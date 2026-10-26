@@ -16,14 +16,6 @@
       "role": "creator",
       "action": "reviewed",
       "detail": "Ran the brand compliance review."
-    },
-    {
-      "id": 3,
-      "at": "2026-10-26T06:10:00Z",
-      "actor": "Asha",
-      "role": "creator",
-      "action": "finding_edited",
-      "detail": "Changed LuminaBulbs to LuminaBulb."
     }
   ]
 }

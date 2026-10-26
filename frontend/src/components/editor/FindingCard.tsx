@@ -1,13 +1,18 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
-import type { Finding, FindingStatus, Severity } from "@/lib/types";
+import type { DemoFinding } from "@/lib/mock-findings";
+import type { FindingStatus, Severity } from "@/lib/types";
 
 interface FindingCardProps {
-  finding: Finding;
+  id: string;
+  finding: DemoFinding;
   busy: boolean;
+  selected: boolean;
+  onSelect: (finding: DemoFinding) => void;
   onResolve: (
-    finding: Finding,
+    finding: DemoFinding,
     status: FindingStatus,
     finalText: string | null,
   ) => Promise<void>;
@@ -20,8 +25,11 @@ const SEVERITY_LABELS: Record<Severity, string> = {
 };
 
 export default function FindingCard({
+  id,
   finding,
   busy,
+  selected,
+  onSelect,
   onResolve,
 }: FindingCardProps) {
   const [editing, setEditing] = useState(false);
@@ -45,15 +53,44 @@ export default function FindingCard({
   const severity = finding.severity;
   const severityLabel = SEVERITY_LABELS[severity] ?? "Unspecified";
   const resolved = finding.status !== "open";
+  const checkLabel = finding.check.replaceAll("_", " ");
+  const knowledgeSource = finding.knowledge_source;
+  const knowledgeHref =
+    knowledgeSource.type === "guideline"
+      ? "/knowledge?tab=guidelines"
+      : knowledgeSource.type === "term"
+        ? "/knowledge?tab=glossary"
+        : "/knowledge?tab=facts";
+  const knowledgeLabel =
+    knowledgeSource.type === "guideline"
+      ? "View guideline"
+      : knowledgeSource.type === "term"
+        ? "View glossary term"
+        : "View fact";
 
   return (
-    <article className={`finding-card severity-${severity}`} aria-label={`${severityLabel} severity finding`}>
+    <article
+      id={id}
+      className={`finding-card severity-${severity}${selected ? " selected" : ""}`}
+      aria-label={`${severityLabel} severity finding: ${checkLabel}`}
+      tabIndex={0}
+      onClick={() => onSelect(finding)}
+      onKeyDown={(event) => {
+        if (
+          event.target === event.currentTarget &&
+          (event.key === "Enter" || event.key === " ")
+        ) {
+          event.preventDefault();
+          onSelect(finding);
+        }
+      }}
+    >
       <div className="finding-heading">
         <div>
           <span className={`severity-badge severity-badge-${severity}`}>
-            {severityLabel} severity
+            {severityLabel} · {severity} severity
           </span>
-          <h3>{finding.check.replaceAll("_", " ")}</h3>
+          <h3>{checkLabel}</h3>
         </div>
         <span className={`finding-status status-${finding.status}`}>
           {finding.status.replaceAll("_", " ")}
@@ -68,6 +105,52 @@ export default function FindingCard({
         <p className="finding-source">
           <strong>Source:</strong> {finding.source.label}
         </p>
+      )}
+      <div className="finding-knowledge-source">
+        {knowledgeSource.type === "guideline" && (
+          <p>{knowledgeSource.record.description}</p>
+        )}
+        {knowledgeSource.type === "term" && (
+          <>
+            <p>{knowledgeSource.record.definition}</p>
+            <p>
+              Status: <strong>{knowledgeSource.record.status ?? "unspecified"}</strong>
+              {knowledgeSource.record.preferredTerm
+                ? ` · Preferred wording: ${knowledgeSource.record.preferredTerm}`
+                : ""}
+            </p>
+          </>
+        )}
+        {knowledgeSource.type === "fact" && (
+          <p>Current mock fact: {knowledgeSource.record.claim}</p>
+        )}
+        <Link href={knowledgeHref} className="finding-source-link">
+          {knowledgeLabel}
+        </Link>
+      </div>
+      {finding.fact_details && (
+        <dl className="finding-fact-details">
+          {finding.fact_details.source && (
+            <div>
+              <dt>Mock source reference</dt>
+              <dd>{finding.fact_details.source}</dd>
+            </div>
+          )}
+          <div>
+            <dt>Fact owner</dt>
+            <dd>{finding.fact_details.owner}</dd>
+          </div>
+          {finding.fact_details.last_reviewed && (
+            <div>
+              <dt>Last reviewed</dt>
+              <dd>{finding.fact_details.last_reviewed}</dd>
+            </div>
+          )}
+          <div>
+            <dt>Review by</dt>
+            <dd>{finding.fact_details.review_date}</dd>
+          </div>
+        </dl>
       )}
 
       {(finding.suggestion || editing) && (
@@ -93,7 +176,9 @@ export default function FindingCard({
 
       {actionError && <p className="form-error" role="alert">{actionError}</p>}
       {resolved ? (
-        <p className="finding-resolved-note">This finding has been {finding.status}.</p>
+        <p className="finding-resolved-note">
+          This finding is {finding.status}. Demo changes are not saved.
+        </p>
       ) : (
         <div className="finding-actions">
           {editing ? (

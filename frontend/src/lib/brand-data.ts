@@ -1,14 +1,24 @@
+import assetFixture from "../../mocks/assets.json";
+import factsFixture from "../../mocks/facts.json";
+import guidelineFixture from "../../mocks/guidelines.json";
+import termFixture from "../../mocks/terms.json";
+
 export interface Guideline {
   id: string;
   title: string;
   description: string;
+  kind?: string;
 }
+
+export type GlossaryStatus = "approved" | "prohibited";
 
 export interface GlossaryTerm {
   id: string;
   term: string;
   definition: string;
   preferredTerm: string;
+  status?: GlossaryStatus;
+  guidelineId?: string;
 }
 
 export interface BrandFact {
@@ -16,6 +26,8 @@ export interface BrandFact {
   claim: string;
   owner: string;
   reviewDate: string;
+  source?: string;
+  lastReviewed?: string;
 }
 
 export interface BrandAsset {
@@ -23,6 +35,8 @@ export interface BrandAsset {
   name: string;
   description: string;
   url: string;
+  kind?: string;
+  notes?: string;
 }
 
 export interface BrandData {
@@ -32,8 +46,6 @@ export interface BrandData {
   assets: BrandAsset[];
 }
 
-export const BRAND_DATA_EVENT = "inline-copilot-brand-data-updated";
-
 export const EMPTY_BRAND_DATA: BrandData = {
   guidelines: [],
   glossary: [],
@@ -42,61 +54,34 @@ export const EMPTY_BRAND_DATA: BrandData = {
 };
 
 export const SAMPLE_BRAND: BrandData = {
-  guidelines: [
-    {
-      id: "sample-guideline-1",
-      title: "Be clear and useful",
-      description:
-        "Use plain language, lead with the customer benefit, and keep sentences concise.",
-    },
-    {
-      id: "sample-guideline-2",
-      title: "Keep claims evidence-based",
-      description:
-        "Only make product claims supported by an approved, current fact.",
-    },
-  ],
-  glossary: [
-    {
-      id: "sample-glossary-1",
-      term: "Northstar account",
-      definition: "A customer's primary account in the Northstar platform.",
-      preferredTerm: "Northstar account",
-    },
-    {
-      id: "sample-glossary-2",
-      term: "Instant",
-      definition:
-        "Avoid this term unless a measured, approved fact supports it.",
-      preferredTerm: "Fast",
-    },
-  ],
-  facts: [
-    {
-      id: "sample-fact-1",
-      claim: "Northstar supports teams in 12 countries.",
-      owner: "Product team",
-      reviewDate: "2027-01-15",
-    },
-    {
-      id: "sample-fact-2",
-      claim: "Northstar launched in 2022.",
-      owner: "Brand team",
-      reviewDate: "2025-01-15",
-    },
-  ],
-  assets: [
-    {
-      id: "sample-asset-1",
-      name: "Northstar logo",
-      description: "Primary logo for light backgrounds.",
-      url: "https://example.com/northstar-logo.svg",
-    },
-    {
-      id: "sample-asset-2",
-      name: "Product screenshots",
-      description: "Approved screenshots for product announcements.",
-      url: "",
-    },
-  ],
+  guidelines: guidelineFixture["GET /api/guidelines"].map((guideline) => ({
+    id: String(guideline.id),
+    title: guideline.title,
+    description: guideline.body,
+    kind: guideline.kind,
+  })),
+  glossary: termFixture["GET /api/terms"].map((term) => ({
+    id: String(term.id),
+    term: term.term,
+    definition: term.reason,
+    preferredTerm: term.preferred,
+    status: term.status === "prohibited" ? "prohibited" : "approved",
+    guidelineId: String(term.guideline_id),
+  })),
+  facts: factsFixture["GET /api/facts"].map((fact) => ({
+    id: String(fact.id),
+    claim: fact.statement,
+    owner: fact.owner,
+    reviewDate: fact.review_by,
+    source: fact.source,
+    lastReviewed: fact.last_reviewed,
+  })),
+  assets: assetFixture["GET /api/assets"].map((asset) => ({
+    id: String(asset.id),
+    name: asset.name,
+    description: asset.notes,
+    url: asset.url,
+    kind: asset.kind,
+    notes: asset.notes,
+  })),
 };

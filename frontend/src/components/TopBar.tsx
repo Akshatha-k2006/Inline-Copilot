@@ -1,20 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 import RoleSwitcher from "./RoleSwitcher";
 
 const NAV = [
   { href: "/", label: "Home", key: "home" },
   { href: "/editor", label: "Write & Review", key: "editor" },
   { href: "/knowledge?tab=guidelines", label: "Guidelines", key: "guidelines" },
-  { href: "/knowledge?tab=assets", label: "Facts & Assets", key: "knowledge" },
+  { href: "/queue", label: "Review queue", key: "queue" },
   { href: "/audit", label: "Review History", key: "audit" },
 ];
 
 export default function TopBar() {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
 
   return (
     <aside className="topbar">
@@ -31,16 +30,15 @@ export default function TopBar() {
       <nav className="nav" aria-label="Main">
         <ul>
           {NAV.map((item) => {
-            const knowledgeTab = searchParams.get("tab");
             const active =
               item.key === "home"
                 ? pathname === "/"
                 : item.key === "editor"
                   ? pathname === "/editor" || pathname.startsWith("/editor/")
-                  : item.key === "knowledge"
-                    ? pathname === "/knowledge" && knowledgeTab === "assets"
-                    : item.key === "guidelines"
-                      ? pathname === "/knowledge" && knowledgeTab !== "assets"
+                  : item.key === "guidelines"
+                    ? pathname === "/knowledge"
+                    : item.key === "queue"
+                      ? pathname === "/queue" || pathname.startsWith("/queue/")
                       : pathname === "/audit" || pathname.startsWith("/audit/");
             return (
               <li key={item.href}>

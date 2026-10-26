@@ -1,107 +1,22 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ApiError, api } from "@/lib/api";
-import type {
-  Content,
-  ContentDraft,
-  Finding,
-  FindingStatus,
-  ReviewResponse,
-  SeedResponse,
-  CheckType,
-  Severity,
-} from "@/lib/types";
+import type { DemoFinding } from "@/lib/mock-findings";
+import {
+  CUSTOM_CONTENT_NOTICE,
+  DEMO_DRAFT,
+  DEMO_FINDINGS_NOTICE,
+} from "@/lib/mock-findings";
+import {
+  recordDemoReview,
+  updateDemoFindings,
+  useDemoWorkspace,
+} from "@/lib/mock-data";
+import type { FindingStatus } from "@/lib/types";
 import FindingsPanel from "./FindingsPanel";
+import HighlightedDraft from "./HighlightedDraft";
 
 const DEFAULT_TITLE = "Untitled draft";
-
-function validContent(value: unknown): value is Content {
-  if (!value || typeof value !== "object") return false;
-  const content = value as Partial<Content>;
-  return (
-    typeof content.id === "number" &&
-    typeof content.title === "string" &&
-    typeof content.body === "string"
-  );
-}
-
-const CHECK_TYPES: CheckType[] = [
-  "terminology",
-  "tone",
-  "messaging",
-  "unsupported_claim",
-  "outdated_info",
-];
-const SEVERITIES: Severity[] = ["high", "medium", "low"];
-const FINDING_STATUSES: FindingStatus[] = [
-  "open",
-  "accepted",
-  "edited",
-  "dismissed",
-];
-
-function validFinding(value: unknown): value is Finding {
-  if (!value || typeof value !== "object") return false;
-  const finding = value as Partial<Finding>;
-  return (
-    typeof finding.id === "number" &&
-    Number.isFinite(finding.id) &&
-    typeof finding.content_id === "number" &&
-    CHECK_TYPES.includes(finding.check as CheckType) &&
-    SEVERITIES.includes(finding.severity as Severity) &&
-    typeof finding.start === "number" &&
-    typeof finding.end === "number" &&
-    typeof finding.text === "string" &&
-    (finding.explanation === undefined ||
-      typeof finding.explanation === "string") &&
-    (finding.source === undefined ||
-      (typeof finding.source === "object" &&
-        finding.source !== null &&
-        typeof finding.source.label === "string")) &&
-    (finding.suggestion === undefined ||
-      finding.suggestion === null ||
-      typeof finding.suggestion === "string") &&
-    FINDING_STATUSES.includes(finding.status as FindingStatus) &&
-    (finding.final_text === undefined ||
-      finding.final_text === null ||
-      typeof finding.final_text === "string")
-  );
-}
-
-function validReview(value: unknown): value is ReviewResponse {
-  if (!value || typeof value !== "object") return false;
-  const review = value as Partial<ReviewResponse>;
-  return (
-    typeof review.content_version === "number" &&
-    Array.isArray(review.findings) &&
-    review.findings.every(validFinding)
-  );
-}
-
-function validSeed(value: unknown): value is SeedResponse {
-  return (
-    !!value &&
-    typeof value === "object" &&
-    typeof (value as Partial<SeedResponse>).content_id === "number"
-  );
-}
-
-function userMessage(error: unknown, fallback: string): string {
-  if (error instanceof ApiError) {
-    if (error.status === 0) {
-      return "Unable to reach the review service. Please check your connection and try again.";
-    }
-    if (error.status === 404) {
-      return "The review service endpoint is not available yet. Your content is still here; try again when the service is ready.";
-    }
-    return error.message || fallback;
-  }
-  if (error instanceof Error && error.message === "Invalid API response.") {
-    return "The review service returned an unexpected response. Please try again.";
-  }
-  return fallback;
-}
 
 function canApplySuggestion(value: string | null): value is string {
   return Boolean(
@@ -111,26 +26,26 @@ function canApplySuggestion(value: string | null): value is string {
 }
 
 export default function Editor() {
-  const [title, setTitle] = useState(DEFAULT_TITLE);
-  const [body, setBody] = useState("");
-  const [contentId, setContentId] = useState<number | null>(null);
+  const workspace = useDemoWorkspace();
+  const [title, setTitle] = useState(DEMO_DRAFT.title);
+  const [body, setBody] = useState(DEMO_DRAFT.body);
   const [contentType, setContentType] = useState("Marketing Copy");
-  const [findings, setFindings] = useState<Finding[] | null>(null);
+  const [findings, setFindings] = useState<DemoFinding[] | null>(
+    workspace.findings,
+  );
   const [reviewing, setReviewing] = useState(false);
-  const [seeding, setSeeding] = useState(false);
-  const [reviewError, setReviewError] = useState("");
-  const [seedMessage, setSeedMessage] = useState("");
-  const [demoActionNotice, setDemoActionNotice] = useState("");
+  const [reviewedCustomText, setReviewedCustomText] = useState(false);
+  const [selectedFindingId, setSelectedFindingId] = useState<number | null>(null);
   const [busyFindingIds, setBusyFindingIds] = useState<number[]>([]);
-  const revision = useRef(0);
-  const requestNumber = useRef(0);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
   const reviewInFlight = useRef(false);
+  const reviewRevision = useRef(0);
 
   function resetReviewForEdit() {
-    revision.current += 1;
+    reviewRevision.current += 1;
     setFindings(null);
-    setReviewError("");
-    setDemoActionNotice("");
+    setSelectedFindingId(null);
+    setReviewedCustomText(false);
   }
 
   function changeTitle(value: string) {
@@ -143,132 +58,101 @@ export default function Editor() {
     resetReviewForEdit();
   }
 
-  async function loadSampleDraft() {
-    setSeeding(true);
-    setSeedMessage("");
-    setReviewError("");
-    try {
-      const seedResult: unknown = await api.seedSample();
-      if (!validSeed(seedResult)) throw new Error("Invalid API response.");
-      const sample: unknown = await api.getContent(seedResult.content_id);
-      if (!validContent(sample)) throw new Error("Invalid API response.");
-      setContentId(sample.id);
-      setTitle(sample.title);
-      setBody(sample.body);
-      setFindings(null);
-      setDemoActionNotice("");
-      revision.current += 1;
-    } catch (error) {
-      setSeedMessage(
-        `${userMessage(error, "The sample draft could not be loaded.")} You can still paste your own content below.`,
-      );
-    } finally {
-      setSeeding(false);
-    }
+  function selectFinding(finding: DemoFinding, scrollToText = false) {
+    setSelectedFindingId(finding.id);
+    if (!scrollToText) return;
+
+    const highlight = document.getElementById(`draft-highlight-${finding.id}`);
+    highlight?.scrollIntoView({ block: "center", behavior: "smooth" });
+    bodyRef.current?.focus({ preventScroll: true });
+    bodyRef.current?.setSelectionRange(finding.start, finding.end);
+  }
+
+  function selectFromHighlightedDraft(finding: DemoFinding) {
+    selectFinding(finding);
+    document
+      .getElementById(`finding-card-${finding.id}`)
+      ?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }
+
+  function loadSampleDraft() {
+    changeTitle(DEMO_DRAFT.title);
+    changeBody(DEMO_DRAFT.body);
+    setFindings(workspace.findings);
+    setReviewedCustomText(false);
+    setSelectedFindingId(null);
   }
 
   async function runReview() {
     if (!body.trim() || reviewInFlight.current) return;
-    const currentRevision = revision.current;
-    const currentRequest = ++requestNumber.current;
-    const draft: ContentDraft = {
-      title: title.trim() || DEFAULT_TITLE,
-      body,
-    };
+    const currentRevision = reviewRevision.current;
+    const submittedBody = body;
 
     reviewInFlight.current = true;
     setReviewing(true);
-    setReviewError("");
     setFindings(null);
-    setDemoActionNotice("");
-    try {
-      const saved: unknown =
-        contentId === null
-          ? await api.createContent(draft)
-          : await api.updateContent(contentId, draft);
-      if (!validContent(saved)) throw new Error("Invalid API response.");
-      setContentId(saved.id);
+    setSelectedFindingId(null);
 
-      const result: unknown = await api.reviewContent(saved.id);
-      if (!validReview(result)) throw new Error("Invalid API response.");
-      if (revision.current === currentRevision && requestNumber.current === currentRequest) {
-        setFindings(result.findings);
-      }
-    } catch (error) {
-      if (revision.current === currentRevision && requestNumber.current === currentRequest) {
-        setReviewError(
-          userMessage(
-            error,
-            "Unable to review your content. Please check your connection and try again.",
-          ),
-        );
-      }
-    } finally {
-      if (requestNumber.current === currentRequest) {
-        reviewInFlight.current = false;
-        setReviewing(false);
-      }
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 350));
+    if (reviewRevision.current === currentRevision) {
+      const demoFindings = recordDemoReview(submittedBody);
+      setFindings(demoFindings);
+      setReviewedCustomText(demoFindings.length === 0);
     }
+    reviewInFlight.current = false;
+    setReviewing(false);
   }
 
   async function resolveFinding(
-    finding: Finding,
+    finding: DemoFinding,
     status: FindingStatus,
     finalText: string | null,
   ) {
     setBusyFindingIds((ids) => [...ids, finding.id]);
-    try {
-      let locallyResolved = false;
-      try {
-        const updated: unknown = await api.patch<unknown>(
-          `/api/findings/${finding.id}`,
-          { status, final_text: finalText },
-        );
-        if (
-          !updated ||
-          typeof updated !== "object" ||
-          typeof (updated as Partial<Finding>).status !== "string"
-        ) {
-          throw new Error("The API returned an invalid finding update.");
-        }
-      } catch (error) {
-        if (error instanceof ApiError && error.status === 404) {
-          locallyResolved = true;
-        } else {
-          throw error;
-        }
-      }
+    const replaceText =
+      canApplySuggestion(finalText) &&
+      body.slice(finding.start, finding.end) === finding.text;
 
-      setFindings((current) =>
-        current?.map((item) =>
+    if (replaceText) {
+      const delta = finalText.length - (finding.end - finding.start);
+      const updatedFindings = (findings ?? []).map((item) => {
+        if (item.id === finding.id) {
+          return {
+            ...item,
+            text: finalText,
+            end: finding.start + finalText.length,
+            status,
+            final_text: finalText,
+          };
+        }
+        if (item.start >= finding.end) {
+          return {
+            ...item,
+            start: item.start + delta,
+            end: item.end + delta,
+          };
+        }
+        return item;
+      });
+      setBody(
+        `${body.slice(0, finding.start)}${finalText}${body.slice(finding.end)}`,
+      );
+      setFindings(updatedFindings);
+      updateDemoFindings(updatedFindings);
+    } else {
+      const updatedFindings = (findings ?? []).map((item) =>
           item.id === finding.id
             ? { ...item, status, final_text: finalText }
             : item,
-        ) ?? null,
       );
-      if (canApplySuggestion(finalText)) {
-        setBody((currentBody) => {
-          const { start, end } = finding;
-          if (
-            start >= 0 &&
-            end <= currentBody.length &&
-            currentBody.slice(start, end) === finding.text
-          ) {
-            revision.current += 1;
-            return `${currentBody.slice(0, start)}${finalText}${currentBody.slice(end)}`;
-          }
-          return currentBody;
-        });
-      }
-      if (locallyResolved) {
-        setDemoActionNotice("This finding update is local to this session and was not saved to the backend.");
-      }
-    } finally {
-      setBusyFindingIds((ids) => ids.filter((id) => id !== finding.id));
+      setFindings(updatedFindings);
+      updateDemoFindings(updatedFindings);
     }
+    setBusyFindingIds((ids) => ids.filter((id) => id !== finding.id));
   }
 
   const emptyContent = !body.trim();
+  const isDemonstrationDraft = body === DEMO_DRAFT.body;
 
   return (
     <section className="editor-page">
@@ -284,27 +168,18 @@ export default function Editor() {
           type="button"
           className="button"
           onClick={() => void loadSampleDraft()}
-          disabled={seeding || reviewing}
+          disabled={reviewing}
         >
-          {seeding ? "Loading sample..." : "Load sample draft"}
+          Load demonstration draft
         </button>
       </header>
 
-      {seedMessage && <p className="editor-notice" role="status">{seedMessage}</p>}
-      {reviewError && (
-        <div className="editor-error" role="alert">
-          <p>{reviewError}</p>
-          <button
-            type="button"
-            className="button"
-            onClick={() => void runReview()}
-            disabled={emptyContent || reviewing}
-          >
-            Retry review
-          </button>
-        </div>
+      <p className="editor-demo-banner" role="note">
+        {DEMO_FINDINGS_NOTICE} Live backend review is not connected.
+      </p>
+      {reviewedCustomText && (
+        <p className="editor-notice" role="status">{CUSTOM_CONTENT_NOTICE}</p>
       )}
-      {demoActionNotice && <p className="editor-notice" role="status">{demoActionNotice}</p>}
 
       <div className="editor-layout">
         <section className="editor-card compose-panel" aria-labelledby="compose-heading">
@@ -313,7 +188,7 @@ export default function Editor() {
               <p className="eyebrow">Draft</p>
               <h2 id="compose-heading">Your content</h2>
             </div>
-            {contentId !== null && <span className="draft-id">Draft #{contentId}</span>}
+            {isDemonstrationDraft && <span className="draft-id">Fictional sample</span>}
           </div>
 
           <div className="editor-fields">
@@ -341,6 +216,7 @@ export default function Editor() {
               Content
               <textarea
                 id="draft-body"
+                ref={bodyRef}
                 className="draft-textarea"
                 value={body}
                 onChange={(event) => changeBody(event.target.value)}
@@ -349,6 +225,15 @@ export default function Editor() {
               />
             </label>
           </div>
+
+          {findings && findings.length > 0 && (
+            <HighlightedDraft
+              body={body}
+              findings={findings}
+              selectedFindingId={selectedFindingId}
+              onSelect={selectFromHighlightedDraft}
+            />
+          )}
 
           <div className="editor-controls">
             <span className="character-count" aria-live="polite">
@@ -360,9 +245,9 @@ export default function Editor() {
                 className="button"
                 onClick={() => {
                   changeBody("");
-                  setContentId(null);
+                  setTitle(DEFAULT_TITLE);
                 }}
-                disabled={!body && contentId === null}
+                disabled={!body}
               >
                 Clear
               </button>
@@ -373,7 +258,7 @@ export default function Editor() {
                 disabled={emptyContent || reviewing}
               >
                 {reviewing && <span className="loading-spinner" aria-hidden="true" />}
-                {reviewing ? "Reviewing your content..." : "Run Review"}
+                {reviewing ? "Reviewing demo content..." : "Run Demo Review"}
               </button>
             </div>
           </div>
@@ -382,6 +267,9 @@ export default function Editor() {
         <FindingsPanel
           findings={findings}
           busyFindingIds={busyFindingIds}
+          selectedFindingId={selectedFindingId}
+          reviewedCustomText={reviewedCustomText}
+          onSelect={(finding) => selectFinding(finding, true)}
           onResolve={resolveFinding}
         />
       </div>
