@@ -1,0 +1,55 @@
+// Types mirror docs/API_CONTRACT.md. Change the contract first, then this file.
+
+export type Role = "creator" | "reviewer" | "brand_manager" | "admin";
+
+export type ContentStatus =
+  | "draft"
+  | "self_checked"
+  | "in_review"
+  | "approved"
+  | "ready_to_publish";
+
+export type CheckType =
+  | "terminology"
+  | "tone"
+  | "messaging"
+  | "unsupported_claim"
+  | "outdated_info";
+
+export type Severity = "high" | "medium" | "low";
+export type FindingStatus = "open" | "accepted" | "edited" | "dismissed";
+
+export interface Content {
+  id: number;
+  title: string;
+  body: string;
+  status: ContentStatus;
+  version: number;
+  created_by: string;
+  updated_at: string;
+}
+
+export interface FindingSource {
+  type: "term" | "guideline" | "fact";
+  id: number;
+  label: string;
+}
+
+export interface Finding {
+  id: number;
+  content_id: number;
+  check: CheckType;
+  severity: Severity;
+  start: number;
+  end: number;
+  text: string;
+  explanation: string;
+  source: FindingSource;
+  suggestion: string | null;
+  status: FindingStatus;
+  final_text: string | null;
+}
+
+export interface Health {
+  status: string;
+}

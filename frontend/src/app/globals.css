@@ -1,0 +1,298 @@
+:root {
+  --bg: #f7f5ee;
+  --surface: #fdfcf8;
+  --border: #ddd8ca;
+  --text: #2f3b45;
+  --muted: #5e6872;
+  --teal: #2f6f68;
+  --rust: #a5532e;
+  --focus: #1a5fb4;
+  --radius: 12px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    Roboto,
+    "Helvetica Neue",
+    Arial,
+    sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+h1,
+h2 {
+  line-height: 1.2;
+  margin: 0 0 12px;
+}
+
+h1 {
+  font-size: clamp(1.5rem, 4.5vw, 2.25rem);
+}
+
+h2 {
+  font-size: 1.25rem;
+}
+
+p {
+  margin: 0 0 12px;
+}
+
+a {
+  color: var(--teal);
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.muted {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+/* Skip link */
+.skip-link {
+  position: absolute;
+  left: 8px;
+  top: -48px;
+  background: var(--text);
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 8px;
+  z-index: 20;
+}
+.skip-link:focus {
+  top: 8px;
+}
+
+/* Top bar: phone = brand + role on row 1, nav on row 2. Laptop = one row. */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  grid-template-areas:
+    "brand role"
+    "nav nav";
+  gap: 8px 12px;
+  align-items: center;
+  padding: 10px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+
+.brand {
+  grid-area: brand;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--text);
+  font-weight: 700;
+  min-width: 0;
+}
+
+.brand-mark {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--teal);
+  color: #fff;
+  font-size: 0.8rem;
+  letter-spacing: 0.5px;
+  flex: none;
+}
+
+.brand-name {
+  white-space: nowrap;
+}
+
+.nav {
+  grid-area: nav;
+}
+
+.nav ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.nav-link {
+  display: block;
+  white-space: nowrap;
+  padding: 8px 12px;
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.nav-link:hover {
+  background: #ebe8dc;
+}
+
+.nav-link.active {
+  background: var(--teal);
+  color: #fff;
+}
+
+/* Role switcher */
+.role-switcher {
+  grid-area: role;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.role-label {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.role-select {
+  font: inherit;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  max-width: 150px;
+}
+
+.role-user {
+  display: none;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+@media (min-width: 900px) {
+  .topbar {
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas: "brand nav role";
+    padding: 12px 32px;
+    gap: 24px;
+  }
+  .role-user {
+    display: inline;
+  }
+}
+
+/* Page layout */
+.container {
+  width: 100%;
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+}
+
+@media (min-width: 900px) {
+  .container {
+    padding: 40px 32px 80px;
+  }
+}
+
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.lead {
+  font-size: 1.1rem;
+  max-width: 62ch;
+  color: #44505a;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+
+.steps {
+  margin: 0 0 16px;
+  padding-left: 1.25rem;
+}
+
+.steps li {
+  margin-bottom: 6px;
+}
+
+/* Buttons */
+.button {
+  display: inline-block;
+  font: inherit;
+  font-weight: 600;
+  padding: 10px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #fff;
+  color: var(--text);
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.button-primary {
+  background: var(--teal);
+  border-color: var(--teal);
+  color: #fff;
+}
+
+/* Backend status */
+.status-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+}
+
+.status-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 200px;
+  overflow-wrap: anywhere;
+}
+
+.dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex: none;
+}
+.dot-checking {
+  background: #b7b09c;
+}
+.dot-ok {
+  background: #2e8b57;
+}
+.dot-down {
+  background: var(--rust);
+}
