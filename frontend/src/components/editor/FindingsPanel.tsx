@@ -56,6 +56,7 @@ export default function FindingsPanel({
           <span className="empty-state-mark" aria-hidden="true">✓</span>
           <h3>Your review will appear here</h3>
           <p>{readOnly ? "No current mock findings are available for this content." : "Run the demonstration review to see matching guideline, terminology, and fact findings."}</p>
+          <p>Run the demonstration review to see its guideline, terminology, and fact findings.</p>
         </div>
       ) : activeFindings.length === 0 ? (
         <div className="editor-empty-state success-state" role="status">

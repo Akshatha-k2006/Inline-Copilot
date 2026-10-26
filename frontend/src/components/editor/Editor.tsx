@@ -82,6 +82,9 @@ export default function Editor() {
     setBody(currentDocument.body);
     setSelectedFindingId(null);
   }, [currentDocument?.title, currentDocument?.body]);
+    setFindings(workspace.findings);
+    setSelectedFindingId(null);
+  }, [currentDocument?.title, currentDocument?.body, workspace.findings]);
 
   function resetReviewForEdit() {
     reviewRevision.current += 1;
@@ -137,6 +140,13 @@ export default function Editor() {
       const sample = resetDemoDocument(role, user);
       setTitle(sample.document.title);
       setBody(sample.document.body);
+    if (!workspace.isHydrated) return;
+    setOperationError("");
+    try {
+      const sample = resetDemoDocument();
+      setTitle(sample.document.title);
+      setBody(sample.document.body);
+      setFindings(sample.findings);
       setReviewedCustomText(false);
       setSelectedFindingId(null);
     } catch (error) {
@@ -162,6 +172,8 @@ export default function Editor() {
       try {
         saveDemoDraft(currentDocument.id, title, submittedBody, role, user);
         const demoFindings = recordDemoReview(submittedBody, role, user);
+        const demoFindings = recordDemoReview(submittedBody);
+        setFindings(demoFindings);
         setReviewedCustomText(demoFindings.length === 0);
         setOperationError("");
       } catch (error) {
@@ -208,6 +220,12 @@ export default function Editor() {
       setOperationError(
         error instanceof Error ? error.message : "Could not submit this draft.",
       );
+      const result = resolveDemoFinding(finding.id, status, finalText);
+      setBody(result.document.body);
+      setFindings(result.findings);
+      setSelectedFindingId(null);
+    } finally {
+      setBusyFindingIds((ids) => ids.filter((id) => id !== finding.id));
     }
   }
 
@@ -234,10 +252,30 @@ export default function Editor() {
             Load demonstration draft
           </button>
         )}
+        <button
+          type="button"
+          className="button"
+          onClick={() => void loadSampleDraft()}
+          disabled={reviewing || !workspace.isHydrated}
+        >
+          Load demonstration draft
+        </button>
       </header>
 
       <p className="editor-demo-banner" role="note">
         {DEMO_FINDINGS_NOTICE} This role switcher is a prototype, not authentication. No backend review or publishing is connected.
+      </p>
+      {operationError && <p className="form-error" role="alert">{operationError}</p>}
+      {!workspace.isHydrated && (
+        <p className="editor-notice" role="status">Loading saved demonstration changes...</p>
+      )}
+      {workspace.persistenceWarning && (
+        <p className="editor-notice" role="alert">
+          Saved mock changes could not be restored: {workspace.persistenceWarning}
+        </p>
+      )}
+      <p className="editor-notice" role="note">
+        Finding actions are saved only in this browser&apos;s local demonstration data, not to a server.
       </p>
       {operationError && <p className="form-error" role="alert">{operationError}</p>}
       {!workspace.isHydrated && (
@@ -305,6 +343,7 @@ export default function Editor() {
                 value={contentType}
                 onChange={(event) => setContentType(event.target.value)}
                 disabled={!mayEdit || !workspace.isHydrated}
+                disabled={!workspace.isHydrated}
               >
                 <option>Marketing Copy</option>
               </select>
@@ -384,6 +423,23 @@ export default function Editor() {
                 className="button button-primary"
                 onClick={submitForReview}
                 disabled={!workspace.isHydrated || workflowBlockers.length > 0}
+            <div className="editor-buttons">
+              <button
+                type="button"
+                className="button"
+                onClick={() => {
+                  changeBody("");
+                  setTitle(DEFAULT_TITLE);
+                }}
+                disabled={!body || !workspace.isHydrated}
+              >
+                Clear
+              </button>
+              <button
+                type="button"
+                className="button button-primary"
+                onClick={() => void runReview()}
+                disabled={emptyContent || reviewing || !workspace.isHydrated}
               >
                 {currentDocument?.status === "changes_requested"
                   ? "Resubmit for review"

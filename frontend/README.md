@@ -52,6 +52,18 @@ dates, reviewers and workflow outcomes are demonstration data, not verified
 evidence. Changes Requested comments and decisions are stored as mock records.
 There is no backend workflow API yet; existing backend requests still use the
 API layer and do not silently fall back to these mocks.
+Write & Review, the dashboard, queue, and history use shared local demonstration
+data from the fixtures in `mocks/`. A sample review updates the document
+timestamp, findings, dashboard counts, and history together for the current
+app session. Shared mock changes, including accepted/edited/dismissed findings
+and document text, are stored in this browser's `localStorage` and restored on
+reload. This is browser-local demonstration persistence, not server persistence;
+clearing this site's browser storage removes it. Findings are only shown for the exact
+fictional sample draft.
+Pasted content does not receive generated or verified results. Finding actions
+and knowledge edits remain mock data. Finding sources, fact claims, people and
+dates are fictional demonstration data, not verified citations or facts. The
+content type selector currently offers Marketing Copy only.
 
 Call the backend like this:
 

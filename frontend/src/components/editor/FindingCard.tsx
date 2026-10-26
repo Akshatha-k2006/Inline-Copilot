@@ -130,6 +130,7 @@ export default function FindingCard({
               No replacement text is available for this finding.
               {readOnly ? "" : " You can enter your own correction."}
             </p>
+            <p className="muted">No replacement text is available for this finding. You can enter your own correction.</p>
           )}
         </section>
       </div>
@@ -208,6 +209,7 @@ export default function FindingCard({
       {resolved ? (
         <p className="finding-resolved-note">This finding is {finding.status}.</p>
       ) : onResolve && !readOnly ? (
+      ) : (
         <div className="finding-actions">
           {finding.range_valid === false ? (
             <button
