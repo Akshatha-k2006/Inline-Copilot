@@ -102,9 +102,6 @@ export default function AuditPage() {
             <p className="eyebrow">Document #{selectedDocument.id}</p>
             <h2 id="history-document-heading">{selectedDocument.title}</h2>
             <p className="muted">Current status: {contentStatusLabel(selectedDocument.status)}</p>
-            <p className="eyebrow">Document #{document.id}</p>
-            <h2 id="history-document-heading">{document.title}</h2>
-            <p className="muted">Current status: {contentStatusLabel(document.status)}</p>
           </div>
           <div className="mock-history-count">
             <strong>{reviewCount}</strong>

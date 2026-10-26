@@ -68,7 +68,6 @@ export function getSubmissionBlockers(
       (finding.status === "open" ||
         ((finding.status === "dismissed" ||
           (finding.status === "accepted" && !finding.final_text)) &&
-        (finding.status === "dismissed" &&
           document.body
             .toLocaleLowerCase()
             .includes(finding.text.toLocaleLowerCase()))),
