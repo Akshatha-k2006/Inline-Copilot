@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import auditFixture from "../../mocks/audit.json";
 import contentFixture from "../../mocks/content.json";
 import queueFixture from "../../mocks/queue.json";
@@ -13,7 +13,7 @@ import {
   type Guideline,
 } from "./brand-data";
 import { DEMO_DRAFT, getDemoFindings, type DemoFinding } from "./mock-findings";
-import type { Content, Role } from "./types";
+import type { Content, FindingStatus, Role } from "./types";
 
 export const MOCK_DATA_NOTICE =
   "Demonstration data only. Documents, checks, findings, sources, and timestamps are fictional and are not verified results.";
@@ -33,6 +33,8 @@ export interface DemoWorkspace {
   queueDocumentIds: number[];
   findings: DemoFinding[];
   history: DemoAuditEntry[];
+  persistenceWarning: string | null;
+  isHydrated: boolean;
 }
 
 export type DemoKnowledgeItem = Guideline | GlossaryTerm | BrandFact | BrandAsset;
@@ -51,9 +53,13 @@ let workspace: DemoWorkspace = {
   queueDocumentIds: initialQueue.map((document) => document.id),
   findings: getDemoFindings(initialDocument.body, initialKnowledge),
   history: initialHistory.map((entry) => ({ ...entry })),
+  persistenceWarning: null,
+  isHydrated: false,
 };
 
 const listeners = new Set<() => void>();
+const STORAGE_KEY = "corespace-demo-workspace-v1";
+let hydrated = false;
 const timestampFormatter = new Intl.DateTimeFormat("en-US", {
   dateStyle: "medium",
   timeStyle: "short",
@@ -73,8 +79,81 @@ function notify(): void {
   for (const listener of listeners) listener();
 }
 
+function persistWorkspace(nextWorkspace: DemoWorkspace): void {
+  if (typeof window === "undefined") return;
+  try {
+    const {
+      persistenceWarning: _warning,
+      isHydrated: _isHydrated,
+      ...persisted
+    } = nextWorkspace;
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(persisted));
+  } catch (error) {
+    throw new Error(
+      error instanceof Error
+        ? `Could not persist demonstration changes in this browser: ${error.message}`
+        : "Could not persist demonstration changes in this browser.",
+    );
+  }
+}
+
+function isStoredWorkspace(
+  value: unknown,
+): value is Omit<DemoWorkspace, "persistenceWarning" | "isHydrated"> {
+  if (!value || typeof value !== "object") return false;
+  const stored = value as Partial<DemoWorkspace>;
+  return Boolean(
+    stored.knowledge &&
+      Array.isArray(stored.knowledge.guidelines) &&
+      Array.isArray(stored.knowledge.glossary) &&
+      Array.isArray(stored.knowledge.facts) &&
+      Array.isArray(stored.knowledge.assets) &&
+      Array.isArray(stored.documents) &&
+      Array.isArray(stored.queueDocumentIds) &&
+      Array.isArray(stored.findings) &&
+      Array.isArray(stored.history),
+  );
+}
+
+function hydrateWorkspace(): void {
+  if (hydrated || typeof window === "undefined") return;
+  hydrated = true;
+  try {
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      const parsed: unknown = JSON.parse(stored);
+      if (!isStoredWorkspace(parsed)) {
+        throw new Error("Saved demonstration data has an invalid format.");
+      }
+      workspace = { ...parsed, persistenceWarning: null, isHydrated: true };
+    } else {
+      workspace = { ...workspace, isHydrated: true };
+    }
+  } catch (error) {
+    workspace = {
+      ...workspace,
+      isHydrated: true,
+      persistenceWarning:
+        error instanceof Error
+          ? error.message
+          : "Could not read saved demonstration data.",
+    };
+  }
+  notify();
+}
+
+function commitWorkspace(nextWorkspace: DemoWorkspace): void {
+  persistWorkspace(nextWorkspace);
+  workspace = nextWorkspace;
+  notify();
+}
+
 export function useDemoWorkspace(): DemoWorkspace {
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const snapshot = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  useEffect(() => {
+    hydrateWorkspace();
+  }, []);
+  return snapshot;
 }
 
 export function getQueuedDocuments(data: DemoWorkspace): Content[] {
@@ -126,8 +205,7 @@ function commitKnowledge(knowledge: BrandData): void {
       : finding;
   });
 
-  workspace = { ...workspace, knowledge, findings };
-  notify();
+  commitWorkspace({ ...workspace, knowledge, findings });
 }
 
 export function saveMockKnowledgeItem(
@@ -235,9 +313,132 @@ export function resetMockKnowledge(): void {
   commitKnowledge(cloneBrandData(SAMPLE_BRAND));
 }
 
-export function updateDemoFindings(findings: DemoFinding[]): void {
-  workspace = { ...workspace, findings };
-  notify();
+export function resetDemoDocument(): ResolveDemoFindingResult {
+  const document = { ...initialDocument };
+  const findings = getDemoFindings(document.body, workspace.knowledge);
+  const nextWorkspace: DemoWorkspace = {
+    ...workspace,
+    documents: workspace.documents.map((item) =>
+      item.id === document.id ? document : item,
+    ),
+    findings,
+  };
+  commitWorkspace(nextWorkspace);
+  return { document, findings };
+}
+
+export interface ResolveDemoFindingResult {
+  document: Content;
+  findings: DemoFinding[];
+}
+
+export function resolveDemoFinding(
+  findingId: number,
+  status: Exclude<FindingStatus, "open">,
+  finalText: string | null,
+): ResolveDemoFindingResult {
+  const finding = workspace.findings.find((item) => item.id === findingId);
+  if (!finding || finding.status !== "open") {
+    throw new Error("This finding is no longer open. Run a new demo review to refresh it.");
+  }
+  if (!["accepted", "edited", "dismissed"].includes(status)) {
+    throw new Error("Unsupported finding action.");
+  }
+
+  const document = workspace.documents.find(
+    (item) => item.id === finding.content_id,
+  );
+  if (!document) throw new Error("The document for this finding is unavailable.");
+
+  const replacesText = status === "accepted" || status === "edited";
+  if (replacesText && !finalText?.trim()) {
+    throw new Error("Enter a non-empty correction before saving.");
+  }
+
+  let updatedBody = document.body;
+  let delta = 0;
+  if (replacesText) {
+    if (finding.range_valid === false) {
+      throw new Error("This finding overlaps an earlier correction. Review the text before changing it.");
+    }
+    const original = document.body.slice(finding.start, finding.end);
+    if (
+      finding.start < 0 ||
+      finding.end > document.body.length ||
+      original !== finding.text
+    ) {
+      throw new Error("The original text no longer matches this finding. Run a new demo review.");
+    }
+    delta = finalText!.length - (finding.end - finding.start);
+    updatedBody =
+      document.body.slice(0, finding.start) +
+      finalText +
+      document.body.slice(finding.end);
+  }
+
+  const updatedFindings = workspace.findings.map((item) => {
+    if (item.id === finding.id) {
+      return {
+        ...item,
+        status,
+        final_text: replacesText ? finalText : null,
+        end: replacesText ? finding.start + finalText!.length : finding.end,
+      };
+    }
+    if (!replacesText) return item;
+
+    const transformOffset = (offset: number) => {
+      if (offset <= finding.start) return offset;
+      if (offset >= finding.end) return offset + delta;
+      return finding.start + Math.min(offset - finding.start, finalText!.length);
+    };
+    const mappedStart = transformOffset(item.start);
+    const mappedEnd = transformOffset(item.end);
+    if (item.start >= finding.end || item.end <= finding.start) {
+      return { ...item, start: mappedStart, end: mappedEnd };
+    }
+    const rangeMatches =
+      updatedBody.slice(mappedStart, mappedEnd) === item.text;
+    return {
+      ...item,
+      start: mappedStart,
+      end: mappedEnd,
+      range_valid: rangeMatches,
+    };
+  });
+
+  const updatedDocument: Content = {
+    ...document,
+    body: updatedBody,
+    updated_at: new Date().toISOString(),
+  };
+  const actionDetail =
+    status === "dismissed"
+      ? `Dismissed finding ${finding.id} in ${document.title}.`
+      : `${status === "accepted" ? "Accepted" : "Edited"} finding ${finding.id} in ${document.title}.`;
+  const nextHistoryId =
+    workspace.history.reduce((largestId, entry) => Math.max(largestId, entry.id), 0) +
+    1;
+  const nextWorkspace: DemoWorkspace = {
+    ...workspace,
+    documents: workspace.documents.map((item) =>
+      item.id === document.id ? updatedDocument : item,
+    ),
+    findings: updatedFindings,
+    history: [
+      ...workspace.history,
+      {
+        id: nextHistoryId,
+        at: updatedDocument.updated_at,
+        actor: "Asha",
+        role: "creator",
+        action: status === "dismissed" ? "finding_dismissed" : `finding_${status}`,
+        detail: actionDetail,
+      },
+    ],
+  };
+  commitWorkspace(nextWorkspace);
+  return { document: updatedDocument, findings: updatedFindings };
 }
 
 export function recordDemoReview(body: string): DemoFinding[] {
@@ -257,7 +458,7 @@ export function recordDemoReview(body: string): DemoFinding[] {
     workspace.history.reduce((largestId, entry) => Math.max(largestId, entry.id), 0) +
     1;
 
-  workspace = {
+  const nextWorkspace: DemoWorkspace = {
     ...workspace,
     documents: workspace.documents.map((document) =>
       document.id === currentDocument.id
@@ -277,7 +478,7 @@ export function recordDemoReview(body: string): DemoFinding[] {
       },
     ],
   };
-  notify();
+  commitWorkspace(nextWorkspace);
 
   return findings;
 }

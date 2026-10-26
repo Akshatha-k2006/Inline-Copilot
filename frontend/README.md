@@ -32,13 +32,15 @@ npm run dev          # http://localhost:3000
 Write & Review, the dashboard, queue, and history use shared local demonstration
 data from the fixtures in `mocks/`. A sample review updates the document
 timestamp, findings, dashboard counts, and history together for the current
-app session (until a page reload). Findings are only shown for the exact
+app session. Shared mock changes, including accepted/edited/dismissed findings
+and document text, are stored in this browser's `localStorage` and restored on
+reload. This is browser-local demonstration persistence, not server persistence;
+clearing this site's browser storage removes it. Findings are only shown for the exact
 fictional sample draft.
 Pasted content does not receive generated or verified results. Finding actions
-and knowledge edits are local to the app session and are not saved. Finding
-sources, fact claims, people and dates are fictional demonstration data, not
-verified citations or facts. The content type selector currently offers
-Marketing Copy only.
+and knowledge edits remain mock data. Finding sources, fact claims, people and
+dates are fictional demonstration data, not verified citations or facts. The
+content type selector currently offers Marketing Copy only.
 
 Call the backend like this:
 
