@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "mock:kb": "node mock_kb.mjs",
+    "test:kb": "node check_kb.mjs"
   },
   "dependencies": {
     "next": "^16.4.3",

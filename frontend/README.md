@@ -14,6 +14,9 @@ npm run dev          # http://localhost:3000
 ## What is here
 
 - `src/components/TopBar.tsx`: app name, navigation (Knowledge base, Editor, Review queue, Audit), role switcher
+- `src/app/knowledge/page.tsx`: editable Guidelines, Glossary, Facts and Assets tabs
+- `src/lib/brand-data.ts`: sample brand data and knowledge item types
+- `mock_kb.mjs`: persistent local stand-in for the knowledge API
 - `src/components/RoleSwitcher.tsx`: demo role switcher, no login
 - `src/lib/api.ts`: the only place that calls the backend. Reads `NEXT_PUBLIC_API_URL` and sends `X-Role` and `X-User` on every request
 - `src/lib/roles.ts`: the four roles and the display name sent as `X-User`
@@ -31,6 +34,21 @@ await api.post("/api/content/1/submit");
 ```
 
 Errors are thrown as `ApiError` with `status`, `code` and a readable `message`.
+
+Use **Load sample brand** on the home screen or in the Knowledge base to populate
+the demo data. The frontend reads and writes through the API; the mock service
+persists edits to `mock-kb-data.json`.
+
+To run the frontend with the stand-in knowledge API, use two terminals:
+
+```
+npm run mock:kb
+npm run dev
+```
+
+The API defaults to `http://localhost:8000`, matching `NEXT_PUBLIC_API_URL`.
+Run `npm run test:kb` to check collection CRUD, sample loading, reload reads, and
+persistence across a mock-server restart.
 
 ## Deploy (Vercel)
 
