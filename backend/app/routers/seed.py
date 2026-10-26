@@ -54,6 +54,7 @@ def load_seed_data(db: Session = Depends(get_db)):
                 Term(
                     id=item["id"],
                     term=item["term"],
+                    definition=item.get("definition", item.get("reason", "")),
                     replacement=item.get("preferred") or None,
                     status=item["status"],
                     explanation=item.get("reason", ""),
@@ -66,6 +67,7 @@ def load_seed_data(db: Session = Depends(get_db)):
                     id=item["id"],
                     statement=item["statement"],
                     source=item["source"],
+                    owner=item.get("owner", ""),
                     review_by=parse_review_date(item["review_by"]),
                 )
             )
@@ -76,6 +78,7 @@ def load_seed_data(db: Session = Depends(get_db)):
                     id=item["id"],
                     name=item["name"],
                     asset_type=item["kind"],
+                    description=item.get("description", item.get("notes", "")),
                     url=item.get("url", ""),
                     metadata_json={"notes": item.get("notes", "")},
                 )

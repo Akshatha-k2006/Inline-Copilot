@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { DemoFinding } from "@/lib/mock-findings";
 import {
   CUSTOM_CONTENT_NOTICE,
@@ -12,6 +13,10 @@ import {
   recordDemoReview,
   resetDemoDocument,
   resolveDemoFinding,
+} from "@/lib/mock-findings";
+import {
+  recordDemoReview,
+  updateDemoFindings,
   useDemoWorkspace,
 } from "@/lib/mock-data";
 import type { FindingStatus } from "@/lib/types";
@@ -19,6 +24,13 @@ import FindingsPanel from "./FindingsPanel";
 import HighlightedDraft from "./HighlightedDraft";
 
 const DEFAULT_TITLE = "Untitled draft";
+
+function canApplySuggestion(value: string | null): value is string {
+  return Boolean(
+    value?.trim() &&
+      !/^(remove|verify|use the approved claim|replace|rewrite)\b/i.test(value.trim()),
+  );
+}
 
 export default function Editor() {
   const workspace = useDemoWorkspace();
@@ -103,6 +115,15 @@ export default function Editor() {
 
   async function runReview() {
     if (!workspace.isHydrated || !body.trim() || reviewInFlight.current) return;
+    changeTitle(DEMO_DRAFT.title);
+    changeBody(DEMO_DRAFT.body);
+    setFindings(workspace.findings);
+    setReviewedCustomText(false);
+    setSelectedFindingId(null);
+  }
+
+  async function runReview() {
+    if (!body.trim() || reviewInFlight.current) return;
     const currentRevision = reviewRevision.current;
     const submittedBody = body;
 
@@ -123,6 +144,9 @@ export default function Editor() {
           error instanceof Error ? error.message : "Could not save this demo review.",
         );
       }
+      const demoFindings = recordDemoReview(submittedBody);
+      setFindings(demoFindings);
+      setReviewedCustomText(demoFindings.length === 0);
     }
     reviewInFlight.current = false;
     setReviewing(false);
@@ -131,6 +155,7 @@ export default function Editor() {
   async function resolveFinding(
     finding: DemoFinding,
     status: Exclude<FindingStatus, "open">,
+    status: FindingStatus,
     finalText: string | null,
   ) {
     if (!workspace.isHydrated) return;
@@ -142,7 +167,46 @@ export default function Editor() {
       setSelectedFindingId(null);
     } finally {
       setBusyFindingIds((ids) => ids.filter((id) => id !== finding.id));
+    const replaceText =
+      canApplySuggestion(finalText) &&
+      body.slice(finding.start, finding.end) === finding.text;
+
+    if (replaceText) {
+      const delta = finalText.length - (finding.end - finding.start);
+      const updatedFindings = (findings ?? []).map((item) => {
+        if (item.id === finding.id) {
+          return {
+            ...item,
+            text: finalText,
+            end: finding.start + finalText.length,
+            status,
+            final_text: finalText,
+          };
+        }
+        if (item.start >= finding.end) {
+          return {
+            ...item,
+            start: item.start + delta,
+            end: item.end + delta,
+          };
+        }
+        return item;
+      });
+      setBody(
+        `${body.slice(0, finding.start)}${finalText}${body.slice(finding.end)}`,
+      );
+      setFindings(updatedFindings);
+      updateDemoFindings(updatedFindings);
+    } else {
+      const updatedFindings = (findings ?? []).map((item) =>
+          item.id === finding.id
+            ? { ...item, status, final_text: finalText }
+            : item,
+      );
+      setFindings(updatedFindings);
+      updateDemoFindings(updatedFindings);
     }
+    setBusyFindingIds((ids) => ids.filter((id) => id !== finding.id));
   }
 
   const emptyContent = !body.trim();
@@ -163,6 +227,7 @@ export default function Editor() {
           className="button"
           onClick={() => void loadSampleDraft()}
           disabled={reviewing || !workspace.isHydrated}
+          disabled={reviewing}
         >
           Load demonstration draft
         </button>
@@ -257,6 +322,7 @@ export default function Editor() {
                   setTitle(DEFAULT_TITLE);
                 }}
                 disabled={!body || !workspace.isHydrated}
+                disabled={!body}
               >
                 Clear
               </button>
@@ -280,6 +346,7 @@ export default function Editor() {
               ? busyFindingIds
               : findings?.map((finding) => finding.id) ?? []
           }
+          busyFindingIds={busyFindingIds}
           selectedFindingId={selectedFindingId}
           reviewedCustomText={reviewedCustomText}
           onSelect={(finding) => selectFinding(finding, true)}

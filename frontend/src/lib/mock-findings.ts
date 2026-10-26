@@ -111,6 +111,12 @@ export function isReplacementSuggestion(value: string | null | undefined): value
   );
 }
 
+  if (source.type === "fact" && finding.check !== "outdated_info") {
+    return `Use the current mock fact: ${source.record.claim}`;
+  }
+  return finding.suggestion;
+}
+
 export function getDemoFindings(
   body: string,
   knowledge: BrandData,
