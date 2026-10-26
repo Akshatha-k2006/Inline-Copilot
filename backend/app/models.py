@@ -1,4 +1,3 @@
-
 from datetime import datetime
 from sqlalchemy import (
     Boolean,
@@ -38,6 +37,7 @@ class Term(Base):
     replacement: Mapped[str | None] = mapped_column(String(200), nullable=True)
     status: Mapped[str] = mapped_column(String(50), default="prohibited")
     explanation: Mapped[str] = mapped_column(Text, default="")
+    definition: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -49,6 +49,7 @@ class Fact(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     statement: Mapped[str] = mapped_column(Text, nullable=False)
     source: Mapped[str] = mapped_column(Text, default="")
+    owner: Mapped[str] = mapped_column(String(150), default="")
     review_by: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -62,6 +63,7 @@ class Asset(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="")
     asset_type: Mapped[str] = mapped_column(String(100), default="other")
     url: Mapped[str] = mapped_column(Text, default="")
     metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
