@@ -4,7 +4,7 @@ import os
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -128,6 +128,45 @@ class ReviewLLMTests(unittest.TestCase):
 
         self.assertIsNone(settings.llm_api_key)
 
+    def test_settings_default_to_gemini_compatible_endpoint_and_model(self):
+        with patch.dict(
+            os.environ,
+            {"DATABASE_URL": "sqlite://"},
+            clear=True,
+        ):
+            settings = Settings(_env_file=None)
+
+        self.assertEqual(
+            settings.llm_api_url,
+            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        )
+        self.assertEqual(settings.llm_model, "gemini-2.5-flash")
+
+    def test_provider_errors_are_classified_without_logging_provider_messages(self):
+        cases = (
+            (401, {"status": "UNAUTHENTICATED"}, "authentication_rejected"),
+            (400, {"message": "API key not valid"}, "authentication_rejected"),
+            (403, {"status": "PERMISSION_DENIED"}, "project_access_denied"),
+            (429, {"status": "RESOURCE_EXHAUSTED"}, "quota_or_rate_limit"),
+            (
+                400,
+                {"status": "INVALID_ARGUMENT", "message": "Unsupported response_format"},
+                "unsupported_response_format",
+            ),
+            (
+                404,
+                {"status": "NOT_FOUND", "message": "model was not found"},
+                "model_or_resource_not_found",
+            ),
+        )
+        for status_code, error, expected in cases:
+            with self.subTest(status_code=status_code):
+                body = json.dumps([{"error": error}]).encode("utf-8")
+                self.assertEqual(
+                    llm_reviewer._provider_error_category(status_code, body),
+                    expected,
+                )
+
     def test_successful_llm_review_sends_only_relevant_guidelines_and_timeout(self):
         llm_content = json.dumps(
             {
@@ -162,10 +201,14 @@ class ReviewLLMTests(unittest.TestCase):
         request = opener.call_args.args[0]
         sent = json.loads(request.data.decode("utf-8"))
         user_payload = json.loads(sent["messages"][1]["content"])
-        self.assertEqual(request.full_url, llm_reviewer.settings.llm_api_url)
+        self.assertEqual(
+            request.full_url,
+            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+        )
         self.assertEqual(request.get_header("Authorization"), "Bearer test-key")
         self.assertEqual(request.get_header("Content-type"), "application/json")
-        self.assertEqual(sent["model"], llm_reviewer.settings.llm_model)
+        self.assertEqual(sent["model"], "gemini-2.5-flash")
+        self.assertNotIn("response_format", sent)
         self.assertEqual(opener.call_args.kwargs["timeout"], 7)
         self.assertEqual(
             [guideline["id"] for guideline in user_payload["guidelines"]],
@@ -366,6 +409,23 @@ class ReviewLLMTests(unittest.TestCase):
             [item["check"] for item in result["findings"]],
         )
 
+    def test_transport_failure_is_logged_without_details_and_falls_back(self):
+        with (
+            patch.object(llm_reviewer.settings, "llm_api_key", "test-key"),
+            patch.object(
+                llm_reviewer,
+                "urlopen",
+                side_effect=URLError("sensitive transport detail"),
+            ),
+            self.assertLogs("app.routers.review", level="WARNING") as captured,
+        ):
+            result = review_content(1, self.db)
+
+        self.assertEqual(result["engine"]["llm"], "error")
+        self.assertTrue(any("category=transport" in line for line in captured.output))
+        self.assertNotIn("sensitive transport detail", "\n".join(captured.output))
+        self.assertIn("terminology", [item["check"] for item in result["findings"]])
+
     def test_provider_failure_falls_back_without_exposing_error(self):
         with (
             patch.object(llm_reviewer.settings, "llm_api_key", "test-key"),
@@ -382,29 +442,62 @@ class ReviewLLMTests(unittest.TestCase):
         self.assertTrue(claim["evidence"]["requires_manual_review"])
 
     def test_http_provider_error_logs_category_and_status_only(self):
+        provider_body = json.dumps(
+            [
+                {
+                    "error": {
+                        "status": "RESOURCE_EXHAUSTED",
+                        "message": "rate limit: confidential provider response",
+                    }
+                }
+            ]
+        ).encode("utf-8")
         provider_error = HTTPError(
-            "https://api.openai.com/v1/chat/completions",
+            "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
             429,
             "rate limit: confidential provider response",
             {},
-            io.BytesIO(b"confidential provider response"),
+            io.BytesIO(provider_body),
         )
         with (
             patch.object(llm_reviewer.settings, "llm_api_key", "test-key"),
             patch.object(llm_reviewer, "urlopen", side_effect=provider_error),
             self.assertLogs(
-                "app.services.llm_reviewer",
+                "app.routers.review",
                 level="WARNING",
             ) as captured,
         ):
             result = review_content(1, self.db)
 
         self.assertEqual(result["engine"]["llm"], "error")
-        self.assertEqual(
-            captured.output,
-            ["WARNING:app.services.llm_reviewer:Hosted LLM request failed: category=provider status=429"],
+        self.assertTrue(
+            any(
+                "category=provider status=429 reason=quota_or_rate_limit" in line
+                for line in captured.output
+            )
         )
         self.assertNotIn("confidential", json.dumps(result))
+        self.assertNotIn("confidential", "\n".join(captured.output))
+        self.assertNotIn("test-key", "\n".join(captured.output))
+        self.assertNotIn("This is too loud", "\n".join(captured.output))
+        self.assertIn("terminology", [item["check"] for item in result["findings"]])
+
+    def test_unexpected_response_structure_is_logged_and_falls_back(self):
+        response = FakeResponse({"choices": []})
+        with (
+            patch.object(llm_reviewer.settings, "llm_api_key", "test-key"),
+            patch.object(llm_reviewer, "urlopen", return_value=response),
+            self.assertLogs("app.routers.review", level="WARNING") as captured,
+        ):
+            result = review_content(1, self.db)
+
+        self.assertEqual(result["engine"]["llm"], "error")
+        self.assertTrue(
+            any(
+                "category=unexpected_response_structure" in line
+                for line in captured.output
+            )
+        )
         self.assertIn("terminology", [item["check"] for item in result["findings"]])
 
     def test_malformed_response_falls_back_and_invalid_source_is_rejected(self):
@@ -414,11 +507,15 @@ class ReviewLLMTests(unittest.TestCase):
         with (
             patch.object(llm_reviewer.settings, "llm_api_key", "test-key"),
             patch.object(llm_reviewer, "urlopen", return_value=malformed_response),
+            self.assertLogs("app.routers.review", level="WARNING") as captured,
         ):
             result = review_content(1, self.db)
         self.assertEqual(result["engine"]["llm"], "error")
+        self.assertTrue(
+            any("category=invalid_json" in line for line in captured.output)
+        )
 
-        with self.assertRaises(llm_reviewer.LLMReviewError):
+        with self.assertRaises(llm_reviewer.LLMResponseError) as raised:
             llm_reviewer._validated_findings(
                 {
                     "findings": [
@@ -434,6 +531,7 @@ class ReviewLLMTests(unittest.TestCase):
                 "This is too loud.",
                 [self.db.get(Guideline, 4)],
             )
+        self.assertEqual(raised.exception.category, "finding_validation")
 
     def test_overlapping_rule_and_llm_claims_are_not_duplicated(self):
         finding = {
