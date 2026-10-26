@@ -107,6 +107,7 @@ const initialHistory = (auditFixture.response as Omit<
   content_id: initialDocument.id,
   content_title: initialDocument.title,
 }));
+const initialHistory = auditFixture.response as DemoAuditEntry[];
 const initialKnowledge = cloneBrandData(SAMPLE_BRAND);
 
 let workspace: DemoWorkspace = {
@@ -225,6 +226,7 @@ function hydrateWorkspace(): void {
         persistenceWarning: null,
         isHydrated: true,
       };
+      workspace = { ...parsed, persistenceWarning: null, isHydrated: true };
     } else {
       workspace = { ...workspace, isHydrated: true };
     }
@@ -358,6 +360,18 @@ function changedText(previous: string, next: string): DemoAuditChange {
   };
 }
 
+  action: string,
+  detail: string,
+  at = new Date().toISOString(),
+): DemoAuditEntry[] {
+  const nextId =
+    history.reduce((largestId, entry) => Math.max(largestId, entry.id), 0) + 1;
+  return [
+    ...history,
+    { id: nextId, at, actor: actorName(user), role, action, detail },
+  ];
+}
+
 function cloneBrandData(data: BrandData): BrandData {
   return {
     guidelines: data.guidelines.map((item) => ({ ...item })),
@@ -420,6 +434,7 @@ function commitKnowledge(knowledge: BrandData): void {
     findingsBody: null,
     reviews: [],
   });
+  commitWorkspace({ ...workspace, knowledge, findings });
 }
 
 export function saveMockKnowledgeItem(
@@ -610,6 +625,7 @@ export function resetDemoDocument(
     version: existing.version + 1,
     updated_at: at,
   };
+  const document = { ...initialDocument };
   const findings = getDemoFindings(document.body, workspace.knowledge);
   const retainedResolved = workspace.findings.filter(
     (finding) =>
@@ -643,6 +659,13 @@ export function resetDemoDocument(
     findings: [...findings, ...retainedResolved],
     findingsBody: null,
     reviews: workspace.reviews.filter((review) => review.document_id !== document.id),
+    findings,
+    findingsBody: null,
+    reviews: workspace.reviews.filter((review) => review.document_id !== document.id),
+    comments: workspace.comments.filter((comment) => comment.document_id !== document.id),
+    submissions: workspace.submissions.filter(
+      (submission) => submission.document_id !== document.id,
+    ),
     history: appendHistory(
       workspace.history,
       role,
@@ -652,6 +675,8 @@ export function resetDemoDocument(
       `Reset ${document.title} to the fictional demonstration draft.`,
       at,
       { content_title: document.title, changes },
+      "draft_reset",
+      `Reset ${document.title} to the fictional demonstration draft.`,
     ),
   };
   commitWorkspace(nextWorkspace);
@@ -727,6 +752,9 @@ export function transitionDemoDocument(
           },
         ],
       },
+      action === "submit" ? "submitted" : "resubmitted",
+      `${action === "submit" ? "Submitted" : "Resubmitted"} ${document.title} for review.`,
+      at,
     );
   } else {
     if (!canDecideReview(role)) {
@@ -769,6 +797,7 @@ export function transitionDemoDocument(
           { content_title: document.title, comment: comment.trim() },
         );
       }
+      );
       history = appendHistory(
         history,
         role,
@@ -787,6 +816,9 @@ export function transitionDemoDocument(
             },
           ],
         },
+        "ready_to_publish",
+        `${document.title} is ready to publish after reviewer approval and required checks.`,
+        at,
       );
       if (comment.trim()) {
         comments = appendReviewComment(
@@ -832,6 +864,9 @@ export function transitionDemoDocument(
           ],
           comment: comment.trim(),
         },
+        "changes_requested",
+        `Requested changes to ${document.title}: ${comment.trim()}`,
+        at,
       );
     }
   }
@@ -911,6 +946,9 @@ export function addDemoReviewComment(
     `Added a review comment to ${document.title}.`,
     at,
     { content_title: document.title, comment: text.trim() },
+    "review_comment_added",
+    `Added a review comment to ${document.title}.`,
+    at,
   );
   commitWorkspace({ ...workspace, comments, history });
 }
@@ -1018,6 +1056,7 @@ export function resolveDemoFinding(
       : status === "edited"
         ? "finding_edited"
         : "finding_dismissed";
+      : `${status === "accepted" ? "Accepted" : "Edited"} finding ${finding.id} in ${document.title}.`;
   const nextWorkspace: DemoWorkspace = {
     ...workspace,
     documents: workspace.documents.map((item) =>
@@ -1051,6 +1090,9 @@ export function resolveDemoFinding(
             ]
           : undefined,
       },
+      status === "dismissed" ? "finding_dismissed" : `finding_${status}`,
+      actionDetail,
+      updatedDocument.updated_at,
     ),
   };
   commitWorkspace(nextWorkspace);
@@ -1131,6 +1173,9 @@ export function recordDemoReview(
       `Ran the local demonstration checks for known sample phrases in ${currentDocument.title}.`,
       reviewedAt,
       { content_title: currentDocument.title },
+      "reviewed",
+      `Ran the local demonstration checks for known sample phrases in ${currentDocument.title}.`,
+      reviewedAt,
     ),
   };
   commitWorkspace(nextWorkspace);

@@ -75,3 +75,4 @@ succeeds. This browser-local history is not authenticated, tamper-proof, or
 server-persistent. A future backend integration should provide a durable
 content-scoped audit API and server-verified actor identity rather than relying
 on the demo role selector.
+endpoints are defined by this contract yet.

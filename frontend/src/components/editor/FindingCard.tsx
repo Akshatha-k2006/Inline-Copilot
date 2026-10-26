@@ -134,6 +134,7 @@ export default function FindingCard({
               {readOnly
                 ? ""
                 : " You can edit your own correction, dismiss it, or accept the finding without changing the document text."}
+              {readOnly ? "" : " You can enter your own correction."}
             </p>
           )}
         </section>

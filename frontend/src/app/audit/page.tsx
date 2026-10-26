@@ -102,6 +102,9 @@ export default function AuditPage() {
             <p className="eyebrow">Document #{selectedDocument.id}</p>
             <h2 id="history-document-heading">{selectedDocument.title}</h2>
             <p className="muted">Current status: {contentStatusLabel(selectedDocument.status)}</p>
+            <p className="eyebrow">Document #{document.id}</p>
+            <h2 id="history-document-heading">{document.title}</h2>
+            <p className="muted">Current status: {contentStatusLabel(document.status)}</p>
           </div>
           <div className="mock-history-count">
             <strong>{reviewCount}</strong>
@@ -176,6 +179,20 @@ export default function AuditPage() {
           })}
         </ol>
       )}
+      <ol className="mock-history-list" aria-label="Demonstration review timeline">
+        {[...workspace.history]
+          .sort((left, right) => left.at.localeCompare(right.at) || left.id - right.id)
+          .map((entry) => (
+            <li className="mock-history-item" key={entry.id}>
+              <time dateTime={entry.at}>{formatMockTimestamp(entry.at)}</time>
+              <div>
+                <h2>{entry.action.replaceAll("_", " ")}</h2>
+                <p>{entry.detail}</p>
+                <p className="muted">{entry.actor} · {entry.role.replaceAll("_", " ")}</p>
+              </div>
+            </li>
+        ))}
+      </ol>
     </section>
   );
 }
