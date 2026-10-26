@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import EmptyState from "@/components/EmptyState";
 import type { DemoFinding } from "@/lib/mock-findings";
 import {
   CUSTOM_CONTENT_NOTICE,
@@ -213,6 +215,50 @@ export default function Editor() {
 
   const emptyContent = !body.trim();
   const isDemonstrationDraft = body === DEMO_DRAFT.body;
+  const reviewState = !workspace.isHydrated
+    ? "loading"
+    : workspace.persistenceWarning
+      ? "error"
+      : !review
+      ? "not-run"
+      : reviewCurrent
+        ? "current"
+        : "stale";
+
+  if (workspace.isHydrated && !currentDocument) {
+    return (
+      <section className="editor-page">
+        <header className="editor-page-heading">
+          <div>
+            <p className="eyebrow">CoRESpace / Workspace</p>
+            <h1>Write &amp; Review</h1>
+            <p className="lead">
+              Prepare content, run supported demonstration checks, and review findings before submission.
+            </p>
+          </div>
+        </header>
+        {workspace.persistenceWarning && (
+          <p className="form-error" role="alert">
+            Saved demonstration data could not be loaded: {workspace.persistenceWarning}
+          </p>
+        )}
+        <EmptyState
+          title="No draft is available to open"
+          description="This demonstration currently has no saved content item. Return to the dashboard to begin the documented workflow; the editor will show a draft when one is available."
+          action={
+            <Link href="/" className="button button-primary">
+              Go to the dashboard
+            </Link>
+          }
+          secondaryAction={
+            <Link href="/knowledge?tab=guidelines" className="button">
+              Explore Guidelines
+            </Link>
+          }
+        />
+      </section>
+    );
+  }
 
   return (
     <section className="editor-page">
@@ -234,30 +280,10 @@ export default function Editor() {
             Load demonstration draft
           </button>
         )}
-        <button
-          type="button"
-          className="button"
-          onClick={() => void loadSampleDraft()}
-          disabled={reviewing || !workspace.isHydrated}
-        >
-          Load demonstration draft
-        </button>
       </header>
 
       <p className="editor-demo-banner" role="note">
         {DEMO_FINDINGS_NOTICE} This role switcher is a prototype, not authentication. No backend review or publishing is connected.
-      </p>
-      {operationError && <p className="form-error" role="alert">{operationError}</p>}
-      {!workspace.isHydrated && (
-        <p className="editor-notice" role="status">Loading saved demonstration changes...</p>
-      )}
-      {workspace.persistenceWarning && (
-        <p className="editor-notice" role="alert">
-          Saved mock changes could not be restored: {workspace.persistenceWarning}
-        </p>
-      )}
-      <p className="editor-notice" role="note">
-        Finding actions are saved only in this browser&apos;s local demonstration data, not to a server.
       </p>
       {operationError && <p className="form-error" role="alert">{operationError}</p>}
       {!workspace.isHydrated && (
@@ -421,23 +447,40 @@ export default function Editor() {
               : findings?.map((finding) => finding.id) ?? []
           }
           readOnly={!mayEdit}
+          reviewState={reviewState}
+          reviewing={reviewing}
+          canRunReview={
+            mayEdit &&
+            !emptyContent &&
+            workspace.isHydrated &&
+            !workspace.persistenceWarning
+          }
+          onRunReview={() => void runReview()}
           selectedFindingId={selectedFindingId}
           reviewedCustomText={reviewedCustomText}
           onSelect={(finding) => selectFinding(finding, true)}
           onResolve={mayEdit ? resolveFinding : undefined}
         />
       </div>
-      {comments.length > 0 && (
+      {currentDocument && (
         <section className="card workflow-comments" aria-labelledby="review-comments-heading">
           <h2 id="review-comments-heading">Review comments and requested changes</h2>
-          <ul>
-            {comments.map((comment) => (
-              <li key={comment.id}>
-                <p>{comment.text}</p>
-                <small>{comment.author} · {comment.role.replaceAll("_", " ")} · {comment.kind.replaceAll("_", " ")}</small>
-              </li>
-            ))}
-          </ul>
+          {comments.length === 0 ? (
+            <p className="muted">
+              {currentDocument.status === "draft"
+                ? "No review comments yet. Comments appear here if a reviewer leaves feedback after submission."
+                : "No review comments or requested changes have been recorded for this document."}
+            </p>
+          ) : (
+            <ul>
+              {comments.map((comment) => (
+                <li key={comment.id}>
+                  <p>{comment.text}</p>
+                  <small>{comment.author} · {comment.role.replaceAll("_", " ")} · {comment.kind.replaceAll("_", " ")}</small>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
       )}
     </section>

@@ -289,6 +289,123 @@ a {
   color: var(--muted);
 }
 
+.getting-started {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.getting-started-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.getting-started-header h2 {
+  margin-bottom: 6px;
+}
+
+.getting-started-header .muted {
+  max-width: 72ch;
+  margin: 0;
+}
+
+.guide-dismiss {
+  flex: none;
+}
+
+.guide-reopen {
+  justify-self: start;
+}
+
+.getting-started-steps {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin: 0;
+  padding: 0 0 0 42px;
+  list-style: none;
+  counter-reset: guide-step;
+}
+
+.getting-started-steps::before {
+  position: absolute;
+  top: 14px;
+  bottom: 14px;
+  left: 13px;
+  width: 2px;
+  background: var(--border);
+  content: "";
+}
+
+.getting-started-steps li {
+  position: relative;
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+  padding: 0 0 20px;
+  counter-increment: guide-step;
+}
+
+.getting-started-steps li:last-child {
+  padding-bottom: 0;
+}
+
+.getting-started-steps li::before {
+  position: absolute;
+  top: 0;
+  left: -42px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #eee9ff;
+  color: #4330a0;
+  content: counter(guide-step);
+  font-size: 0.85rem;
+  font-weight: 750;
+}
+
+.getting-started-steps strong {
+  display: block;
+  margin: 2px 0 4px;
+}
+
+.getting-started-steps p {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.getting-started-steps a {
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.guide-step-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.guide-step-actions .sample-brand-action {
+  margin: 0;
+}
+
+.guide-step-actions .button {
+  padding: 6px 10px;
+  font-size: 0.85rem;
+}
+
+.contextual-empty-state {
+  width: 100%;
+}
+
 .mock-document-card {
   align-items: flex-start;
 }
@@ -1467,6 +1584,11 @@ a {
 }
 
 @media (max-width: 600px) {
+  .getting-started-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
   .finding-comparison {
     grid-template-columns: minmax(0, 1fr);
   }

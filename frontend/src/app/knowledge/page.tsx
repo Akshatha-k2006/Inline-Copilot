@@ -33,6 +33,17 @@ const TABS: {
   { key: "assets", label: "Assets", itemLabel: "asset", queryValue: "assets" },
 ];
 
+const EMPTY_DESCRIPTIONS: Record<TabKey, string> = {
+  guidelines:
+    "Guidelines describe the brand voice, style rules, and content requirements people should follow.",
+  glossary:
+    "Glossary entries define preferred terms, approved wording, and words or phrases to avoid.",
+  facts:
+    "Facts contain approved claims with an owner and review date. Demo facts and their sources are fictional and not verified.",
+  assets:
+    "Assets hold approved brand resources such as logos, imagery, and usage notes.",
+};
+
 const FIELDS: Record<
   TabKey,
   {
@@ -196,6 +207,11 @@ export default function KnowledgeBasePage() {
       <p className="mock-data-notice" role="note">
         Fictional demonstration records only. Facts, source references, owners and review dates are not verified. Changes are local to this browser and are not sent to a backend.
       </p>
+      {workspace.persistenceWarning && (
+        <p className="form-error" role="alert">
+          Saved knowledge records could not be loaded or saved in this browser: {workspace.persistenceWarning}
+        </p>
+      )}
       {!mayManageKnowledge && (
         <p className="editor-notice" role="note">
           Knowledge records are read-only for {role.replaceAll("_", " ")}. Switch to Brand Manager or Admin to manage them.
@@ -335,13 +351,24 @@ export default function KnowledgeBasePage() {
           </form>
         )}
 
-        {items.length === 0 ? (
+        {!workspace.isHydrated ? (
+          <p className="editor-notice" role="status">
+            Loading saved {currentTab.label.toLowerCase()}...
+          </p>
+        ) : items.length === 0 && workspace.persistenceWarning ? (
+          <div className="empty-state" role="alert">
+            <h3>{currentTab.label} could not be loaded</h3>
+            <p>
+              Saved demonstration records are unavailable, so this section cannot confirm whether it is empty.
+            </p>
+          </div>
+        ) : items.length === 0 ? (
           <div className="empty-state">
             <h3>No {currentTab.label.toLowerCase()} yet</h3>
             <p>
               {mayManageKnowledge
-                ? `Add your first ${currentTab.itemLabel}, or load the sample brand to see how the knowledge base works.`
-                : "No demonstration records are available in this subsection."}
+                ? `${EMPTY_DESCRIPTIONS[activeTab]} Add your first ${currentTab.itemLabel}, or load the sample brand to see the demonstration records.`
+                : `${EMPTY_DESCRIPTIONS[activeTab]} No demonstration records are available here yet. Switch to Brand Manager or Admin using the demo role selector to add or load records.`}
             </p>
             {mayManageKnowledge && (
               <div className="empty-actions">

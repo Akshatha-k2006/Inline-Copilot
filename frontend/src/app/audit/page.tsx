@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import EmptyState from "@/components/EmptyState";
 import {
   formatMockTimestamp,
   getContentAuditEvents,
@@ -113,15 +114,36 @@ export default function AuditPage() {
         </section>
       )}
 
-      {events.length === 0 ? (
-        <div className="card empty-state">
-          <h2>{workspace.isHydrated ? "No audit events for this content" : "Loading audit history"}</h2>
-          <p className="muted">
-            {workspace.isHydrated
-              ? "Successful actions for this item will appear here as the shared demonstration history."
-              : "The browser-local demonstration history is being loaded."}
+      {!workspace.isHydrated ? (
+        <p className="editor-notice" role="status">
+          Loading the browser-local demonstration audit history...
+        </p>
+      ) : workspace.persistenceWarning && events.length === 0 ? (
+        <div className="empty-state" role="alert">
+          <h2>Audit history could not be loaded</h2>
+          <p>
+            The saved demonstration history is unavailable, so this page cannot confirm whether this content has prior events.
           </p>
         </div>
+      ) : events.length === 0 ? (
+        <EmptyState
+          title={
+            selectedContentId === "all"
+              ? "No audit events are available"
+              : "No events for this content yet"
+          }
+          description="Workflow actions will appear here as content is created, reviewed, edited, and approved. This timeline uses only recorded demonstration events; it does not invent history."
+          action={
+            <Link href={selectedDocument ? "/editor" : "/"} className="button button-primary">
+              {selectedDocument ? "Open Write & Review" : "Go to the dashboard"}
+            </Link>
+          }
+          secondaryAction={selectedDocument ? (
+            <Link href="/" className="button">
+              Go to the dashboard
+            </Link>
+          ) : undefined}
+        />
       ) : (
         <ol className="mock-history-list" aria-label="Chronological audit timeline">
           {events.map((entry) => {
@@ -176,20 +198,6 @@ export default function AuditPage() {
           })}
         </ol>
       )}
-      <ol className="mock-history-list" aria-label="Demonstration review timeline">
-        {[...workspace.history]
-          .sort((left, right) => left.at.localeCompare(right.at) || left.id - right.id)
-          .map((entry) => (
-            <li className="mock-history-item" key={entry.id}>
-              <time dateTime={entry.at}>{formatMockTimestamp(entry.at)}</time>
-              <div>
-                <h2>{entry.action.replaceAll("_", " ")}</h2>
-                <p>{entry.detail}</p>
-                <p className="muted">{entry.actor} · {entry.role.replaceAll("_", " ")}</p>
-              </div>
-            </li>
-        ))}
-      </ol>
     </section>
   );
 }

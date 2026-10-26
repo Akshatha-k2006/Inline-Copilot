@@ -8,6 +8,10 @@ interface FindingsPanelProps {
   findings: DemoFinding[] | null;
   busyFindingIds: number[];
   readOnly?: boolean;
+  reviewState?: "loading" | "error" | "not-run" | "stale" | "current";
+  reviewing?: boolean;
+  canRunReview?: boolean;
+  onRunReview?: () => void;
   selectedFindingId: number | null;
   reviewedCustomText: boolean;
   onSelect: (finding: DemoFinding) => void;
@@ -22,6 +26,10 @@ export default function FindingsPanel({
   findings,
   busyFindingIds,
   readOnly = false,
+  reviewState = "not-run",
+  reviewing = false,
+  canRunReview = false,
+  onRunReview,
   selectedFindingId,
   reviewedCustomText,
   onSelect,
@@ -54,9 +62,36 @@ export default function FindingsPanel({
       {findings === null ? (
         <div className="editor-empty-state">
           <span className="empty-state-mark" aria-hidden="true">✓</span>
-          <h3>Your review will appear here</h3>
-          <p>{readOnly ? "No current mock findings are available for this content." : "Run the demonstration review to see matching guideline, terminology, and fact findings."}</p>
-          <p>Run the demonstration review to see its guideline, terminology, and fact findings.</p>
+          <h3>
+            {reviewState === "loading"
+              ? "Loading review results"
+              : reviewState === "error"
+                ? "Review results unavailable"
+                : reviewState === "stale"
+                  ? "Review this version again"
+                  : "Review not run yet"}
+          </h3>
+          <p>
+            {reviewState === "loading"
+              ? "Saved demonstration review results are still loading."
+              : reviewState === "error"
+                ? "Saved demonstration review data could not be loaded or saved. This is not a successful empty review."
+                : reviewState === "stale"
+                  ? "The draft changed after its last review, so those results are out of date. Run the demonstration checks again for this version."
+                  : readOnly
+                    ? "No demonstration review is recorded for this content yet. The creator can run the known-phrase checks in Write & Review."
+                    : "Run the demonstration checks to see any supported guideline, terminology, or fact findings for this draft."}
+          </p>
+          {canRunReview && onRunReview && (
+            <button
+              type="button"
+              className="button button-primary"
+              onClick={onRunReview}
+              disabled={reviewing || reviewState === "loading" || reviewState === "error"}
+            >
+              {reviewing ? "Reviewing demo content..." : "Run Demo Review"}
+            </button>
+          )}
         </div>
       ) : activeFindings.length === 0 ? (
         <div className="editor-empty-state success-state" role="status">
@@ -75,7 +110,7 @@ export default function FindingsPanel({
               ? "The local demo has findings for its sample draft only. This does not mean your custom content has passed a review."
               : resolvedFindings.length > 0
                 ? "Resolved findings remain below for reference. This does not indicate a verified review result."
-                  : "There are no findings to display."}
+                  : "The current demonstration review detected no supported issues in this content. It does not verify every guideline, fact, or possible issue."}
           </p>
         </div>
       ) : (

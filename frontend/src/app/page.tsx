@@ -2,7 +2,11 @@
 
 import Link from "next/link";
 import BackendStatus from "@/components/BackendStatus";
+import EmptyState from "@/components/EmptyState";
+import GettingStartedGuide from "@/components/GettingStartedGuide";
 import SampleBrandButton from "@/components/SampleBrandButton";
+import { useRole } from "@/lib/role";
+import { canManageKnowledge, canViewReviewQueue } from "@/lib/workflow";
 import {
   getQueuedDocuments,
   MOCK_DATA_NOTICE,
@@ -11,6 +15,9 @@ import {
 
 export default function Home() {
   const workspace = useDemoWorkspace();
+  const { role } = useRole();
+  const mayManageKnowledge = canManageKnowledge(role);
+  const mayViewQueue = canViewReviewQueue(role);
   const queuedDocuments = getQueuedDocuments(workspace);
   const currentDocument = workspace.documents[0];
   const findingsCurrent = Boolean(
@@ -34,41 +41,68 @@ export default function Home() {
 
       <p className="mock-data-notice" role="note">{MOCK_DATA_NOTICE}</p>
 
-      <section className="demo-stat-grid" aria-label="Demonstration statistics">
-        <article className="demo-stat-card">
-          <span>Documents in review</span>
-          <strong>{queuedDocuments.length}</strong>
-          <small>Fictional sample documents</small>
-        </article>
-        <article className="demo-stat-card">
-          <span>Sample review runs</span>
-          <strong>{reviewRuns}</strong>
-          <small>Not verified checks</small>
-        </article>
-        <article className="demo-stat-card">
-          <span>Open sample findings</span>
-          <strong>{openFindings.length}</strong>
-          <small>{findingsCurrent ? "Across current matching mock checks" : "No current mock review results"}</small>
-        </article>
-      </section>
+      <GettingStartedGuide />
+
+      {workspace.persistenceWarning && (
+        <p className="form-error" role="alert">
+          Saved dashboard data could not be loaded or saved in this browser: {workspace.persistenceWarning}
+        </p>
+      )}
+      {!workspace.isHydrated ? (
+        <p className="editor-notice" role="status">
+          Loading saved demonstration statistics...
+        </p>
+      ) : workspace.persistenceWarning ? null : (
+        <section className="demo-stat-grid" aria-label="Demonstration statistics">
+          <article className="demo-stat-card">
+            <span>Documents in review</span>
+            <strong>{queuedDocuments.length}</strong>
+            <small>Fictional sample documents</small>
+          </article>
+          <article className="demo-stat-card">
+            <span>Sample review runs</span>
+            <strong>{reviewRuns}</strong>
+            <small>Not verified checks</small>
+          </article>
+          <article className="demo-stat-card">
+            <span>Open sample findings</span>
+            <strong>{openFindings.length}</strong>
+            <small>{findingsCurrent ? "Across current matching mock checks" : "No current mock review results"}</small>
+          </article>
+        </section>
+      )}
+
+      {workspace.isHydrated && workspace.documents.length === 0 && (
+        <EmptyState
+          title="No content is available yet"
+          description={
+            workspace.history.length === 0
+              ? "There is no draft or recent workflow activity in this browser yet. Open Write & Review to begin the documented workflow; available demo content will appear there."
+              : "There is no draft available in this browser. Open Write & Review to continue the documented workflow."
+          }
+          action={
+            <Link href="/editor" className="button button-primary">
+              Open Write &amp; Review
+            </Link>
+          }
+          secondaryAction={
+            <Link href="/knowledge?tab=guidelines" className="button">
+              Explore Guidelines
+            </Link>
+          }
+        />
+      )}
 
       <div className="card">
         <div className="home-actions">
           <h2>Try it now</h2>
           <SampleBrandButton />
         </div>
-        <p>Load the sample brand in one click, then explore its guidelines, glossary, facts and assets.</p>
-        <h2>Try it in five steps</h2>
-        <ol className="steps">
-          <li>Open the Knowledge base to view or edit brand information.</li>
-          <li>
-            Open Write &amp; Review and run a review on the sample draft, or paste your
-            own text.
-          </li>
-          <li>Accept, edit or dismiss each flag.</li>
-          <li>Submit for review, then switch Role (top right) to Reviewer.</li>
-          <li>Approve the content or request changes.</li>
-        </ol>
+        <p>
+          {mayManageKnowledge
+            ? "Load the fictional sample brand, then explore its guidelines, glossary, facts and assets."
+            : "Explore the fictional sample brand's guidelines, glossary, facts and assets. Switch to the Brand Manager or Admin demo role to load or reset sample data."}
+        </p>
         <p>
           <Link href="/editor" className="button button-primary">
             Open Write &amp; Review
@@ -77,9 +111,11 @@ export default function Home() {
             Open the Knowledge base
           </Link>
           {" "}
-          <Link href="/queue" className="button">
-            Open the Review queue
-          </Link>
+          {mayViewQueue && (
+            <Link href="/queue" className="button">
+              Open the Review queue
+            </Link>
+          )}
         </p>
       </div>
 

@@ -1,6 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
+import EmptyState from "@/components/EmptyState";
 import FindingsPanel from "@/components/editor/FindingsPanel";
 import {
   addDemoReviewComment,
@@ -82,9 +84,15 @@ export default function ReviewQueuePage() {
         <p className="eyebrow">CoRESpace / Reviews</p>
         <h1>Review queue</h1>
         <p className="mock-data-notice" role="note">{MOCK_DATA_NOTICE}</p>
-        <p className="editor-notice" role="status">
-          The review queue is available to Reviewer, Brand Manager, and Admin demo roles. Switch roles in the top navigation to continue.
-        </p>
+        <EmptyState
+          title="The review queue is not available to this role"
+          description="The queue is visible to Reviewer, Brand Manager, and Admin demo roles. As Creator, use Write & Review to prepare and submit content, then switch to Reviewer to make a review decision."
+          action={
+            <Link href="/editor" className="button button-primary">
+              Open Write &amp; Review
+            </Link>
+          }
+        />
       </section>
     );
   }
@@ -97,14 +105,44 @@ export default function ReviewQueuePage() {
         <p className="lead">Submitted demonstration content awaiting a human decision.</p>
       </div>
       <p className="mock-data-notice" role="note">{MOCK_DATA_NOTICE} Role switching is a prototype, not authentication.</p>
+      {workspace.persistenceWarning && (
+        <p className="form-error" role="alert">
+          Saved review data could not be loaded or saved in this browser: {workspace.persistenceWarning}
+        </p>
+      )}
       {message && <p className="editor-notice" role="status">{message}</p>}
       {error && <p className="form-error" role="alert">{error}</p>}
 
-      {documents.length === 0 ? (
-        <div className="card">
-          <h2>No documents in the demonstration queue</h2>
-          <p className="muted">Only documents with In Review status appear here. Submitted content and decisions are local mock data.</p>
+      {!workspace.isHydrated ? (
+        <p className="editor-notice" role="status">
+          Loading the browser-local demonstration review queue...
+        </p>
+      ) : documents.length === 0 && workspace.persistenceWarning ? (
+        <div className="empty-state" role="alert">
+          <h2>Review queue data could not be loaded</h2>
+          <p>
+            The saved demonstration state is unavailable, so this page cannot confirm whether content is waiting for review.
+          </p>
         </div>
+      ) : documents.length === 0 ? (
+        <EmptyState
+          title="No content is waiting for review"
+          description={
+            role === "reviewer"
+              ? "Content appears here after a Creator submits it. Switch the demo role to Creator in the top navigation to prepare and submit the sample draft, then switch back to Reviewer to review it. Queue records and decisions are local demonstration data."
+              : `Content appears here after a Creator submits it. The ${role.replaceAll("_", " ")} role can inspect the queue but cannot submit content. Switch the demo role to Creator in the top navigation to prepare the sample draft. Queue records and decisions are local demonstration data.`
+          }
+          action={
+            <Link href="/editor" className="button button-primary">
+              Open Write &amp; Review
+            </Link>
+          }
+          secondaryAction={
+            <Link href="/" className="button">
+              Go to the dashboard
+            </Link>
+          }
+        />
       ) : (
         <ul className="entry-list">
           {documents.map((document) => {
@@ -217,6 +255,17 @@ export default function ReviewQueuePage() {
                       }
                       busyFindingIds={findings.map((finding) => finding.id)}
                       readOnly
+                      reviewState={
+                        workspace.persistenceWarning
+                          ? "error"
+                          : !currentReview
+                            ? review
+                              ? "stale"
+                              : "not-run"
+                            : workspace.findingsBody === document.body
+                              ? "current"
+                              : "stale"
+                      }
                       selectedFindingId={null}
                       reviewedCustomText={document.body !== workspace.findingsBody}
                       onSelect={() => undefined}
@@ -225,7 +274,13 @@ export default function ReviewQueuePage() {
                     <section className="workflow-comments" aria-labelledby={`comments-heading-${document.id}`}>
                       <h3 id={`comments-heading-${document.id}`}>Review comments</h3>
                       {comments.length === 0 ? (
-                        <p className="muted">No review comments have been added.</p>
+                        <p className="muted">
+                          {workspace.persistenceWarning
+                            ? "Saved comments could not be loaded, so this section may be incomplete."
+                            : mayDecide
+                              ? "No review comments yet. Add feedback here, or request changes with an explanation."
+                              : "No review comments have been recorded for this document yet."}
+                        </p>
                       ) : (
                         <ul>
                           {comments.map((item) => (
