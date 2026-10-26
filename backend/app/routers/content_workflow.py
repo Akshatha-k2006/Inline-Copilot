@@ -2,14 +2,17 @@ import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.dependencies import get_role
-from app.models import Comment
+from app.models import AuditEvent, Comment, Content
 from app.schemas import (
     ContentStatusResponse,
+    ContentCommentsResponse,
+    ReviewCommentCreateRequest,
     ReviewCommentResponse,
     ReviewDecisionRequest,
     ReviewDecisionResponse,
@@ -109,3 +112,181 @@ def decide_content_review(
             else None
         ),
     )
+
+
+@router.post(
+    "/content/{content_id}/ready-to-publish",
+    response_model=ContentStatusResponse,
+)
+def mark_content_ready_to_publish(
+    content_id: int,
+    x_user: Annotated[str, Header()],
+    role: Annotated[str, Depends(get_role)],
+    db: Annotated[Session, Depends(get_db)],
+) -> ContentStatusResponse:
+    try:
+        content = transition_content_status(
+            db,
+            content_id,
+            "ready_to_publish",
+            x_user,
+            role,
+        )
+    except SQLAlchemyError as exc:
+        logger.exception("Unable to mark content ready to publish.")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "workflow_failed",
+                "message": "Unable to update content status.",
+            },
+        ) from exc
+
+    return ContentStatusResponse(
+        content_id=content.id,
+        status=content.status,
+        content_version=content.version,
+    )
+
+
+@router.post(
+    "/content/{content_id}/comments",
+    response_model=ReviewCommentResponse,
+    status_code=201,
+)
+def add_review_comment(
+    content_id: int,
+    request: ReviewCommentCreateRequest,
+    x_user: Annotated[str, Header()],
+    role: Annotated[str, Depends(get_role)],
+    db: Annotated[Session, Depends(get_db)],
+) -> ReviewCommentResponse:
+    actor = x_user.strip()
+    try:
+        content = (
+            db.query(Content)
+            .filter(Content.id == content_id)
+            .with_for_update()
+            .first()
+        )
+        if content is None:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "not_found", "message": "Content not found."},
+            )
+        if role != "reviewer" or content.status != "in_review":
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": "forbidden",
+                    "message": (
+                        "Only reviewers can comment while content is in review."
+                    ),
+                },
+            )
+        if not actor:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": "validation_error",
+                    "message": "The request data is invalid.",
+                },
+            )
+
+        comment = Comment(
+            content_id=content.id,
+            author=actor,
+            body=request.body,
+        )
+        db.add(comment)
+        db.flush()
+        db.add(
+            AuditEvent(
+                content_id=content.id,
+                actor=actor,
+                action="comment_added",
+                details={"comment_id": comment.id, "actor_role": role},
+            )
+        )
+        db.refresh(comment)
+        comment_response = ReviewCommentResponse.model_validate(comment)
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.exception("Unable to save review comment.")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "workflow_failed",
+                "message": "Unable to save review comment.",
+            },
+        ) from exc
+    except Exception:
+        db.rollback()
+        raise
+
+    return comment_response
+
+
+@router.get(
+    "/content/{content_id}/comments",
+    response_model=ContentCommentsResponse,
+)
+def get_review_comments(
+    content_id: int,
+    x_user: Annotated[str, Header()],
+    role: Annotated[str, Depends(get_role)],
+    db: Annotated[Session, Depends(get_db)],
+) -> ContentCommentsResponse:
+    actor = x_user.strip()
+    try:
+        content = db.get(Content, content_id)
+        if content is None:
+            raise HTTPException(
+                status_code=404,
+                detail={"error": "not_found", "message": "Content not found."},
+            )
+        if not actor:
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "error": "validation_error",
+                    "message": "The request data is invalid.",
+                },
+            )
+        if role == "creator":
+            can_read = content.created_by == actor
+        else:
+            can_read = role in {"reviewer", "brand_manager", "admin"}
+        if not can_read:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "error": "forbidden",
+                    "message": "This role cannot access these content comments.",
+                },
+            )
+
+        comments = db.scalars(
+            select(Comment)
+            .where(Comment.content_id == content_id)
+            .order_by(Comment.created_at, Comment.id)
+        ).all()
+        return ContentCommentsResponse(
+            content_id=content.id,
+            comments=comments,
+        )
+    except HTTPException:
+        raise
+    except SQLAlchemyError as exc:
+        logger.exception("Unable to load review comments.")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "workflow_failed",
+                "message": "Unable to load review comments.",
+            },
+        ) from exc

@@ -238,6 +238,58 @@ The status change, optional comment, and `content_status_changed` audit event
 are committed atomically; the event records the actor, content ID, role,
 previous status, and new status.
 
+`POST /api/content/{id}/ready-to-publish` accepts an empty request body and
+transitions content from `approved` to `ready_to_publish`. Only a
+`brand_manager` or `admin` may perform this transition. It returns `200` with
+the same `{ "content_id", "status", "content_version" }` response as submit.
+The content text and version are unchanged. Missing content returns `404`;
+missing or unauthorized roles return `403`; missing `X-User` returns `422`.
+Invalid transitions return `409` with
+`{ "error": "invalid_status_transition", "message": "Status transition is not allowed." }`.
+Database failures return `500` with
+`{ "error": "workflow_failed", "message": "Unable to update content status." }`.
+The shared transition service writes exactly one `content_status_changed`
+audit event with the transition and actor details in the same transaction.
+
+Standalone review comments use the existing content comments collection.
+`POST /api/content/{id}/comments` accepts:
+
+```json
+{ "body": "Please clarify the supporting claim." }
+```
+
+The body must be non-empty after trimming and unknown request fields are
+rejected. Only a reviewer may add a comment while the content is `in_review`.
+The existing `X-Role` dependency validates the role and `X-User` supplies the
+comment author; the backend does not have a separate identity-authentication
+mechanism. Success returns `201` with the comment schema:
+
+```json
+{
+  "id": 1,
+  "author": "reviewer-user",
+  "body": "Please clarify the supporting claim.",
+  "created_at": "2026-10-26T16:33:00Z"
+}
+```
+
+Comment creation also writes a `comment_added` audit event transactionally.
+Missing content returns `404`; invalid role or a content status other than
+`in_review` returns `403`; missing actor or invalid comment data returns `422`.
+Database failures return `500` with
+`{ "error": "workflow_failed", "message": "Unable to save review comment." }`.
+
+`GET /api/content/{id}/comments` returns
+`{ "content_id": 1, "comments": [<comment schema>, ...] }`, ordered by
+creation time and comment ID. The content creator may retrieve comments on
+their own content; reviewers, brand managers, and admins may retrieve comments
+for any content. Other roles or creators who do not own the content receive
+`403`. Missing content returns `404`; missing or invalid roles return `403`;
+missing `X-User` returns `422`. Database failures return `500` with
+`{ "error": "workflow_failed", "message": "Unable to load review comments." }`.
+Comments attached to a `request_changes` decision are included in this
+collection and use the same authorization rules.
+
 ## Frontend workflow prototype
 
 The current frontend includes a browser-local workflow demonstration. Its
@@ -253,8 +305,9 @@ authentication.
 Review records, comments, decisions, prior submitted versions, and workflow
 audit events are stored in browser `localStorage`. They are not sent to the
 backend, do not represent verified checks, and do not publish content. The
-backend review, submit, and decision routes are defined above. Standalone
-comment and other status transitions do not have dedicated backend endpoints.
+backend review, submit, decision, ready-to-publish, and comment routes are
+defined above. Other status transitions do not have dedicated backend
+endpoints.
 
 The frontend audit timeline uses the shared workflow history collection. Each
 event is associated with a content ID and stores the demo actor name and role

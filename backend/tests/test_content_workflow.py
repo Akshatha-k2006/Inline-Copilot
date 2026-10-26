@@ -63,7 +63,14 @@ class ContentWorkflowTests(unittest.TestCase):
         self.db.close()
         self.engine.dispose()
 
-    def request(self, path, role="creator", user="test-user", body=None):
+    def request(
+        self,
+        path,
+        role="creator",
+        user="test-user",
+        body=None,
+        method="POST",
+    ):
         async def dispatch():
             sent = []
             received = False
@@ -97,7 +104,7 @@ class ContentWorkflowTests(unittest.TestCase):
                     "type": "http",
                     "asgi": {"version": "3.0", "spec_version": "2.3"},
                     "http_version": "1.1",
-                    "method": "POST",
+                    "method": method,
                     "scheme": "http",
                     "path": path,
                     "raw_path": path.encode("ascii"),
@@ -487,6 +494,16 @@ class ContentWorkflowTests(unittest.TestCase):
         self.assertEqual(event.details["new_status"], "draft")
         self.assertIsNotNone(event.created_at)
 
+        read_status, read_payload = self.request(
+            "/api/content/1/comments",
+            role="creator",
+            user="creator-user",
+            method="GET",
+        )
+        self.assertEqual(read_status, 200)
+        self.assertEqual(read_payload["content_id"], self.content.id)
+        self.assertEqual(read_payload["comments"], [payload["comment"]])
+
     def test_review_decision_rejects_unauthorized_roles(self):
         self.content.status = "in_review"
         self.db.commit()
@@ -657,6 +674,302 @@ class ContentWorkflowTests(unittest.TestCase):
             },
         )
         self.assertEqual(self.db.get(Content, 1).status, "in_review")
+        self.assertEqual(self.db.query(Comment).count(), 0)
+        self.assertEqual(self.db.query(AuditEvent).count(), 0)
+
+    def test_ready_to_publish_by_brand_manager_and_admin_records_one_audit(self):
+        original_body = self.content.body
+        original_version = self.content.version
+
+        for role in ("brand_manager", "admin"):
+            self.content.status = "approved"
+            self.db.commit()
+
+            status, payload = self.request(
+                "/api/content/1/ready-to-publish",
+                role=role,
+                user=f"{role}-user",
+            )
+
+            self.assertEqual(status, 200)
+            self.assertEqual(
+                payload,
+                {
+                    "content_id": 1,
+                    "status": "ready_to_publish",
+                    "content_version": original_version,
+                },
+            )
+            self.assertEqual(self.content.body, original_body)
+            self.assertEqual(self.content.version, original_version)
+            event = self.db.query(AuditEvent).one()
+            self.assertEqual(event.action, "content_status_changed")
+            self.assertEqual(event.actor, f"{role}-user")
+            self.assertEqual(event.content_id, self.content.id)
+            self.assertEqual(
+                event.details,
+                {
+                    "actor_role": role,
+                    "previous_status": "approved",
+                    "new_status": "ready_to_publish",
+                },
+            )
+            self.assertIsNotNone(event.created_at)
+
+            repeated_status, repeated_payload = self.request(
+                "/api/content/1/ready-to-publish",
+                role=role,
+                user=f"{role}-user",
+            )
+            self.assertEqual(repeated_status, 409)
+            self.assertEqual(
+                repeated_payload,
+                {
+                    "error": "invalid_status_transition",
+                    "message": "Status transition is not allowed.",
+                },
+            )
+            self.assertEqual(self.db.query(AuditEvent).count(), 1)
+            self.db.query(AuditEvent).delete()
+            self.db.commit()
+
+    def test_ready_to_publish_rejects_unauthorized_roles(self):
+        self.content.status = "approved"
+        self.db.commit()
+
+        for role in ("creator", "reviewer"):
+            status, payload = self.request(
+                "/api/content/1/ready-to-publish",
+                role=role,
+            )
+            self.assertEqual(status, 403)
+            self.assertEqual(payload["error"], "forbidden")
+            self.assertEqual(self.content.status, "approved")
+            self.assertEqual(self.db.query(AuditEvent).count(), 0)
+
+    def test_ready_to_publish_invalid_status_returns_exact_409(self):
+        status, payload = self.request(
+            "/api/content/1/ready-to-publish",
+            role="brand_manager",
+        )
+
+        self.assertEqual(status, 409)
+        self.assertEqual(
+            payload,
+            {
+                "error": "invalid_status_transition",
+                "message": "Status transition is not allowed.",
+            },
+        )
+        self.assertEqual(self.content.status, "draft")
+        self.assertEqual(self.db.query(AuditEvent).count(), 0)
+
+    def test_ready_to_publish_rolls_back_when_audit_persistence_fails(self):
+        self.content.status = "approved"
+        self.db.commit()
+        add = self.db.add
+
+        def fail_on_audit(instance):
+            if isinstance(instance, AuditEvent):
+                raise SQLAlchemyError("audit write failed")
+            add(instance)
+
+        with patch.object(self.db, "add", side_effect=fail_on_audit):
+            status, payload = self.request(
+                "/api/content/1/ready-to-publish",
+                role="admin",
+            )
+
+        self.db.expire_all()
+        self.assertEqual(status, 500)
+        self.assertEqual(
+            payload,
+            {
+                "error": "workflow_failed",
+                "message": "Unable to update content status.",
+            },
+        )
+        self.assertEqual(self.db.get(Content, 1).status, "approved")
+        self.assertEqual(self.db.query(AuditEvent).count(), 0)
+
+    def test_standalone_comment_creation_and_retrieval(self):
+        self.content.status = "in_review"
+        self.db.commit()
+
+        status, payload = self.request(
+            "/api/content/1/comments",
+            role="reviewer",
+            user="reviewer-user",
+            body={"body": "  Please add evidence.  "},
+        )
+
+        self.assertEqual(status, 201)
+        self.assertEqual(
+            set(payload),
+            {"id", "author", "body", "created_at"},
+        )
+        self.assertEqual(payload["author"], "reviewer-user")
+        self.assertEqual(payload["body"], "Please add evidence.")
+        self.assertIsInstance(payload["id"], int)
+        self.assertIsInstance(payload["created_at"], str)
+        comment = self.db.get(Comment, payload["id"])
+        self.assertEqual(comment.content_id, self.content.id)
+        self.assertEqual(comment.author, "reviewer-user")
+        self.assertEqual(comment.body, "Please add evidence.")
+        comment_event = self.db.query(AuditEvent).one()
+        self.assertEqual(comment_event.action, "comment_added")
+        self.assertEqual(comment_event.actor, "reviewer-user")
+        self.assertEqual(comment_event.content_id, self.content.id)
+        self.assertEqual(
+            comment_event.details,
+            {"comment_id": comment.id, "actor_role": "reviewer"},
+        )
+        self.assertIsNotNone(comment_event.created_at)
+
+        read_status, read_payload = self.request(
+            "/api/content/1/comments",
+            role="creator",
+            user="creator-user",
+            method="GET",
+        )
+        self.assertEqual(read_status, 200)
+        self.assertEqual(
+            read_payload,
+            {"content_id": 1, "comments": [payload]},
+        )
+
+    def test_standalone_comment_validation_and_role_authorization(self):
+        self.content.status = "in_review"
+        self.db.commit()
+
+        for body in ({}, {"body": "  "}, {"body": "Valid", "extra": True}):
+            status, payload = self.request(
+                "/api/content/1/comments",
+                role="reviewer",
+                body=body,
+            )
+            self.assertEqual(status, 422)
+            self.assertEqual(
+                payload,
+                {
+                    "error": "validation_error",
+                    "message": "The request data is invalid.",
+                },
+            )
+
+        unauthorized_status, unauthorized_payload = self.request(
+            "/api/content/1/comments",
+            role="creator",
+            body={"body": "Please revise."},
+        )
+        self.assertEqual(unauthorized_status, 403)
+        self.assertEqual(unauthorized_payload["error"], "forbidden")
+
+        missing_role_status, missing_role_payload = self.request(
+            "/api/content/1/comments",
+            role=None,
+            body={"body": "Please revise."},
+        )
+        missing_actor_status, missing_actor_payload = self.request(
+            "/api/content/1/comments",
+            role="reviewer",
+            user=None,
+            body={"body": "Please revise."},
+        )
+        self.assertEqual(missing_role_status, 403)
+        self.assertEqual(missing_role_payload["error"], "forbidden")
+        self.assertEqual(missing_actor_status, 422)
+        self.assertEqual(missing_actor_payload["error"], "validation_error")
+        self.assertEqual(self.db.query(Comment).count(), 0)
+        self.assertEqual(self.db.query(AuditEvent).count(), 0)
+
+    def test_comment_creation_rejects_content_outside_in_review(self):
+        status, payload = self.request(
+            "/api/content/1/comments",
+            role="reviewer",
+            body={"body": "Please revise."},
+        )
+        self.assertEqual(status, 403)
+        self.assertEqual(payload["error"], "forbidden")
+        self.assertEqual(self.db.query(Comment).count(), 0)
+        self.assertEqual(self.db.query(AuditEvent).count(), 0)
+
+    def test_comment_retrieval_checks_content_ownership_and_not_found(self):
+        unauthorized_status, unauthorized_payload = self.request(
+            "/api/content/1/comments",
+            role="creator",
+            user="another-creator",
+            method="GET",
+        )
+        missing_status, missing_payload = self.request(
+            "/api/content/999/comments",
+            role="reviewer",
+            method="GET",
+        )
+
+        self.assertEqual(unauthorized_status, 403)
+        self.assertEqual(unauthorized_payload["error"], "forbidden")
+        self.assertEqual(missing_status, 404)
+        self.assertEqual(
+            missing_payload,
+            {"error": "not_found", "message": "Content not found."},
+        )
+
+    def test_standalone_comment_rolls_back_when_audit_persistence_fails(self):
+        self.content.status = "in_review"
+        self.db.commit()
+        add = self.db.add
+
+        def fail_on_audit(instance):
+            if isinstance(instance, AuditEvent):
+                raise SQLAlchemyError("audit write failed")
+            add(instance)
+
+        with patch.object(self.db, "add", side_effect=fail_on_audit):
+            status, payload = self.request(
+                "/api/content/1/comments",
+                role="reviewer",
+                body={"body": "Please revise."},
+            )
+
+        self.db.expire_all()
+        self.assertEqual(status, 500)
+        self.assertEqual(
+            payload,
+            {
+                "error": "workflow_failed",
+                "message": "Unable to save review comment.",
+            },
+        )
+        self.assertEqual(self.db.query(Comment).count(), 0)
+        self.assertEqual(self.db.query(AuditEvent).count(), 0)
+
+    def test_standalone_comment_rolls_back_when_comment_persistence_fails(self):
+        self.content.status = "in_review"
+        self.db.commit()
+        add = self.db.add
+
+        def fail_on_comment(instance):
+            if isinstance(instance, Comment):
+                raise SQLAlchemyError("comment write failed")
+            add(instance)
+
+        with patch.object(self.db, "add", side_effect=fail_on_comment):
+            status, payload = self.request(
+                "/api/content/1/comments",
+                role="reviewer",
+                body={"body": "Please revise."},
+            )
+
+        self.db.expire_all()
+        self.assertEqual(status, 500)
+        self.assertEqual(
+            payload,
+            {
+                "error": "workflow_failed",
+                "message": "Unable to save review comment.",
+            },
+        )
         self.assertEqual(self.db.query(Comment).count(), 0)
         self.assertEqual(self.db.query(AuditEvent).count(), 0)
 

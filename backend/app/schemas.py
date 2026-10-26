@@ -73,6 +73,24 @@ class ReviewDecisionResponse(ContentStatusResponse):
     comment: ReviewCommentResponse | None
 
 
+class ReviewCommentCreateRequest(BaseModel):
+    body: str
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def validate_body(self) -> "ReviewCommentCreateRequest":
+        self.body = self.body.strip()
+        if not self.body:
+            raise ValueError("A comment body is required.")
+        return self
+
+
+class ContentCommentsResponse(BaseModel):
+    content_id: int
+    comments: list[ReviewCommentResponse]
+
+
 class FindingActionRequest(BaseModel):
     action: Literal["accept", "edit", "dismiss"]
     replacement: str | None = None
