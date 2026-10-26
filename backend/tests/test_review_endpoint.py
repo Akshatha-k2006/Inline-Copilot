@@ -11,7 +11,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db import Base, get_db, migrate_review_schema
 from app.exception_handlers import register_exception_handlers
-from app.models import Content, Finding, Term
+from app.models import AuditEvent, Content, Finding, Term
 from app.routers.review import review_content
 
 
@@ -55,7 +55,7 @@ class ReviewEndpointTests(unittest.TestCase):
         app.dependency_overrides[get_db] = override_get_db
         self.app = app
 
-    def request(self, path):
+    def request(self, path, method="POST", body=None):
         async def dispatch():
             sent = []
             received = False
@@ -75,21 +75,28 @@ class ReviewEndpointTests(unittest.TestCase):
                 sent.append(message)
 
             raw_path = path.encode("ascii")
+            headers = [(b"x-user", b"test-user")]
+            request_payload = b""
+            if body is not None:
+                request_payload = json.dumps(body).encode("utf-8")
+                headers.append((b"content-type", b"application/json"))
             await self.app(
                 {
                     "type": "http",
                     "asgi": {"version": "3.0", "spec_version": "2.3"},
                     "http_version": "1.1",
-                    "method": "POST",
+                    "method": method,
                     "scheme": "http",
                     "path": path,
                     "raw_path": raw_path,
                     "query_string": b"",
-                    "headers": [],
+                    "headers": headers,
                     "client": ("testclient", 123),
                     "server": ("testserver", 80),
                 },
-                receive,
+                receive
+                if not request_payload
+                else self._body_receiver(request_payload),
                 send,
             )
             status = next(
@@ -97,14 +104,31 @@ class ReviewEndpointTests(unittest.TestCase):
                 for message in sent
                 if message["type"] == "http.response.start"
             )
-            body = b"".join(
+            response_body = b"".join(
                 message.get("body", b"")
                 for message in sent
                 if message["type"] == "http.response.body"
             )
-            return status, json.loads(body)
+            return status, json.loads(response_body)
 
         return asyncio.run(dispatch())
+
+    @staticmethod
+    def _body_receiver(body):
+        received = False
+
+        async def receive():
+            nonlocal received
+            if received:
+                return {"type": "http.disconnect"}
+            received = True
+            return {
+                "type": "http.request",
+                "body": body,
+                "more_body": False,
+            }
+
+        return receive
 
     def add_finding(
         self,
@@ -115,6 +139,8 @@ class ReviewEndpointTests(unittest.TestCase):
         message="Existing finding",
         start_offset=0,
         end_offset=4,
+        matched_text="best",
+        suggested_fix=None,
     ):
         finding = Finding(
             content_id=1,
@@ -122,7 +148,8 @@ class ReviewEndpointTests(unittest.TestCase):
             check_type=check_type,
             severity="warning",
             message=message,
-            evidence={"matched_text": "best"},
+            evidence={"matched_text": matched_text},
+            suggested_fix=suggested_fix,
             start_offset=start_offset,
             end_offset=end_offset,
             status=status,
@@ -389,6 +416,326 @@ class ReviewEndpointTests(unittest.TestCase):
             [(item.id, item.content_version) for item in persisted],
             [(previous.id, 3)],
         )
+
+    def test_accept_applies_suggested_fix_and_updates_versioned_offsets(self):
+        content = self.db.get(Content, 1)
+        content.body = "before old middle last"
+        before = self.add_finding(
+            check_type="messaging",
+            message="Before replacement",
+            start_offset=0,
+            end_offset=6,
+            matched_text="before",
+        )
+        target = self.add_finding(
+            message="Target finding",
+            start_offset=7,
+            end_offset=10,
+            matched_text="old",
+            suggested_fix="new",
+        )
+        after = self.add_finding(
+            check_type="unsupported_claim",
+            message="After replacement",
+            start_offset=18,
+            end_offset=22,
+            matched_text="last",
+        )
+
+        status, payload = self.request(
+            f"/api/findings/{target.id}",
+            method="PATCH",
+            body={"action": "accept"},
+        )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            set(payload),
+            {"content_id", "content_version", "finding"},
+        )
+        self.assertEqual(payload["content_id"], 1)
+        self.assertEqual(payload["content_version"], 4)
+        self.assertEqual(
+            set(payload["finding"]),
+            {
+                "id",
+                "check",
+                "severity",
+                "message",
+                "evidence",
+                "suggested_fix",
+                "start_offset",
+                "end_offset",
+                "status",
+            },
+        )
+        self.assertEqual(payload["finding"]["id"], target.id)
+        self.assertEqual(payload["finding"]["status"], "accepted")
+        self.assertEqual(payload["finding"]["start_offset"], 7)
+        self.assertEqual(payload["finding"]["end_offset"], 10)
+        self.assertEqual(content.body, "before new middle last")
+        self.assertEqual(content.version, 4)
+        self.assertEqual(
+            (before.start_offset, before.end_offset, before.content_version),
+            (0, 6, 4),
+        )
+        self.assertEqual(
+            (after.start_offset, after.end_offset, after.content_version),
+            (18, 22, 4),
+        )
+        event = self.db.query(AuditEvent).one()
+        self.assertEqual(event.content_id, content.id)
+        self.assertEqual(event.actor, "test-user")
+        self.assertEqual(event.action, "finding_accepted")
+        self.assertEqual(event.details["finding_id"], target.id)
+        self.assertEqual(event.details["previous_version"], 3)
+        self.assertEqual(event.details["new_version"], 4)
+        self.assertEqual(
+            event.details["changes"],
+            {"field": "text", "previous": "old", "next": "new"},
+        )
+
+    def test_edit_replaces_only_target_span_and_shifts_later_findings(self):
+        content = self.db.get(Content, 1)
+        content.body = "before old middle last"
+        before = self.add_finding(
+            check_type="messaging",
+            message="Before replacement",
+            start_offset=0,
+            end_offset=6,
+            matched_text="before",
+        )
+        target = self.add_finding(
+            message="Target finding",
+            start_offset=7,
+            end_offset=10,
+            matched_text="old",
+            suggested_fix="suggested",
+        )
+        after = self.add_finding(
+            check_type="unsupported_claim",
+            message="After replacement",
+            start_offset=18,
+            end_offset=22,
+            matched_text="last",
+        )
+
+        status, payload = self.request(
+            f"/api/findings/{target.id}",
+            method="PATCH",
+            body={"action": "edit", "replacement": "longer"},
+        )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["content_version"], 4)
+        self.assertEqual(payload["finding"]["status"], "edited")
+        self.assertEqual(payload["finding"]["start_offset"], 7)
+        self.assertEqual(payload["finding"]["end_offset"], 13)
+        self.assertEqual(content.body, "before longer middle last")
+        self.assertEqual(content.version, 4)
+        self.assertEqual(
+            (before.start_offset, before.end_offset, before.content_version),
+            (0, 6, 4),
+        )
+        self.assertEqual(
+            (after.start_offset, after.end_offset, after.content_version),
+            (21, 25, 4),
+        )
+        event = self.db.query(AuditEvent).one()
+        self.assertEqual(event.action, "finding_edited")
+        self.assertEqual(event.actor, "test-user")
+
+    def test_dismiss_changes_status_and_records_audit_without_editing_content(self):
+        content = self.db.get(Content, 1)
+        finding = self.add_finding()
+        original_body = content.body
+        original_version = content.version
+
+        status, payload = self.request(
+            f"/api/findings/{finding.id}",
+            method="PATCH",
+            body={"action": "dismiss"},
+        )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["finding"]["status"], "dismissed")
+        self.assertEqual(payload["content_version"], original_version)
+        self.assertEqual(content.body, original_body)
+        self.assertEqual(content.version, original_version)
+        event = self.db.query(AuditEvent).one()
+        self.assertEqual(event.action, "finding_dismissed")
+        self.assertEqual(event.content_id, content.id)
+        self.assertEqual(event.actor, "test-user")
+        self.assertEqual(event.details["finding_id"], finding.id)
+        self.assertEqual(event.details["previous_version"], original_version)
+        self.assertEqual(event.details["new_version"], original_version)
+
+    def test_invalid_action_or_edit_replacement_fails_without_changes(self):
+        finding = self.add_finding(suggested_fix="correction")
+        original_body = self.db.get(Content, 1).body
+
+        for payload in (
+            {"action": "replace"},
+            {"action": "edit"},
+            {"action": "edit", "replacement": "  "},
+            {"action": "accept", "replacement": "not allowed"},
+        ):
+            with self.subTest(payload=payload):
+                status, _ = self.request(
+                    f"/api/findings/{finding.id}",
+                    method="PATCH",
+                    body=payload,
+                )
+                self.assertEqual(status, 422)
+                self.assertEqual(self.db.get(Finding, finding.id).status, "open")
+                self.assertEqual(self.db.get(Content, 1).body, original_body)
+                self.assertEqual(self.db.query(AuditEvent).count(), 0)
+
+    def test_missing_finding_returns_contract_not_found_error(self):
+        status, payload = self.request(
+            "/api/findings/999",
+            method="PATCH",
+            body={"action": "dismiss"},
+        )
+
+        self.assertEqual(status, 404)
+        self.assertEqual(
+            payload,
+            {"error": "not_found", "message": "Finding not found."},
+        )
+
+    def test_stale_offsets_fail_without_partial_updates(self):
+        finding = self.add_finding(
+            start_offset=2,
+            end_offset=6,
+            matched_text="best",
+            suggested_fix="replacement",
+        )
+        content = self.db.get(Content, 1)
+        original_body = content.body
+        original_version = content.version
+
+        status, payload = self.request(
+            f"/api/findings/{finding.id}",
+            method="PATCH",
+            body={"action": "accept"},
+        )
+
+        self.assertEqual(status, 409)
+        self.assertEqual(payload["error"], "stale_finding")
+        self.assertEqual(content.body, original_body)
+        self.assertEqual(content.version, original_version)
+        self.assertEqual(self.db.get(Finding, finding.id).status, "open")
+        self.assertEqual(self.db.query(AuditEvent).count(), 0)
+
+    def test_stale_content_version_fails_without_partial_updates(self):
+        finding = self.add_finding(suggested_fix="great")
+        content = self.db.get(Content, 1)
+        content.version = 4
+        self.db.commit()
+        original_body = content.body
+
+        status, payload = self.request(
+            f"/api/findings/{finding.id}",
+            method="PATCH",
+            body={"action": "accept"},
+        )
+
+        self.assertEqual(status, 409)
+        self.assertEqual(payload["error"], "stale_finding")
+        self.assertEqual(content.body, original_body)
+        self.assertEqual(content.version, 4)
+        self.assertEqual(self.db.get(Finding, finding.id).status, "open")
+        self.assertEqual(self.db.query(AuditEvent).count(), 0)
+
+    def test_accept_without_suggested_fix_fails_without_changes(self):
+        finding = self.add_finding()
+        content = self.db.get(Content, 1)
+        original_body = content.body
+
+        status, payload = self.request(
+            f"/api/findings/{finding.id}",
+            method="PATCH",
+            body={"action": "accept"},
+        )
+
+        self.assertEqual(status, 409)
+        self.assertEqual(payload["error"], "suggestion_unavailable")
+        self.assertEqual(content.body, original_body)
+        self.assertEqual(content.version, 3)
+        self.assertEqual(self.db.get(Finding, finding.id).status, "open")
+        self.assertEqual(self.db.query(AuditEvent).count(), 0)
+
+    def test_findings_overlapping_replacement_are_rejected(self):
+        content = self.db.get(Content, 1)
+        content.body = "before old middle"
+        self.db.commit()
+        target = self.add_finding(
+            start_offset=7,
+            end_offset=10,
+            matched_text="old",
+            suggested_fix="new",
+        )
+        overlapping = self.add_finding(
+            check_type="unsupported_claim",
+            start_offset=8,
+            end_offset=11,
+            matched_text="ld ",
+        )
+        original_body = content.body
+
+        status, payload = self.request(
+            f"/api/findings/{target.id}",
+            method="PATCH",
+            body={"action": "accept"},
+        )
+
+        self.assertEqual(status, 409)
+        self.assertEqual(payload["error"], "overlapping_finding")
+        self.assertEqual(content.body, original_body)
+        self.assertEqual(content.version, 3)
+        self.assertEqual(self.db.get(Finding, target.id).status, "open")
+        self.assertEqual(self.db.get(Finding, overlapping.id).status, "open")
+        self.assertEqual(self.db.query(AuditEvent).count(), 0)
+
+    def test_finding_cannot_be_applied_twice(self):
+        finding = self.add_finding(suggested_fix="great")
+        status, _ = self.request(
+            f"/api/findings/{finding.id}",
+            method="PATCH",
+            body={"action": "accept"},
+        )
+        self.assertEqual(status, 200)
+
+        repeated_status, payload = self.request(
+            f"/api/findings/{finding.id}",
+            method="PATCH",
+            body={"action": "accept"},
+        )
+
+        self.assertEqual(repeated_status, 409)
+        self.assertEqual(payload["error"], "finding_resolved")
+        self.assertEqual(self.db.query(AuditEvent).count(), 1)
+
+    def test_finding_action_database_failure_rolls_back_content_and_audit(self):
+        finding = self.add_finding(suggested_fix="great")
+        content = self.db.get(Content, 1)
+        original_body = content.body
+        original_version = content.version
+
+        with patch.object(self.db, "commit", side_effect=SQLAlchemyError("failure")):
+            status, payload = self.request(
+                f"/api/findings/{finding.id}",
+                method="PATCH",
+                body={"action": "accept"},
+            )
+
+        self.assertEqual(status, 500)
+        self.assertEqual(payload["error"], "review_failed")
+        self.assertEqual(content.body, original_body)
+        self.assertEqual(content.version, original_version)
+        self.assertEqual(self.db.get(Finding, finding.id).status, "open")
+        self.assertEqual(self.db.query(AuditEvent).count(), 0)
 
     def test_review_operation_failure_rolls_back_replaced_findings(self):
         previous = self.add_finding(message="Must survive failed rerun")

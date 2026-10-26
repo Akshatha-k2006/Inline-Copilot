@@ -66,6 +66,74 @@ input returns `422` with
 Database failures return `500` with
 `{ "error": "review_failed", "message": "Unable to save review findings." }`.
 
+### Finding actions
+
+`PATCH /api/findings/{id}` accepts an action for an open finding. The frontend
+must send `X-User`; that value is recorded as the audit actor.
+
+Accept an existing suggestion or dismiss a finding:
+
+```json
+{ "action": "accept" }
+```
+
+```json
+{ "action": "dismiss" }
+```
+
+For a custom correction, `replacement` is required and must not be blank:
+
+```json
+{ "action": "edit", "replacement": "preferred wording" }
+```
+
+The `replacement` field is not allowed with `accept` or `dismiss`. Accept
+applies the finding's `suggested_fix`; if there is no suggestion, the request
+conflicts. Accept and edit replace only the span indicated by the finding's
+offsets, increment the content version, and update the offsets and version
+associations of findings for that version. If the finding's span is stale or
+overlaps another finding, the action is rejected rather than risking an
+incorrect edit. Dismiss does not change the content or its version. Successful
+actions return `200`:
+
+```json
+{
+  "content_id": 1,
+  "content_version": 2,
+  "finding": {
+    "id": 1,
+    "check": "terminology",
+    "severity": "warning",
+    "message": "Prohibited term detected: example",
+    "evidence": {
+      "matched_text": "example",
+      "source": {},
+      "requires_manual_review": false
+    },
+    "suggested_fix": "preferred wording",
+    "start_offset": 12,
+    "end_offset": 28,
+    "status": "accepted"
+  }
+}
+```
+
+The finding uses the same fields and types as a finding in the review response.
+Each successful action records an `AuditEvent` with action `finding_accepted`,
+`finding_edited`, or `finding_dismissed`; its details include the finding ID and
+previous/new content versions. Text changes additionally include previous and
+replacement text.
+
+Missing findings return `404` with
+`{ "error": "not_found", "message": "Finding not found." }`. Invalid action or
+replacement fields return `422` with
+`{ "error": "validation_error", "message": "The request data is invalid." }`.
+Resolved findings, stale offsets or versions, missing suggestions, and
+overlapping finding spans return `409` with a JSON `{ "error": "...",
+"message": "..." }` body. Database failures return `500` with
+`{ "error": "review_failed", "message": "Unable to save finding action." }`.
+Content, finding, version, and audit changes are committed atomically.
+
 The LLM status is `disabled` when `LLM_API_KEY` is not configured, `timeout`
 when the request exceeds `LLM_TIMEOUT_SECONDS`, `error` for other provider or
 response-validation failures, and `ok` when guideline review succeeds.
