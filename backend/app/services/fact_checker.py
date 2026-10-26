@@ -48,7 +48,10 @@ def _numbers(text: str) -> list[float]:
         r"\s*(?:thousand|million|billion)?"
     )
 
-    return [_number(value) for value in re.findall(pattern, text, re.I)]
+    return [
+        _number(value)
+        for value in re.findall(pattern, text, re.IGNORECASE)
+    ]
 
 
 def check_claims(text: str, db: Session) -> list[dict]:
@@ -149,7 +152,7 @@ def check_claims(text: str, db: Session) -> list[dict]:
     customer_facts = [
         fact
         for fact in facts
-        if re.search(r"\bcustomers?\b", fact.statement, re.I)
+        if re.search(r"\bcustomers?\b", fact.statement, re.IGNORECASE)
     ]
 
     for match in count_pattern.finditer(text):
@@ -161,19 +164,29 @@ def check_claims(text: str, db: Session) -> list[dict]:
                 fact
                 for fact in customer_facts
                 if _numbers(fact.statement)
-                and claimed_number > _numbers(fact.statement)[0]
             ),
             None,
         )
 
         if matching_fact:
-            add_fact_finding(
-                match,
-                matching_fact,
-                "Customer-count claim exceeds the approved fact: "
-                f"{matching_fact.statement}",
-            )
-        elif not customer_facts:
+            approved_values = _numbers(matching_fact.statement)
+            approved_number = approved_values[0]
+
+            if _fact_is_outdated(matching_fact):
+                add_fact_finding(
+                    match,
+                    matching_fact,
+                    "Customer-count information is outdated and requires "
+                    "reapproval: " + matching_fact.statement,
+                )
+            elif claimed_number > approved_number:
+                add_fact_finding(
+                    match,
+                    matching_fact,
+                    "Customer-count claim exceeds the approved fact: "
+                    + matching_fact.statement,
+                )
+        else:
             add_guideline_finding(
                 match,
                 "unsupported_claim",
@@ -181,13 +194,13 @@ def check_claims(text: str, db: Session) -> list[dict]:
             )
 
     # Percentage claims.
-    percentage_pattern = re.compile(r"\b\d+(?:\.\d+)?\s*%", re.I)
+    percentage_pattern = re.compile(r"\b\d+(?:\.\d+)?\s*%", re.IGNORECASE)
 
     percentage_facts = [
         fact
         for fact in facts
         if "%" in fact.statement
-        or re.search(r"\bpercent\b", fact.statement, re.I)
+        or re.search(r"\bpercent\b", fact.statement, re.IGNORECASE)
     ]
 
     for match in percentage_pattern.finditer(text):
@@ -195,7 +208,7 @@ def check_claims(text: str, db: Session) -> list[dict]:
             re.search(r"\d+(?:\.\d+)?", match.group(0)).group()
         )
 
-        # Examine the nearby draft text to avoid matching unrelated facts.
+        # Prefer facts with meaningful words overlapping the nearby claim.
         claim_start = max(0, match.start() - 100)
         claim_end = min(len(text), match.end() + 100)
         claim_context = text[claim_start:claim_end].lower()
@@ -237,7 +250,7 @@ def check_claims(text: str, db: Session) -> list[dict]:
                 match,
                 matching_fact,
                 "Percentage claim exceeds the approved fact: "
-                f"{matching_fact.statement}",
+                + matching_fact.statement,
             )
         elif not relevant_facts:
             add_guideline_finding(
@@ -245,11 +258,66 @@ def check_claims(text: str, db: Session) -> list[dict]:
                 "unsupported_claim",
                 "No relevant approved fact supports this percentage claim.",
             )
+    
+    # Numeric claims involving product lifetime and founding year.
+    numeric_patterns = [
+        (
+            re.compile(r"\b\d+(?:,\d{3})*\s+hours?\b", re.IGNORECASE),
+            "hours",
+            r"\bhours?\b",
+        ),
+        (
+            re.compile(r"\b(?:founded|established)\s+in\s+\d{4}\b", re.IGNORECASE),
+            "year",
+            r"\bfounded|established\b",
+        ),
+    ]
+
+    for pattern, metric, context_pattern in numeric_patterns:
+        relevant_facts = [
+            fact
+            for fact in facts
+            if re.search(context_pattern, fact.statement, re.IGNORECASE)
+        ]
+
+        for match in pattern.finditer(text):
+            claimed_values = _numbers(match.group(0))
+            if metric == "year":
+                year_match = re.search(r"\d{4}", match.group(0))
+                claimed_values = [float(year_match.group())] if year_match else []
+
+            if not claimed_values:
+                continue
+
+            claimed_number = claimed_values[0]
+            matching_fact = next(
+                (
+                    fact
+                    for fact in relevant_facts
+                    if _numbers(fact.statement)
+                    and claimed_number != _numbers(fact.statement)[0]
+                ),
+                None,
+            )
+
+            if matching_fact:
+                add_fact_finding(
+                    match,
+                    matching_fact,
+                    f"Numeric {metric} claim disagrees with the approved fact: "
+                    + matching_fact.statement,
+                )
+            elif not relevant_facts:
+                add_guideline_finding(
+                    match,
+                    "unsupported_claim",
+                    f"No approved fact supports this {metric} claim.",
+                )
 
     # Superlatives require approved evidence.
     superlative_pattern = re.compile(
         r"\b(?:best|greatest|number\s+one|most|leading)\b|#\s*1",
-        re.I,
+        re.IGNORECASE,
     )
 
     for match in superlative_pattern.finditer(text):
@@ -263,13 +331,13 @@ def check_claims(text: str, db: Session) -> list[dict]:
     guarantee_pattern = re.compile(
         r"\b(?:guaranteed?\s+to\s+last\s+forever|"
         r"last\s+forever|guaranteed\s+forever|never\s+fail)\b",
-        re.I,
+        re.IGNORECASE,
     )
 
     guarantee_facts = [
         fact
         for fact in facts
-        if re.search(r"\bguarantee|guaranteed\b", fact.statement, re.I)
+        if re.search(r"\bguarantee|guaranteed\b", fact.statement, re.IGNORECASE)
     ]
 
     for match in guarantee_pattern.finditer(text):
@@ -287,7 +355,7 @@ def check_claims(text: str, db: Session) -> list[dict]:
                 match,
                 outdated_fact,
                 "This claim references an outdated guarantee fact: "
-                f"{outdated_fact.statement}",
+                + outdated_fact.statement,
             )
         else:
             source_fact = guarantee_facts[0] if guarantee_facts else None
