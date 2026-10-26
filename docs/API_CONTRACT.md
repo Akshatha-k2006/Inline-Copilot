@@ -24,17 +24,47 @@ Each item returned by the API includes an `id`.
 
 ## Content review
 
-`POST /api/content/{id}/review` returns the content version, persisted
-findings, and engine statuses:
+`POST /api/content/{id}/review` returns `200` with the content version,
+persisted findings, and engine statuses. Each finding contains an integer
+`id`, string `check`, `severity`, `message`, and `status`, an `evidence`
+object, a nullable string `suggested_fix`, and nullable integer `start_offset`
+and `end_offset`. The evidence object contains string `matched_text`, object
+`source`, boolean `requires_manual_review`, and an optional object
+`suggestion_source`. Findings are returned in ascending text-position order.
+Each persisted finding is associated with the requested content ID and the
+content version reviewed.
 
 ```json
 {
   "content_id": 1,
   "content_version": 1,
-  "findings": [],
+  "findings": [
+    {
+      "id": 1,
+      "check": "terminology",
+      "severity": "warning",
+      "message": "Prohibited term detected: example",
+      "evidence": {
+        "matched_text": "example",
+        "source": {},
+        "requires_manual_review": false
+      },
+      "suggested_fix": "preferred wording",
+      "start_offset": 12,
+      "end_offset": 19,
+      "status": "open"
+    }
+  ],
   "engine": { "rules": "ok", "llm": "ok" }
 }
 ```
+
+Missing content returns `404` with
+`{ "error": "not_found", "message": "Content not found." }`. Invalid path
+input returns `422` with
+`{ "error": "validation_error", "message": "The request data is invalid." }`.
+Database failures return `500` with
+`{ "error": "review_failed", "message": "Unable to save review findings." }`.
 
 The LLM status is `disabled` when `LLM_API_KEY` is not configured, `timeout`
 when the request exceeds `LLM_TIMEOUT_SECONDS`, `error` for other provider or
@@ -60,8 +90,10 @@ authentication.
 Review records, comments, decisions, prior submitted versions, and workflow
 audit events are stored in browser `localStorage`. They are not sent to the
 backend, do not represent
-verified checks, and do not publish content. No content-review workflow
-endpoints are defined by this contract yet.
+verified checks, and do not publish content. Only the backend review route
+above is defined for content review. The frontend submission, decision,
+comment, and audit workflows remain local demonstrations and have no backend
+endpoints in this contract.
 
 The frontend audit timeline uses the shared workflow history collection. Each
 event is associated with a content ID and stores the demo actor name and role
@@ -75,4 +107,3 @@ succeeds. This browser-local history is not authenticated, tamper-proof, or
 server-persistent. A future backend integration should provide a durable
 content-scoped audit API and server-verified actor identity rather than relying
 on the demo role selector.
-endpoints are defined by this contract yet.
