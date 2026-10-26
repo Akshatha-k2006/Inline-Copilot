@@ -90,11 +90,13 @@ For a custom correction, `replacement` is required and must not be blank:
 The `replacement` field is not allowed with `accept` or `dismiss`. Accept
 applies the finding's `suggested_fix`; if there is no suggestion, the request
 conflicts. Accept and edit replace only the span indicated by the finding's
-offsets and increment the content version once. Other findings are advanced
-to the new version only when their stored spans can be verified against the
-updated text; findings without verifiable spans remain associated with their
-older version and are stale. If the target span is stale or overlaps another
-finding, the action is rejected rather than risking an incorrect edit.
+offsets and increment the content version once when the replacement changes
+the content. A replacement identical to the matched text resolves the finding
+and records the action without changing the content version. Other findings
+are advanced to the new version only when their stored spans can be verified
+against the updated text; findings without verifiable spans remain associated
+with their older version and are stale. If the target span is stale or overlaps
+another finding, the action is rejected rather than risking an incorrect edit.
 Dismiss does not change the content or its version. Successful actions return
 `200`:
 

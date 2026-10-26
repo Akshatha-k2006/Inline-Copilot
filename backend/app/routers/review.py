@@ -357,9 +357,12 @@ def update_finding(
         elif action == "edit":
             replacement = action_request.replacement
 
-        text_changes = action in {"accept", "edit"}
+        replacement_action = action in {"accept", "edit"}
+        changes_content = (
+            replacement_action and replacement != matched_text
+        )
         new_version = old_version
-        if text_changes:
+        if changes_content:
             replacement = replacement or ""
             delta = len(replacement) - (end - start)
             affected_findings = (
@@ -467,6 +470,8 @@ def update_finding(
                 "matched_text": replacement,
             }
             finding.status = "accepted" if action == "accept" else "edited"
+        elif replacement_action:
+            finding.status = "accepted" if action == "accept" else "edited"
         else:
             finding.status = "dismissed"
 
@@ -483,7 +488,7 @@ def update_finding(
             "previous_version": old_version,
             "new_version": new_version,
         }
-        if text_changes:
+        if changes_content:
             details["changes"] = {
                 "field": "text",
                 "previous": previous_text,

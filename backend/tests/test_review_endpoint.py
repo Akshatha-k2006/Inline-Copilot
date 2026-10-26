@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 
 from fastapi import FastAPI
-from sqlalchemy import create_engine, inspect, text
+from sqlalchemy import create_engine, inspect, text, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
@@ -55,7 +55,7 @@ class ReviewEndpointTests(unittest.TestCase):
         app.dependency_overrides[get_db] = override_get_db
         self.app = app
 
-    def request(self, path, method="POST", body=None):
+    def request(self, path, method="POST", body=None, user="test-user"):
         async def dispatch():
             sent = []
             received = False
@@ -75,7 +75,9 @@ class ReviewEndpointTests(unittest.TestCase):
                 sent.append(message)
 
             raw_path = path.encode("ascii")
-            headers = [(b"x-user", b"test-user")]
+            headers = []
+            if user is not None:
+                headers.append((b"x-user", user.encode("ascii")))
             request_payload = b""
             if body is not None:
                 request_payload = json.dumps(body).encode("utf-8")
@@ -265,6 +267,69 @@ class ReviewEndpointTests(unittest.TestCase):
         self.assertEqual(
             {finding.id for finding in findings},
             {item["id"] for item in second["findings"]},
+        )
+
+    def test_review_action_rerun_lifecycle_keeps_resolved_findings(self):
+        content = self.db.get(Content, 1)
+        content.body = "badword then badword"
+        self.db.commit()
+
+        with patch("app.services.llm_reviewer.settings.llm_api_key", None):
+            review_status, review = self.request("/api/content/1/review")
+
+        self.assertEqual(review_status, 200)
+        term_findings = [
+            item for item in review["findings"] if item["check"] == "terminology"
+        ]
+        self.assertEqual(len(term_findings), 2)
+        first, second = term_findings
+        first_status, first_result = self.request(
+            f"/api/findings/{first['id']}",
+            method="PATCH",
+            body={"action": "accept"},
+        )
+        self.assertEqual(first_status, 200)
+        self.assertEqual(first_result["content_version"], 4)
+        self.assertEqual(content.body, "good word then badword")
+
+        shifted_second = self.db.get(Finding, second["id"])
+        self.assertEqual(shifted_second.start_offset, 15)
+        self.assertEqual(shifted_second.content_version, 4)
+        second_status, second_result = self.request(
+            f"/api/findings/{second['id']}",
+            method="PATCH",
+            body={"action": "accept"},
+        )
+        self.assertEqual(second_status, 200)
+        self.assertEqual(second_result["content_version"], 5)
+        self.assertEqual(content.body, "good word then good word")
+
+        rerun_status, rerun = self.request("/api/content/1/review")
+
+        self.assertEqual(rerun_status, 200)
+        self.assertEqual(rerun["content_version"], 5)
+        accepted = (
+            self.db.query(Finding)
+            .filter(Finding.status == "accepted")
+            .order_by(Finding.id)
+            .all()
+        )
+        self.assertEqual([item.id for item in accepted], [first["id"], second["id"]])
+        self.assertTrue(all(item.content_version == 5 for item in accepted))
+        self.assertEqual(self.db.query(AuditEvent).count(), 2)
+        self.assertEqual(
+            [
+                (
+                    event.action,
+                    event.details["previous_version"],
+                    event.details["new_version"],
+                )
+                for event in self.db.query(AuditEvent).order_by(AuditEvent.id)
+            ],
+            [
+                ("finding_accepted", 3, 4),
+                ("finding_accepted", 4, 5),
+            ],
         )
 
     def test_rerun_replaces_outdated_open_findings_for_current_version(self):
@@ -545,6 +610,38 @@ class ReviewEndpointTests(unittest.TestCase):
         event = self.db.query(AuditEvent).one()
         self.assertEqual(event.action, "finding_edited")
         self.assertEqual(event.actor, "test-user")
+        self.assertEqual(event.content_id, content.id)
+        self.assertEqual(event.details["finding_id"], target.id)
+        self.assertEqual(event.details["previous_version"], 3)
+        self.assertEqual(event.details["new_version"], 4)
+        self.assertEqual(
+            event.details["changes"],
+            {"field": "text", "previous": "old", "next": "longer"},
+        )
+
+    def test_edit_to_identical_text_does_not_increment_content_version(self):
+        finding = self.add_finding(matched_text="best")
+        content = self.db.get(Content, 1)
+        original_body = content.body
+        original_version = content.version
+
+        status, payload = self.request(
+            f"/api/findings/{finding.id}",
+            method="PATCH",
+            body={"action": "edit", "replacement": "best"},
+        )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["content_version"], original_version)
+        self.assertEqual(content.body, original_body)
+        self.assertEqual(content.version, original_version)
+        self.assertEqual(finding.status, "edited")
+        self.assertEqual(finding.content_version, original_version)
+        self.assertEqual(self.db.query(AuditEvent).one().action, "finding_edited")
+        event = self.db.query(AuditEvent).one()
+        self.assertEqual(event.details["previous_version"], original_version)
+        self.assertEqual(event.details["new_version"], original_version)
+        self.assertNotIn("changes", event.details)
 
     def test_shorter_replacement_shifts_adjacent_findings_and_keeps_exact_spans(self):
         content = self.db.get(Content, 1)
@@ -748,6 +845,50 @@ class ReviewEndpointTests(unittest.TestCase):
         self.assertEqual(payload["error"], "stale_finding")
         self.assertEqual(content.body, original_body)
         self.assertEqual(content.version, 3)
+        self.assertEqual(finding.status, "open")
+        self.assertEqual(self.db.query(AuditEvent).count(), 0)
+
+    def test_optimistic_version_conflict_rolls_back_action(self):
+        finding = self.add_finding(suggested_fix="great")
+        content = self.db.get(Content, 1)
+        original_body = content.body
+        original_version = content.version
+
+        with patch(
+            "app.routers.review.update",
+            return_value=update(Content).where(Content.id == -1),
+        ):
+            status, payload = self.request(
+                f"/api/findings/{finding.id}",
+                method="PATCH",
+                body={"action": "accept"},
+            )
+
+        self.assertEqual(status, 409)
+        self.assertEqual(payload["error"], "stale_finding")
+        self.assertEqual(content.body, original_body)
+        self.assertEqual(content.version, original_version)
+        self.assertEqual(finding.status, "open")
+        self.assertEqual(self.db.query(AuditEvent).count(), 0)
+
+    def test_finding_action_requires_audit_actor_header(self):
+        finding = self.add_finding()
+
+        status, payload = self.request(
+            f"/api/findings/{finding.id}",
+            method="PATCH",
+            body={"action": "dismiss"},
+            user=None,
+        )
+
+        self.assertEqual(status, 422)
+        self.assertEqual(
+            payload,
+            {
+                "error": "validation_error",
+                "message": "The request data is invalid.",
+            },
+        )
         self.assertEqual(finding.status, "open")
         self.assertEqual(self.db.query(AuditEvent).count(), 0)
 
