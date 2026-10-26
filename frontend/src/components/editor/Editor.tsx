@@ -1,15 +1,17 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { DemoFinding } from "@/lib/mock-findings";
 import {
   CUSTOM_CONTENT_NOTICE,
   DEMO_DRAFT,
   DEMO_FINDINGS_NOTICE,
+  isReplacementSuggestion,
 } from "@/lib/mock-findings";
 import {
   recordDemoReview,
-  updateDemoFindings,
+  resetDemoDocument,
+  resolveDemoFinding,
   useDemoWorkspace,
 } from "@/lib/mock-data";
 import type { FindingStatus } from "@/lib/types";
@@ -17,13 +19,6 @@ import FindingsPanel from "./FindingsPanel";
 import HighlightedDraft from "./HighlightedDraft";
 
 const DEFAULT_TITLE = "Untitled draft";
-
-function canApplySuggestion(value: string | null): value is string {
-  return Boolean(
-    value?.trim() &&
-      !/^(remove|verify|use the approved claim|replace|rewrite)\b/i.test(value.trim()),
-  );
-}
 
 export default function Editor() {
   const workspace = useDemoWorkspace();
@@ -34,12 +29,24 @@ export default function Editor() {
     workspace.findings,
   );
   const [reviewing, setReviewing] = useState(false);
+  const [operationError, setOperationError] = useState("");
   const [reviewedCustomText, setReviewedCustomText] = useState(false);
   const [selectedFindingId, setSelectedFindingId] = useState<number | null>(null);
   const [busyFindingIds, setBusyFindingIds] = useState<number[]>([]);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
   const reviewInFlight = useRef(false);
   const reviewRevision = useRef(0);
+  const currentDocument = workspace.documents.find(
+    (item) => item.id === DEMO_DRAFT.id,
+  );
+
+  useEffect(() => {
+    if (!currentDocument) return;
+    setTitle(currentDocument.title);
+    setBody(currentDocument.body);
+    setFindings(workspace.findings);
+    setSelectedFindingId(null);
+  }, [currentDocument?.title, currentDocument?.body, workspace.findings]);
 
   function resetReviewForEdit() {
     reviewRevision.current += 1;
@@ -76,15 +83,26 @@ export default function Editor() {
   }
 
   function loadSampleDraft() {
-    changeTitle(DEMO_DRAFT.title);
-    changeBody(DEMO_DRAFT.body);
-    setFindings(workspace.findings);
-    setReviewedCustomText(false);
-    setSelectedFindingId(null);
+    if (!workspace.isHydrated) return;
+    setOperationError("");
+    try {
+      const sample = resetDemoDocument();
+      setTitle(sample.document.title);
+      setBody(sample.document.body);
+      setFindings(sample.findings);
+      setReviewedCustomText(false);
+      setSelectedFindingId(null);
+    } catch (error) {
+      setOperationError(
+        error instanceof Error
+          ? error.message
+          : "Could not reset the demonstration draft.",
+      );
+    }
   }
 
   async function runReview() {
-    if (!body.trim() || reviewInFlight.current) return;
+    if (!workspace.isHydrated || !body.trim() || reviewInFlight.current) return;
     const currentRevision = reviewRevision.current;
     const submittedBody = body;
 
@@ -95,9 +113,16 @@ export default function Editor() {
 
     await new Promise<void>((resolve) => window.setTimeout(resolve, 350));
     if (reviewRevision.current === currentRevision) {
-      const demoFindings = recordDemoReview(submittedBody);
-      setFindings(demoFindings);
-      setReviewedCustomText(demoFindings.length === 0);
+      try {
+        const demoFindings = recordDemoReview(submittedBody);
+        setFindings(demoFindings);
+        setReviewedCustomText(demoFindings.length === 0);
+        setOperationError("");
+      } catch (error) {
+        setOperationError(
+          error instanceof Error ? error.message : "Could not save this demo review.",
+        );
+      }
     }
     reviewInFlight.current = false;
     setReviewing(false);
@@ -105,50 +130,19 @@ export default function Editor() {
 
   async function resolveFinding(
     finding: DemoFinding,
-    status: FindingStatus,
+    status: Exclude<FindingStatus, "open">,
     finalText: string | null,
   ) {
+    if (!workspace.isHydrated) return;
     setBusyFindingIds((ids) => [...ids, finding.id]);
-    const replaceText =
-      canApplySuggestion(finalText) &&
-      body.slice(finding.start, finding.end) === finding.text;
-
-    if (replaceText) {
-      const delta = finalText.length - (finding.end - finding.start);
-      const updatedFindings = (findings ?? []).map((item) => {
-        if (item.id === finding.id) {
-          return {
-            ...item,
-            text: finalText,
-            end: finding.start + finalText.length,
-            status,
-            final_text: finalText,
-          };
-        }
-        if (item.start >= finding.end) {
-          return {
-            ...item,
-            start: item.start + delta,
-            end: item.end + delta,
-          };
-        }
-        return item;
-      });
-      setBody(
-        `${body.slice(0, finding.start)}${finalText}${body.slice(finding.end)}`,
-      );
-      setFindings(updatedFindings);
-      updateDemoFindings(updatedFindings);
-    } else {
-      const updatedFindings = (findings ?? []).map((item) =>
-          item.id === finding.id
-            ? { ...item, status, final_text: finalText }
-            : item,
-      );
-      setFindings(updatedFindings);
-      updateDemoFindings(updatedFindings);
+    try {
+      const result = resolveDemoFinding(finding.id, status, finalText);
+      setBody(result.document.body);
+      setFindings(result.findings);
+      setSelectedFindingId(null);
+    } finally {
+      setBusyFindingIds((ids) => ids.filter((id) => id !== finding.id));
     }
-    setBusyFindingIds((ids) => ids.filter((id) => id !== finding.id));
   }
 
   const emptyContent = !body.trim();
@@ -168,7 +162,7 @@ export default function Editor() {
           type="button"
           className="button"
           onClick={() => void loadSampleDraft()}
-          disabled={reviewing}
+          disabled={reviewing || !workspace.isHydrated}
         >
           Load demonstration draft
         </button>
@@ -176,6 +170,18 @@ export default function Editor() {
 
       <p className="editor-demo-banner" role="note">
         {DEMO_FINDINGS_NOTICE} Live backend review is not connected.
+      </p>
+      {operationError && <p className="form-error" role="alert">{operationError}</p>}
+      {!workspace.isHydrated && (
+        <p className="editor-notice" role="status">Loading saved demonstration changes...</p>
+      )}
+      {workspace.persistenceWarning && (
+        <p className="editor-notice" role="alert">
+          Saved mock changes could not be restored: {workspace.persistenceWarning}
+        </p>
+      )}
+      <p className="editor-notice" role="note">
+        Finding actions are saved only in this browser&apos;s local demonstration data, not to a server.
       </p>
       {reviewedCustomText && (
         <p className="editor-notice" role="status">{CUSTOM_CONTENT_NOTICE}</p>
@@ -200,6 +206,7 @@ export default function Editor() {
                 value={title}
                 onChange={(event) => changeTitle(event.target.value)}
                 placeholder="Give your draft a title"
+                disabled={!workspace.isHydrated}
               />
             </label>
             <label className="form-field" htmlFor="content-type">
@@ -208,6 +215,7 @@ export default function Editor() {
                 id="content-type"
                 value={contentType}
                 onChange={(event) => setContentType(event.target.value)}
+                disabled={!workspace.isHydrated}
               >
                 <option>Marketing Copy</option>
               </select>
@@ -222,6 +230,7 @@ export default function Editor() {
                 onChange={(event) => changeBody(event.target.value)}
                 placeholder="Paste or write your content here..."
                 rows={14}
+                disabled={!workspace.isHydrated}
               />
             </label>
           </div>
@@ -247,7 +256,7 @@ export default function Editor() {
                   changeBody("");
                   setTitle(DEFAULT_TITLE);
                 }}
-                disabled={!body}
+                disabled={!body || !workspace.isHydrated}
               >
                 Clear
               </button>
@@ -255,7 +264,7 @@ export default function Editor() {
                 type="button"
                 className="button button-primary"
                 onClick={() => void runReview()}
-                disabled={emptyContent || reviewing}
+                disabled={emptyContent || reviewing || !workspace.isHydrated}
               >
                 {reviewing && <span className="loading-spinner" aria-hidden="true" />}
                 {reviewing ? "Reviewing demo content..." : "Run Demo Review"}
@@ -266,7 +275,11 @@ export default function Editor() {
 
         <FindingsPanel
           findings={findings}
-          busyFindingIds={busyFindingIds}
+          busyFindingIds={
+            workspace.isHydrated
+              ? busyFindingIds
+              : findings?.map((finding) => finding.id) ?? []
+          }
           selectedFindingId={selectedFindingId}
           reviewedCustomText={reviewedCustomText}
           onSelect={(finding) => selectFinding(finding, true)}

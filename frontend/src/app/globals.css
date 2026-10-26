@@ -1056,6 +1056,42 @@ a {
   overflow-wrap: anywhere;
 }
 
+.finding-comparison {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.finding-comparison > section {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.finding-comparison h4 {
+  margin: 0;
+  font-size: 0.84rem;
+}
+
+.finding-comparison-suggestion {
+  background: #f2fbf7;
+  border-color: #b9e3cb !important;
+}
+
+.finding-comparison-suggestion p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.finding-suggestion {
+  display: grid;
+  gap: 8px;
+}
+
 .finding-explanation,
 .finding-source,
 .finding-suggestion p {
@@ -1111,6 +1147,42 @@ a {
 .finding-fact-details dd {
   margin: 2px 0 0;
   overflow-wrap: anywhere;
+}
+
+.resolved-findings {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.resolved-findings h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.resolved-findings ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.resolved-findings li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  overflow-wrap: anywhere;
+}
+
+.resolved-findings q {
+  color: var(--text);
 }
 
 .finding-suggestion {
@@ -1213,6 +1285,10 @@ a {
 }
 
 @media (max-width: 600px) {
+  .finding-comparison {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .knowledge-heading,
   .panel-heading,
   .entry-card,

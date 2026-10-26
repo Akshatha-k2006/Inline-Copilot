@@ -23,6 +23,7 @@ export type DemoKnowledgeSource =
 export type DemoFinding = Finding & {
   knowledge_source: DemoKnowledgeSource;
   fact_details?: DemoFactDetails;
+  range_valid?: boolean;
 };
 
 export const DEMO_DRAFT = contentFixture["POST /api/content"];
@@ -97,10 +98,17 @@ function currentSuggestion(
   source: DemoKnowledgeSource,
 ): string | null | undefined {
   if (source.type === "term") return source.record.preferredTerm;
-  if (source.type === "fact" && finding.check !== "outdated_info") {
-    return `Use the current mock fact: ${source.record.claim}`;
-  }
+  if (source.type === "fact") return null;
   return finding.suggestion;
+}
+
+export function isReplacementSuggestion(value: string | null | undefined): value is string {
+  return Boolean(
+    value?.trim() &&
+      !/^(remove|verify|use the approved claim|use the current mock fact|replace|rewrite)\b/i.test(
+        value.trim(),
+      ),
+  );
 }
 
 export function getDemoFindings(
