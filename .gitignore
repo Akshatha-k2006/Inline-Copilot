@@ -16,3 +16,29 @@ venv/
 node_modules/
 .next/
 out/
+# Secrets
+.env
+.env.*
+.env.example
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.db
+*.sqlite3
+
+# Node
+node_modules/
+.next/
+out/
+dist/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Uploads
+backend/uploads/
