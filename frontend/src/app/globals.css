@@ -565,6 +565,16 @@ a {
   white-space: nowrap;
 }
 
+.editor-demo-banner {
+  margin: 0;
+  padding: 12px 16px;
+  border: 1px solid #d9d0ff;
+  border-radius: 10px;
+  background: #f3f0ff;
+  color: #44318f;
+  font-size: 0.92rem;
+}
+
 .editor-fields {
   display: flex;
   flex-direction: column;
@@ -597,6 +607,157 @@ a {
   min-height: 310px;
   line-height: 1.65;
   resize: vertical;
+}
+
+.highlighted-draft {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 20px;
+  padding: 15px;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: #fbfcff;
+}
+
+.highlighted-draft-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.highlighted-draft-heading h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.highlighted-draft-copy {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.severity-legend {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+}
+
+.severity-legend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #48536e;
+  font-size: 0.76rem;
+  font-weight: 650;
+}
+
+.legend-marker {
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  font-size: 0.7rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.legend-error {
+  background: #d92d45;
+  color: white;
+}
+
+.legend-warning {
+  background: #d97706;
+  color: white;
+}
+
+.legend-info {
+  background: #2563a6;
+  color: white;
+}
+
+.highlighted-draft-text {
+  max-height: 300px;
+  overflow: auto;
+  padding: 12px;
+  border: 1px solid #e7eaf2;
+  border-radius: 8px;
+  background: #fff;
+  color: #343d59;
+  font-size: 0.92rem;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.finding-highlight {
+  position: relative;
+  display: inline;
+  padding: 1px 3px 1px 20px;
+  border: 0;
+  border-bottom: 2px solid currentColor;
+  border-radius: 3px;
+  font: inherit;
+  text-align: left;
+  white-space: inherit;
+  cursor: pointer;
+}
+
+.finding-highlight::before {
+  position: absolute;
+  left: 3px;
+  top: 50%;
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 800;
+  line-height: 1;
+  transform: translateY(-50%);
+}
+
+.finding-highlight-high {
+  background: #fff0f1;
+  color: #9d1d31;
+}
+
+.finding-highlight-high::before {
+  content: "!";
+  background: #d92d45;
+}
+
+.finding-highlight-medium {
+  background: #fff5e6;
+  color: #855000;
+}
+
+.finding-highlight-medium::before {
+  content: "!";
+  background: #d97706;
+}
+
+.finding-highlight-low {
+  background: #eef5ff;
+  color: #1f578e;
+}
+
+.finding-highlight-low::before {
+  content: "i";
+  background: #2563a6;
+}
+
+.finding-highlight.selected,
+.finding-highlight:focus-visible {
+  outline: 3px solid #6941e8;
+  outline-offset: 2px;
 }
 
 .editor-controls,
@@ -704,6 +865,16 @@ a {
   border-left: 4px solid #a6acc0;
   border-radius: 11px;
   background: #fff;
+  cursor: pointer;
+}
+
+.finding-card:focus-visible {
+  outline: 3px solid #6941e8;
+  outline-offset: 2px;
+}
+
+.finding-card.selected {
+  box-shadow: 0 0 0 2px #6941e8, 0 4px 16px rgb(32 41 74 / 8%);
 }
 
 .finding-card.severity-high {
@@ -715,7 +886,7 @@ a {
 }
 
 .finding-card.severity-low {
-  border-left-color: #16804a;
+  border-left-color: #2563a6;
 }
 
 .finding-heading {
@@ -752,8 +923,8 @@ a {
 }
 
 .severity-badge-low {
-  background: #eaf7ef;
-  color: #12683c;
+  background: #eef5ff;
+  color: #1f578e;
 }
 
 .finding-status {
@@ -791,6 +962,31 @@ a {
 
 .finding-source {
   font-size: 0.86rem;
+}
+
+.finding-fact-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: #f6f7fb;
+  font-size: 0.82rem;
+}
+
+.finding-fact-details > div {
+  min-width: 100px;
+}
+
+.finding-fact-details dt {
+  color: var(--muted);
+  font-weight: 650;
+}
+
+.finding-fact-details dd {
+  margin: 2px 0 0;
+  overflow-wrap: anywhere;
 }
 
 .finding-suggestion {

@@ -1,13 +1,17 @@
 "use client";
 
-import type { Finding, FindingStatus } from "@/lib/types";
+import type { DemoFinding } from "@/lib/mock-findings";
+import type { FindingStatus } from "@/lib/types";
 import FindingCard from "./FindingCard";
 
 interface FindingsPanelProps {
-  findings: Finding[] | null;
+  findings: DemoFinding[] | null;
   busyFindingIds: number[];
+  selectedFindingId: number | null;
+  reviewedCustomText: boolean;
+  onSelect: (finding: DemoFinding) => void;
   onResolve: (
-    finding: Finding,
+    finding: DemoFinding,
     status: FindingStatus,
     finalText: string | null,
   ) => Promise<void>;
@@ -16,6 +20,9 @@ interface FindingsPanelProps {
 export default function FindingsPanel({
   findings,
   busyFindingIds,
+  selectedFindingId,
+  reviewedCustomText,
+  onSelect,
   onResolve,
 }: FindingsPanelProps) {
   const highCount = findings?.filter((finding) => finding.severity === "high").length ?? 0;
@@ -30,7 +37,7 @@ export default function FindingsPanel({
           </h2>
         </div>
         {findings && findings.length > 0 && (
-          <span className="finding-count">{highCount} high priority</span>
+          <span className="finding-count">{highCount} error severity</span>
         )}
       </div>
 
@@ -42,17 +49,26 @@ export default function FindingsPanel({
         </div>
       ) : findings.length === 0 ? (
         <div className="editor-empty-state success-state" role="status">
-          <span className="empty-state-mark" aria-hidden="true">✓</span>
-          <h3>No issues found</h3>
-          <p>Your content passed the available brand checks.</p>
+          <span className="empty-state-mark" aria-hidden="true">
+            {reviewedCustomText ? "i" : "✓"}
+          </span>
+          <h3>{reviewedCustomText ? "No demo findings for this text" : "No findings"}</h3>
+          <p>
+            {reviewedCustomText
+              ? "The local demo has findings for its sample draft only. This does not mean your custom content has passed a review."
+              : "There are no findings to display."}
+          </p>
         </div>
       ) : (
         <div className="finding-list">
           {findings.map((finding) => (
             <FindingCard
               key={finding.id}
+              id={`finding-card-${finding.id}`}
               finding={finding}
               busy={busyFindingIds.includes(finding.id)}
+              selected={selectedFindingId === finding.id}
+              onSelect={onSelect}
               onResolve={onResolve}
             />
           ))}
