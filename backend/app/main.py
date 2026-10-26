@@ -6,6 +6,7 @@ from app.config import settings
 from app.db import Base, engine
 from app import models
 from app.routers import health
+from app.routers import health, seed
 
 app = FastAPI(title="CoRESpace — Inline Copilot API")
 
@@ -26,3 +27,4 @@ app.add_middleware(
 Base.metadata.create_all(bind=engine)
 
 app.include_router(health.router, prefix="/api")
+app.include_router(seed.router, prefix="/api")

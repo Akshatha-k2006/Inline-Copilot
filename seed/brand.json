@@ -1,0 +1,182 @@
+{
+  "_note": "Sample data for a FICTIONAL brand, Lumina Home. People, figures and reports are invented for the demo.",
+  "brand": "Lumina Home",
+  "guidelines": [
+    {
+      "id": 1,
+      "kind": "tone",
+      "title": "Tone of voice",
+      "body": "Warm, clear and confident. Write like a helpful neighbour who knows lighting. No slang or text-speak, no hype words, no more than one exclamation mark per piece."
+    },
+    {
+      "id": 2,
+      "kind": "messaging",
+      "title": "Messaging pillars",
+      "body": "Every piece supports at least one pillar: 1) Real energy savings, 2) Simple set-up, 3) Trust and honesty. Describe the product as smart lighting. Lead with the customer benefit, not the technology."
+    },
+    {
+      "id": 3,
+      "kind": "claims",
+      "title": "Claims policy",
+      "body": "Every number, comparison and guarantee must match an approved fact. Superlatives such as best, number one or most are not allowed without approved evidence. The only guarantee we offer is the 30-day money-back guarantee. Facts past their review date must be re-approved before use."
+    }
+  ],
+  "terms": [
+    {
+      "id": 1,
+      "term": "cheap",
+      "status": "prohibited",
+      "preferred": "affordable",
+      "reason": "Implies low quality.",
+      "guideline_id": 1
+    },
+    {
+      "id": 2,
+      "term": "revolutionary",
+      "status": "prohibited",
+      "preferred": "new",
+      "reason": "Hype word. Describe the benefit instead.",
+      "guideline_id": 1
+    },
+    {
+      "id": 3,
+      "term": "lol",
+      "status": "prohibited",
+      "preferred": "",
+      "reason": "Text-speak does not fit our tone.",
+      "guideline_id": 1
+    },
+    {
+      "id": 4,
+      "term": "LuminaBulbs",
+      "status": "prohibited",
+      "preferred": "LuminaBulb",
+      "reason": "The product name is singular, even for several bulbs.",
+      "guideline_id": 2
+    },
+    {
+      "id": 5,
+      "term": "smart lighting",
+      "status": "approved",
+      "preferred": "",
+      "reason": "Approved category description.",
+      "guideline_id": 2
+    },
+    {
+      "id": 6,
+      "term": "energy-saving",
+      "status": "approved",
+      "preferred": "",
+      "reason": "Approved descriptor.",
+      "guideline_id": 2
+    }
+  ],
+  "facts": [
+    {
+      "id": 1,
+      "statement": "LuminaBulb uses up to 75% less energy than incandescent bulbs.",
+      "source": "Lab report LT-2025-03 (sample)",
+      "owner": "Priya Nair, Product",
+      "last_reviewed": "2026-03-15",
+      "review_by": "2027-03-15"
+    },
+    {
+      "id": 2,
+      "statement": "More than 1.2 million customers served.",
+      "source": "Annual report 2024 (sample)",
+      "owner": "Rohan Das, Marketing Ops",
+      "last_reviewed": "2025-01-10",
+      "review_by": "2025-12-31"
+    },
+    {
+      "id": 3,
+      "statement": "LuminaBulb is rated for up to 25,000 hours of use.",
+      "source": "Lab report LT-2025-03 (sample)",
+      "owner": "Priya Nair, Product",
+      "last_reviewed": "2026-03-15",
+      "review_by": "2027-03-15"
+    },
+    {
+      "id": 4,
+      "statement": "Lumina Home was founded in 2019.",
+      "source": "Company records (sample)",
+      "owner": "Rohan Das, Marketing Ops",
+      "last_reviewed": "2026-01-20",
+      "review_by": "2027-01-20"
+    },
+    {
+      "id": 5,
+      "statement": "Every LuminaBulb comes with a 30-day money-back guarantee.",
+      "source": "Returns policy v3 (sample)",
+      "owner": "Meera Iyer, Customer Care",
+      "last_reviewed": "2026-02-02",
+      "review_by": "2027-02-02"
+    }
+  ],
+  "assets": [
+    {
+      "id": 1,
+      "name": "Logo (primary)",
+      "kind": "logo",
+      "url": "",
+      "notes": "Do not recolour or stretch."
+    },
+    {
+      "id": 2,
+      "name": "Brand palette",
+      "kind": "palette",
+      "url": "",
+      "notes": "Warm amber #F2A93B, deep slate #26323B, soft white #FAF8F3."
+    }
+  ],
+  "sample_draft": {
+    "title": "Spring launch post (sample)",
+    "body": "Meet LuminaBulbs, the #1 best smart bulbs on the planet! They will definitely cut your energy bill by 90%, and they are guaranteed to last forever. Our revolutionary app is cheap and super easy to set up, lol. Over 2 million happy customers since 2019 can't be wrong. Get yours today!"
+  },
+  "expected_findings": [
+    {
+      "text": "LuminaBulbs",
+      "check": "terminology",
+      "source": "term 4",
+      "suggestion": "LuminaBulb"
+    },
+    {
+      "text": "#1 best smart bulbs on the planet",
+      "check": "unsupported_claim",
+      "source": "guideline 3 (no approved fact)"
+    },
+    {
+      "text": "cut your energy bill by 90%",
+      "check": "unsupported_claim",
+      "source": "fact 1 (up to 75% less energy)"
+    },
+    {
+      "text": "guaranteed to last forever",
+      "check": "unsupported_claim",
+      "source": "fact 3 (25,000 hours) and fact 5 (only guarantee is 30-day money-back)"
+    },
+    {
+      "text": "revolutionary",
+      "check": "terminology",
+      "source": "term 2",
+      "suggestion": "new"
+    },
+    {
+      "text": "cheap",
+      "check": "terminology",
+      "source": "term 1",
+      "suggestion": "affordable"
+    },
+    {
+      "text": "lol",
+      "check": "tone",
+      "source": "term 3 / guideline 1",
+      "suggestion": ""
+    },
+    {
+      "text": "Over 2 million happy customers",
+      "check": "outdated_info",
+      "source": "fact 2 (1.2 million, review date 2025-12-31 has passed)"
+    }
+  ]
+}
