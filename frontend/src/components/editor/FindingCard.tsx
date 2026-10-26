@@ -10,9 +10,10 @@ interface FindingCardProps {
   id: string;
   finding: DemoFinding;
   busy: boolean;
+  readOnly?: boolean;
   selected: boolean;
   onSelect: (finding: DemoFinding) => void;
-  onResolve: (
+  onResolve?: (
     finding: DemoFinding,
     status: Exclude<FindingStatus, "open">,
     finalText: string | null,
@@ -29,6 +30,7 @@ export default function FindingCard({
   id,
   finding,
   busy,
+  readOnly = false,
   selected,
   onSelect,
   onResolve,
@@ -50,6 +52,7 @@ export default function FindingCard({
       setActionError("Enter a non-empty correction before saving.");
       return;
     }
+    if (!onResolve) return;
     setActionError("");
     try {
       await onResolve(finding, status, finalText);
@@ -123,7 +126,10 @@ export default function FindingCard({
           {hasSuggestedReplacement ? (
             <p>{finding.suggestion}</p>
           ) : (
-            <p className="muted">No replacement text is available for this finding. You can enter your own correction.</p>
+            <p className="muted">
+              No replacement text is available for this finding.
+              {readOnly ? "" : " You can enter your own correction."}
+            </p>
           )}
         </section>
       </div>
@@ -201,7 +207,7 @@ export default function FindingCard({
       )}
       {resolved ? (
         <p className="finding-resolved-note">This finding is {finding.status}.</p>
-      ) : (
+      ) : onResolve && !readOnly ? (
         <div className="finding-actions">
           {finding.range_valid === false ? (
             <button
@@ -268,6 +274,8 @@ export default function FindingCard({
             </>
           )}
         </div>
+      ) : (
+        <p className="finding-resolved-note">Finding actions are unavailable in this role.</p>
       )}
     </article>
   );

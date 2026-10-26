@@ -7,10 +7,11 @@ import FindingCard from "./FindingCard";
 interface FindingsPanelProps {
   findings: DemoFinding[] | null;
   busyFindingIds: number[];
+  readOnly?: boolean;
   selectedFindingId: number | null;
   reviewedCustomText: boolean;
   onSelect: (finding: DemoFinding) => void;
-  onResolve: (
+  onResolve?: (
     finding: DemoFinding,
     status: Exclude<FindingStatus, "open">,
     finalText: string | null,
@@ -20,6 +21,7 @@ interface FindingsPanelProps {
 export default function FindingsPanel({
   findings,
   busyFindingIds,
+  readOnly = false,
   selectedFindingId,
   reviewedCustomText,
   onSelect,
@@ -53,7 +55,7 @@ export default function FindingsPanel({
         <div className="editor-empty-state">
           <span className="empty-state-mark" aria-hidden="true">✓</span>
           <h3>Your review will appear here</h3>
-          <p>Run the demonstration review to see its guideline, terminology, and fact findings.</p>
+          <p>{readOnly ? "No current mock findings are available for this content." : "Run the demonstration review to see matching guideline, terminology, and fact findings."}</p>
         </div>
       ) : activeFindings.length === 0 ? (
         <div className="editor-empty-state success-state" role="status">
@@ -83,6 +85,7 @@ export default function FindingsPanel({
               id={`finding-card-${finding.id}`}
               finding={finding}
               busy={busyFindingIds.includes(finding.id)}
+              readOnly={readOnly}
               selected={selectedFindingId === finding.id}
               onSelect={onSelect}
               onResolve={onResolve}

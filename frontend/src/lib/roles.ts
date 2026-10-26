@@ -12,8 +12,8 @@ export const ROLE_OPTIONS: RoleOption[] = [
   { role: "reviewer", label: "Reviewer", user: "Ravi (Reviewer)" },
   {
     role: "brand_manager",
-    label: "Brand manager",
-    user: "Bhavana (Brand manager)",
+    label: "Brand Manager",
+    user: "Bhavana (Brand Manager)",
   },
   { role: "admin", label: "Admin", user: "Admin" },
 ];
