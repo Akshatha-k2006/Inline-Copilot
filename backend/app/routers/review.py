@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import Content, Finding
 from app.services.terminology_checker import check_terminology
-
+from app.services.fact_checker import check_claims
 router = APIRouter(tags=["Review"])
 
 
@@ -21,22 +21,28 @@ def review_content(content_id: int, db: Session = Depends(get_db)):
                 "message": "Content not found.",
             },
         )
-
-    # Remove previous terminology findings so every review
-    # reflects the current glossary and current draft.
+    
+    # Remove previous findings from all checks handled by this review.
     db.query(Finding).filter(
         Finding.content_id == content_id,
-        Finding.check_type == "terminology",
+        Finding.check_type.in_([
+            "terminology",
+            "unsupported_claim",
+            "outdated_info",
+        ]),
     ).delete(synchronize_session=False)
 
+
     terminology_findings = check_terminology(content.body, db)
+    claim_findings = check_claims(content.body, db)
 
     saved_findings = []
+    all_findings = terminology_findings + claim_findings
 
-    for item in terminology_findings:
+    for item in all_findings:
         finding = Finding(
             content_id=content.id,
-            check_type="terminology",
+            check_type=item["check"],
             severity=item["severity"],
             message=item["message"],
             evidence={
