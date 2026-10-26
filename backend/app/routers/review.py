@@ -92,10 +92,11 @@ def review_content(content_id: int, db: Session = Depends(get_db)):
         )
 
     try:
-        # Replace prior results for the checks handled by this review in the
-        # same transaction as writing their replacements.
+        # Replace only open findings for this exact reviewed version.
         db.query(Finding).filter(
             Finding.content_id == content_id,
+            Finding.content_version == content.version,
+            Finding.status == "open",
             Finding.check_type.in_(
                 [
                     "terminology",
@@ -192,6 +193,9 @@ def review_content(content_id: int, db: Session = Depends(get_db)):
                 "message": "Unable to save review findings.",
             },
         ) from exc
+    except Exception:
+        db.rollback()
+        raise
 
     return {
         "content_id": content.id,

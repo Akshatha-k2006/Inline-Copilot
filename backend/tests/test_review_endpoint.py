@@ -106,6 +106,31 @@ class ReviewEndpointTests(unittest.TestCase):
 
         return asyncio.run(dispatch())
 
+    def add_finding(
+        self,
+        *,
+        content_version=3,
+        check_type="tone",
+        status="open",
+        message="Existing finding",
+        start_offset=0,
+        end_offset=4,
+    ):
+        finding = Finding(
+            content_id=1,
+            content_version=content_version,
+            check_type=check_type,
+            severity="warning",
+            message=message,
+            evidence={"matched_text": "best"},
+            start_offset=start_offset,
+            end_offset=end_offset,
+            status=status,
+        )
+        self.db.add(finding)
+        self.db.commit()
+        return finding
+
     def tearDown(self):
         self.db.close()
         self.engine.dispose()
@@ -193,6 +218,95 @@ class ReviewEndpointTests(unittest.TestCase):
         self.assertEqual(status, 404)
         self.assertEqual(payload, {"error": "not_found", "message": "Content not found."})
 
+    def test_repeated_review_replaces_open_findings_without_duplicates(self):
+        with patch("app.services.llm_reviewer.settings.llm_api_key", None):
+            first_status, first = self.request("/api/content/1/review")
+            second_status, second = self.request("/api/content/1/review")
+
+        self.assertEqual((first_status, second_status), (200, 200))
+        self.assertEqual(len(first["findings"]), len(second["findings"]))
+        findings = (
+            self.db.query(Finding)
+            .filter(
+                Finding.content_id == 1,
+                Finding.content_version == 3,
+                Finding.status == "open",
+            )
+            .all()
+        )
+        self.assertEqual(len(findings), len(second["findings"]))
+        self.assertEqual(
+            {finding.id for finding in findings},
+            {item["id"] for item in second["findings"]},
+        )
+
+    def test_rerun_replaces_outdated_open_findings_for_current_version(self):
+        old = self.add_finding(
+            check_type="tone",
+            message="Obsolete review result",
+        )
+
+        with patch("app.services.llm_reviewer.settings.llm_api_key", None):
+            status, payload = self.request("/api/content/1/review")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            self.db.query(Finding)
+            .filter(Finding.message == "Obsolete review result")
+            .count(),
+            0,
+        )
+        self.assertNotIn(
+            "Obsolete review result",
+            {item["message"] for item in payload["findings"]},
+        )
+        self.assertTrue(payload["findings"])
+        self.assertTrue(
+            all(item["status"] == "open" for item in payload["findings"])
+        )
+
+    def test_rerun_preserves_accepted_and_dismissed_findings(self):
+        accepted = self.add_finding(status="accepted", message="Accepted result")
+        dismissed = self.add_finding(
+            status="dismissed",
+            message="Dismissed result",
+            start_offset=1,
+            end_offset=3,
+        )
+
+        with patch("app.services.llm_reviewer.settings.llm_api_key", None):
+            status, payload = self.request("/api/content/1/review")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(self.db.get(Finding, accepted.id).status, "accepted")
+        self.assertEqual(self.db.get(Finding, dismissed.id).status, "dismissed")
+        self.assertNotIn(
+            accepted.id,
+            {item["id"] for item in payload["findings"]},
+        )
+        self.assertNotIn(
+            dismissed.id,
+            {item["id"] for item in payload["findings"]},
+        )
+
+    def test_rerun_leaves_findings_from_other_content_versions_untouched(self):
+        previous_version = self.add_finding(
+            content_version=2,
+            message="Previous version finding",
+        )
+
+        with patch("app.services.llm_reviewer.settings.llm_api_key", None):
+            status, payload = self.request("/api/content/1/review")
+
+        self.assertEqual(status, 200)
+        preserved = self.db.get(Finding, previous_version.id)
+        self.assertIsNotNone(preserved)
+        self.assertEqual(preserved.content_version, 2)
+        self.assertEqual(preserved.message, "Previous version finding")
+        self.assertTrue(
+            all(item["id"] != previous_version.id for item in payload["findings"])
+        )
+
     def test_invalid_content_id_uses_validation_error_contract(self):
         status, payload = self.request("/api/content/not-an-id/review")
 
@@ -257,18 +371,7 @@ class ReviewEndpointTests(unittest.TestCase):
         )
 
     def test_database_failure_rolls_back_deletion_and_returns_contract_error(self):
-        previous = Finding(
-            content_id=1,
-            content_version=2,
-            check_type="tone",
-            severity="warning",
-            message="Old finding",
-            evidence={},
-            start_offset=0,
-            end_offset=1,
-        )
-        self.db.add(previous)
-        self.db.commit()
+        previous = self.add_finding(content_version=3, message="Old finding")
 
         with patch.object(self.db, "commit", side_effect=SQLAlchemyError("failure")):
             status, payload = self.request("/api/content/1/review")
@@ -284,7 +387,29 @@ class ReviewEndpointTests(unittest.TestCase):
         persisted = self.db.query(Finding).all()
         self.assertEqual(
             [(item.id, item.content_version) for item in persisted],
-            [(previous.id, 2)],
+            [(previous.id, 3)],
+        )
+
+    def test_review_operation_failure_rolls_back_replaced_findings(self):
+        previous = self.add_finding(message="Must survive failed rerun")
+
+        with patch(
+            "app.routers.review.check_claims",
+            side_effect=SQLAlchemyError("review query failed"),
+        ):
+            status, payload = self.request("/api/content/1/review")
+
+        self.assertEqual(status, 500)
+        self.assertEqual(
+            payload,
+            {
+                "error": "review_failed",
+                "message": "Unable to save review findings.",
+            },
+        )
+        self.assertEqual(
+            self.db.query(Finding).filter(Finding.id == previous.id).count(),
+            1,
         )
 
     def test_schema_migration_adds_version_to_existing_findings(self):
