@@ -4,6 +4,7 @@ import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException
+from sqlalchemy import update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -371,6 +372,7 @@ def update_finding(
                 .with_for_update()
                 .all()
             )
+            original_body = content.body
             for other in affected_findings:
                 other_start = other.start_offset
                 other_end = other.end_offset
@@ -383,53 +385,87 @@ def update_finding(
                     or isinstance(other_end, bool)
                     or other_start < 0
                     or other_start >= other_end
-                    or other_end > len(content.body)
+                    or other_end > len(original_body)
                 ):
-                    raise _action_error(
-                        409,
-                        "stale_finding",
-                        "Another finding has invalid offsets for this content version.",
-                    )
+                    continue
                 if other_start < end and other_end > start:
                     raise _action_error(
                         409,
                         "overlapping_finding",
                         "The replacement overlaps another finding; review the text before applying it.",
                     )
-                if other.status == "open":
-                    other_text = (
-                        other.evidence.get("matched_text")
-                        if isinstance(other.evidence, dict)
-                        else None
-                    )
-                    if (
-                        not isinstance(other_text, str)
-                        or content.body[other_start:other_end] != other_text
-                    ):
-                        raise _action_error(
-                            409,
-                            "stale_finding",
-                            "Another finding no longer matches the content.",
-                        )
+                other_text = (
+                    other.evidence.get("matched_text")
+                    if isinstance(other.evidence, dict)
+                    else None
+                )
+                if (
+                    not isinstance(other_text, str)
+                    or content.body[other_start:other_end] != other_text
+                ):
+                    continue
 
-            content.body = (
-                content.body[:start] + replacement + content.body[end:]
+            updated_body = (
+                original_body[:start] + replacement + original_body[end:]
             )
-            content.version = old_version + 1
+            updated_version = old_version + 1
+            update_result = db.execute(
+                update(Content)
+                .where(
+                    Content.id == content.id,
+                    Content.version == old_version,
+                )
+                .values(body=updated_body, version=updated_version)
+            )
+            if update_result.rowcount != 1:
+                raise _action_error(
+                    409,
+                    "stale_finding",
+                    "The content changed while this action was being applied.",
+                )
+            db.refresh(content)
             new_version = content.version
 
             for other in affected_findings:
+                other_start = other.start_offset
+                other_end = other.end_offset
                 if (
-                    other.start_offset is not None
-                    and other.end_offset is not None
-                    and other.start_offset >= end
+                    not isinstance(other_start, int)
+                    or isinstance(other_start, bool)
+                    or not isinstance(other_end, int)
+                    or isinstance(other_end, bool)
+                    or other_start < 0
+                    or other_start >= other_end
+                    or other_end > len(original_body)
                 ):
-                    other.start_offset += delta
-                    other.end_offset += delta
+                    continue
+                other_text = (
+                    other.evidence.get("matched_text")
+                    if isinstance(other.evidence, dict)
+                    else None
+                )
+                if (
+                    not isinstance(other_text, str)
+                    or original_body[other_start:other_end] != other_text
+                ):
+                    continue
+
+                updated_start = (
+                    other_start + delta if other_start >= end else other_start
+                )
+                updated_end = other_end + delta if other_start >= end else other_end
+                if updated_body[updated_start:updated_end] != other_text:
+                    continue
+                other.start_offset = updated_start
+                other.end_offset = updated_end
                 other.content_version = new_version
 
             finding.end_offset = start + len(replacement)
             finding.content_version = new_version
+            finding.evidence = {
+                **finding.evidence,
+                "matched_text": replacement,
+            }
             finding.status = "accepted" if action == "accept" else "edited"
         else:
             finding.status = "dismissed"

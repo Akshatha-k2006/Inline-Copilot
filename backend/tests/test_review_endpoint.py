@@ -473,6 +473,7 @@ class ReviewEndpointTests(unittest.TestCase):
         self.assertEqual(payload["finding"]["status"], "accepted")
         self.assertEqual(payload["finding"]["start_offset"], 7)
         self.assertEqual(payload["finding"]["end_offset"], 10)
+        self.assertEqual(payload["finding"]["evidence"]["matched_text"], "new")
         self.assertEqual(content.body, "before new middle last")
         self.assertEqual(content.version, 4)
         self.assertEqual(
@@ -544,6 +545,87 @@ class ReviewEndpointTests(unittest.TestCase):
         event = self.db.query(AuditEvent).one()
         self.assertEqual(event.action, "finding_edited")
         self.assertEqual(event.actor, "test-user")
+
+    def test_shorter_replacement_shifts_adjacent_findings_and_keeps_exact_spans(self):
+        content = self.db.get(Content, 1)
+        content.body = "beforeOLDafter"
+        before = self.add_finding(
+            check_type="messaging",
+            message="Adjacent before",
+            start_offset=0,
+            end_offset=6,
+            matched_text="before",
+        )
+        target = self.add_finding(
+            start_offset=6,
+            end_offset=9,
+            matched_text="OLD",
+            suggested_fix="x",
+        )
+        after = self.add_finding(
+            check_type="unsupported_claim",
+            message="Adjacent after",
+            start_offset=9,
+            end_offset=14,
+            matched_text="after",
+        )
+
+        status, payload = self.request(
+            f"/api/findings/{target.id}",
+            method="PATCH",
+            body={"action": "accept"},
+        )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(payload["content_version"], 4)
+        self.assertEqual(content.body, "beforexafter")
+        self.assertEqual(content.version, 4)
+        self.assertEqual(
+            (before.start_offset, before.end_offset, before.content_version),
+            (0, 6, 4),
+        )
+        self.assertEqual(
+            (target.start_offset, target.end_offset, target.content_version),
+            (6, 7, 4),
+        )
+        self.assertEqual(target.evidence["matched_text"], "x")
+        self.assertEqual(
+            (after.start_offset, after.end_offset, after.content_version),
+            (7, 12, 4),
+        )
+        self.assertEqual(content.body[before.start_offset:before.end_offset], "before")
+        self.assertEqual(content.body[target.start_offset:target.end_offset], "x")
+        self.assertEqual(content.body[after.start_offset:after.end_offset], "after")
+
+    def test_unverifiable_other_finding_remains_stale_in_prior_version(self):
+        content = self.db.get(Content, 1)
+        content.body = "old text"
+        target = self.add_finding(
+            start_offset=0,
+            end_offset=3,
+            matched_text="old",
+            suggested_fix="new",
+        )
+        stale = self.add_finding(
+            check_type="unsupported_claim",
+            message="Legacy finding without span",
+            start_offset=None,
+            end_offset=None,
+            matched_text="",
+        )
+
+        status, _ = self.request(
+            f"/api/findings/{target.id}",
+            method="PATCH",
+            body={"action": "accept"},
+        )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(content.version, 4)
+        self.assertEqual(content.body, "new text")
+        self.assertEqual(stale.content_version, 3)
+        self.assertIsNone(stale.start_offset)
+        self.assertIsNone(stale.end_offset)
 
     def test_dismiss_changes_status_and_records_audit_without_editing_content(self):
         content = self.db.get(Content, 1)
@@ -646,6 +728,27 @@ class ReviewEndpointTests(unittest.TestCase):
         self.assertEqual(content.body, original_body)
         self.assertEqual(content.version, 4)
         self.assertEqual(self.db.get(Finding, finding.id).status, "open")
+        self.assertEqual(self.db.query(AuditEvent).count(), 0)
+
+    def test_older_version_finding_is_not_applied_to_current_content(self):
+        finding = self.add_finding(
+            content_version=2,
+            suggested_fix="great",
+        )
+        content = self.db.get(Content, 1)
+        original_body = content.body
+
+        status, payload = self.request(
+            f"/api/findings/{finding.id}",
+            method="PATCH",
+            body={"action": "accept"},
+        )
+
+        self.assertEqual(status, 409)
+        self.assertEqual(payload["error"], "stale_finding")
+        self.assertEqual(content.body, original_body)
+        self.assertEqual(content.version, 3)
+        self.assertEqual(finding.status, "open")
         self.assertEqual(self.db.query(AuditEvent).count(), 0)
 
     def test_accept_without_suggested_fix_fails_without_changes(self):
