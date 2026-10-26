@@ -147,7 +147,28 @@ The standalone mock service in `frontend/mock_kb.mjs` implements these routes an
 persists data to `frontend/mock-kb-data.json` by default. Its integration check
 uses a temporary database and does not alter the developer's saved mock data.
 
-## Frontend workflow prototype (not a backend API)
+## Content approval workflow
+
+Content status transitions follow this sequence:
+`draft → self_checked → in_review → approved → ready_to_publish`.
+The shared backend transition service authorizes `creator` for
+`draft → self_checked` and `self_checked → in_review`, `reviewer` for
+`in_review → approved`, and `brand_manager` or `admin` for
+`approved → ready_to_publish`. Callers must obtain the role through the
+existing `X-Role` role dependency and provide the actor from `X-User`.
+
+Submitting `self_checked` content into review returns `409` while any finding
+for the current content version has severity `high` and status `open`.
+That response uses
+`{ "error": "open_high_severity_findings", "message": "Content cannot be submitted while high-severity findings remain open." }`.
+Invalid transitions return `409` with
+`{ "error": "invalid_status_transition", "message": "Status transition is not allowed." }`.
+The transition and its `AuditEvent` are committed atomically. The event uses
+action `content_status_changed`, the actor and content ID fields, a database
+timestamp, and details containing `actor_role`, `previous_status`, and
+`new_status`.
+
+## Frontend workflow prototype
 
 The current frontend includes a browser-local workflow demonstration. Its
 content states are `draft`, `in_review`, `changes_requested`, and
@@ -163,9 +184,10 @@ Review records, comments, decisions, prior submitted versions, and workflow
 audit events are stored in browser `localStorage`. They are not sent to the
 backend, do not represent
 verified checks, and do not publish content. Only the backend review route
-above is defined for content review. The frontend submission, decision,
-comment, and audit workflows remain local demonstrations and have no backend
-endpoints in this contract.
+above and the shared content status-transition service are implemented on the
+backend. The frontend submission, decision, comment, and audit workflows remain
+local demonstrations and have no backend endpoints in this contract. The
+transition service is not itself an HTTP endpoint.
 
 The frontend audit timeline uses the shared workflow history collection. Each
 event is associated with a content ID and stores the demo actor name and role
