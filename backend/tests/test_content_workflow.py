@@ -131,25 +131,21 @@ class ContentWorkflowTests(unittest.TestCase):
         return asyncio.run(dispatch())
 
     def test_allowed_transitions_record_statuses_and_audit_events(self):
+        original_body = self.content.body
+        original_version = self.content.version
         for target, role in (
             ("self_checked", "creator"),
             ("in_review", "creator"),
             ("approved", "reviewer"),
             ("ready_to_publish", "brand_manager"),
         ):
-            self.content.status = {
-                "self_checked": "draft",
-                "in_review": "self_checked",
-                "approved": "in_review",
-                "ready_to_publish": "approved",
-            }[target]
-            self.db.commit()
-
             result = transition_content_status(
                 self.db, self.content.id, target, "workflow-user", role
             )
 
             self.assertEqual(result.status, target)
+            self.assertEqual(result.body, original_body)
+            self.assertEqual(result.version, original_version)
 
         events = self.db.query(AuditEvent).order_by(AuditEvent.id).all()
         self.assertEqual(len(events), 4)
@@ -163,6 +159,7 @@ class ContentWorkflowTests(unittest.TestCase):
                     event.details["new_status"],
                     event.details["actor_role"],
                     event.created_at is not None,
+                    event.id,
                 )
                 for event in events
             ],
@@ -175,6 +172,7 @@ class ContentWorkflowTests(unittest.TestCase):
                     "self_checked",
                     "creator",
                     True,
+                    1,
                 ),
                 (
                     "content_status_changed",
@@ -184,6 +182,7 @@ class ContentWorkflowTests(unittest.TestCase):
                     "in_review",
                     "creator",
                     True,
+                    2,
                 ),
                 (
                     "content_status_changed",
@@ -193,6 +192,7 @@ class ContentWorkflowTests(unittest.TestCase):
                     "approved",
                     "reviewer",
                     True,
+                    3,
                 ),
                 (
                     "content_status_changed",
@@ -202,6 +202,7 @@ class ContentWorkflowTests(unittest.TestCase):
                     "ready_to_publish",
                     "brand_manager",
                     True,
+                    4,
                 ),
             ],
         )
@@ -837,6 +838,15 @@ class ContentWorkflowTests(unittest.TestCase):
             read_payload,
             {"content_id": 1, "comments": [payload]},
         )
+        for role in ("reviewer", "brand_manager", "admin"):
+            role_status, role_payload = self.request(
+                "/api/content/1/comments",
+                role=role,
+                user=f"{role}-user",
+                method="GET",
+            )
+            self.assertEqual(role_status, 200)
+            self.assertEqual(role_payload, read_payload)
 
     def test_standalone_comment_validation_and_role_authorization(self):
         self.content.status = "in_review"
