@@ -100,6 +100,9 @@ class Finding(Base):
     content_id: Mapped[int] = mapped_column(
         ForeignKey("content.id", ondelete="CASCADE"), nullable=False
     )
+    content_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
     check_type: Mapped[str] = mapped_column(String(100), nullable=False)
     severity: Mapped[str] = mapped_column(String(50), default="warning")
     message: Mapped[str] = mapped_column(Text, nullable=False)
