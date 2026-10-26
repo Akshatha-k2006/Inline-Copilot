@@ -79,17 +79,22 @@ def review_content(content_id: int, db: Session = Depends(get_db)):
         llm_findings = []
         llm_status = "timeout"
         logger.warning("Hosted LLM review failed: category=timeout")
-    except LLMProviderError:
+    except LLMProviderError as exc:
         llm_findings = []
         llm_status = "error"
+        logger.warning(
+            "Hosted LLM review failed: category=provider status=%d reason=%s",
+            exc.status_code,
+            exc.category,
+        )
     except LLMTransportError:
         llm_findings = []
         llm_status = "error"
         logger.warning("Hosted LLM review failed: category=transport")
-    except LLMResponseError:
+    except LLMResponseError as exc:
         llm_findings = []
         llm_status = "error"
-        logger.warning("Hosted LLM review failed: category=response")
+        logger.warning("Hosted LLM review failed: category=%s", exc.category)
     except Exception:
         llm_findings = []
         llm_status = "error"
