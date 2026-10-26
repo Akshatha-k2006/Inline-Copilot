@@ -6,8 +6,15 @@ from app.config import settings
 from app.db import Base, engine
 from app import models
 from app.exception_handlers import register_exception_handlers
-from app.routers import health, seed, guidelines, glossary, facts, assets
-
+from app.routers import (
+    health,
+    seed,
+    guidelines,
+    glossary,
+    facts,
+    assets,
+    review,
+)
 app = FastAPI(title="CoRESpace — Inline Copilot API")
 register_exception_handlers(app)
 
@@ -33,3 +40,4 @@ app.include_router(guidelines.router, prefix="/api")
 app.include_router(glossary.router, prefix="/api")
 app.include_router(facts.router, prefix="/api")
 app.include_router(assets.router, prefix="/api")
+app.include_router(review.router, prefix="/api")
