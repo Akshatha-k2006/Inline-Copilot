@@ -24,13 +24,40 @@ import {
 export const MOCK_DATA_NOTICE =
   "Demonstration data only. Documents, checks, findings, sources, and timestamps are fictional and are not verified results.";
 
+export type DemoAuditAction =
+  | "created"
+  | "draft_edited"
+  | "draft_reset"
+  | "reviewed"
+  | "finding_accepted"
+  | "finding_edited"
+  | "finding_dismissed"
+  | "submitted"
+  | "resubmitted"
+  | "review_comment_added"
+  | "changes_requested"
+  | "approved"
+  | "ready_to_publish";
+
+export interface DemoAuditChange {
+  field: "title" | "body" | "status" | "text";
+  previous: string | null;
+  next: string | null;
+}
+
 export interface DemoAuditEntry {
   id: number;
+  content_id: number;
+  content_title: string;
   at: string;
   actor: string;
   role: Role;
-  action: string;
+  action: DemoAuditAction;
   detail: string;
+  finding_id?: number;
+  finding_title?: string;
+  changes?: DemoAuditChange[];
+  comment?: string;
 }
 
 export interface DemoWorkspace {
@@ -72,7 +99,14 @@ const initialDocument: Content = {
   ...contentFixture["POST /api/content"],
   status: "draft",
 };
-const initialHistory = auditFixture.response as DemoAuditEntry[];
+const initialHistory = (auditFixture.response as Omit<
+  DemoAuditEntry,
+  "content_id" | "content_title"
+>[]).map((entry) => ({
+  ...entry,
+  content_id: initialDocument.id,
+  content_title: initialDocument.title,
+}));
 const initialKnowledge = cloneBrandData(SAMPLE_BRAND);
 
 let workspace: DemoWorkspace = {
@@ -171,6 +205,14 @@ function hydrateWorkspace(): void {
       workspace = {
         ...parsed,
         documents,
+        history: parsed.history.map((entry) => ({
+          ...entry,
+          content_id: entry.content_id ?? initialDocument.id,
+          content_title:
+            entry.content_title ??
+            documents.find((document) => document.id === initialDocument.id)?.title ??
+            initialDocument.title,
+        })),
         comments: parsed.comments ?? [],
         submissions: parsed.submissions ?? [],
         reviews: parsed.reviews ?? [],
@@ -243,6 +285,18 @@ export function formatMockTimestamp(timestamp: string): string {
   return `${timestampFormatter.format(new Date(timestamp))} UTC`;
 }
 
+export function getContentAuditEvents(
+  data: DemoWorkspace,
+  contentId: number,
+): DemoAuditEntry[] {
+  return data.history
+    .filter((entry) => entry.content_id === contentId)
+    .sort(
+      (left, right) =>
+        left.at.localeCompare(right.at) || left.id - right.id,
+    );
+}
+
 function actorName(user: string): string {
   return user.replace(/\s+\([^)]*\)$/, "");
 }
@@ -251,16 +305,58 @@ function appendHistory(
   history: DemoAuditEntry[],
   role: Role,
   user: string,
-  action: string,
+  contentId: number,
+  action: DemoAuditAction,
   detail: string,
   at = new Date().toISOString(),
+  metadata: Partial<
+    Pick<
+      DemoAuditEntry,
+      "content_title" | "finding_id" | "finding_title" | "changes" | "comment"
+    >
+  > = {},
 ): DemoAuditEntry[] {
   const nextId =
     history.reduce((largestId, entry) => Math.max(largestId, entry.id), 0) + 1;
+  const content = workspace.documents.find((item) => item.id === contentId);
   return [
     ...history,
-    { id: nextId, at, actor: actorName(user), role, action, detail },
+    {
+      id: nextId,
+      content_id: contentId,
+      content_title: metadata.content_title ?? content?.title ?? `Document #${contentId}`,
+      at,
+      actor: actorName(user),
+      role,
+      action,
+      detail,
+      ...metadata,
+    },
   ];
+}
+
+function changedText(previous: string, next: string): DemoAuditChange {
+  let prefix = 0;
+  while (
+    prefix < previous.length &&
+    prefix < next.length &&
+    previous[prefix] === next[prefix]
+  ) {
+    prefix += 1;
+  }
+  let suffix = 0;
+  while (
+    suffix < previous.length - prefix &&
+    suffix < next.length - prefix &&
+    previous[previous.length - suffix - 1] === next[next.length - suffix - 1]
+  ) {
+    suffix += 1;
+  }
+  return {
+    field: "body",
+    previous: previous.slice(prefix, previous.length - suffix),
+    next: next.slice(prefix, next.length - suffix),
+  };
 }
 
 function cloneBrandData(data: BrandData): BrandData {
@@ -466,12 +562,31 @@ export function saveDemoDraft(
     version: document.version + 1,
     updated_at: new Date().toISOString(),
   };
+  const changes: DemoAuditChange[] = [];
+  if (document.title !== normalizedTitle) {
+    changes.push({
+      field: "title",
+      previous: document.title,
+      next: normalizedTitle,
+    });
+  }
+  if (document.body !== body) changes.push(changedText(document.body, body));
   commitWorkspace({
     ...workspace,
     documents: workspace.documents.map((item) =>
       item.id === documentId ? updated : item,
     ),
     findingsBody: null,
+    history: appendHistory(
+      workspace.history,
+      role,
+      user,
+      documentId,
+      "draft_edited",
+      `Edited the draft ${changes.map((change) => change.field).join(" and ")}.`,
+      updated.updated_at,
+      { content_title: normalizedTitle, changes },
+    ),
   });
   return updated;
 }
@@ -491,26 +606,54 @@ export function resetDemoDocument(
   if (!existing || !canEditContent(role, actorName(user), existing)) {
     throw new Error("Only the creator can reset their editable demonstration draft.");
   }
-  const document = { ...initialDocument };
+  const at = new Date().toISOString();
+  const document: Content = {
+    ...initialDocument,
+    version: existing.version + 1,
+    updated_at: at,
+  };
   const findings = getDemoFindings(document.body, workspace.knowledge);
+  const retainedResolved = workspace.findings.filter(
+    (finding) =>
+      finding.status !== "open" &&
+      !findings.some((current) => current.id === finding.id),
+  );
+  const changes: DemoAuditChange[] = [];
+  if (existing.title !== document.title) {
+    changes.push({
+      field: "title",
+      previous: existing.title,
+      next: document.title,
+    });
+  }
+  if (existing.body !== document.body) {
+    const bodyChange = changedText(existing.body, document.body);
+    changes.push(bodyChange);
+  }
+  if (existing.status !== document.status) {
+    changes.push({
+      field: "status",
+      previous: existing.status,
+      next: document.status,
+    });
+  }
   const nextWorkspace: DemoWorkspace = {
     ...workspace,
     documents: workspace.documents.map((item) =>
       item.id === document.id ? document : item,
     ),
-    findings,
+    findings: [...findings, ...retainedResolved],
     findingsBody: null,
     reviews: workspace.reviews.filter((review) => review.document_id !== document.id),
-    comments: workspace.comments.filter((comment) => comment.document_id !== document.id),
-    submissions: workspace.submissions.filter(
-      (submission) => submission.document_id !== document.id,
-    ),
     history: appendHistory(
       workspace.history,
       role,
       user,
+      document.id,
       "draft_reset",
       `Reset ${document.title} to the fictional demonstration draft.`,
+      at,
+      { content_title: document.title, changes },
     ),
   };
   commitWorkspace(nextWorkspace);
@@ -572,9 +715,20 @@ export function transitionDemoDocument(
       history,
       role,
       user,
+      documentId,
       action === "submit" ? "submitted" : "resubmitted",
       `${action === "submit" ? "Submitted" : "Resubmitted"} ${document.title} for review.`,
       at,
+      {
+        content_title: document.title,
+        changes: [
+          {
+            field: "status",
+            previous: document.status,
+            next: "in_review",
+          },
+        ],
+      },
     );
   } else {
     if (!canDecideReview(role)) {
@@ -591,19 +745,50 @@ export function transitionDemoDocument(
         history,
         role,
         user,
+        documentId,
         "approved",
         comment.trim()
           ? `Approved ${document.title}. Reviewer comment: ${comment.trim()}`
           : `Approved ${document.title}.`,
         at,
+        {
+          content_title: document.title,
+          changes: [
+            { field: "status", previous: "in_review", next: "approved" },
+          ],
+          comment: comment.trim() || undefined,
+        },
       );
+      if (comment.trim()) {
+        history = appendHistory(
+          history,
+          role,
+          user,
+          documentId,
+          "review_comment_added",
+          `Added an approval comment to ${document.title}.`,
+          at,
+          { content_title: document.title, comment: comment.trim() },
+        );
+      }
       history = appendHistory(
         history,
         role,
         user,
+        documentId,
         "ready_to_publish",
         `${document.title} is ready to publish after reviewer approval and required checks.`,
         at,
+        {
+          content_title: document.title,
+          changes: [
+            {
+              field: "status",
+              previous: "approved",
+              next: "ready_to_publish",
+            },
+          ],
+        },
       );
       if (comment.trim()) {
         comments = appendReviewComment(
@@ -634,9 +819,21 @@ export function transitionDemoDocument(
         history,
         role,
         user,
+        documentId,
         "changes_requested",
         `Requested changes to ${document.title}: ${comment.trim()}`,
         at,
+        {
+          content_title: document.title,
+          changes: [
+            {
+              field: "status",
+              previous: "in_review",
+              next: "changes_requested",
+            },
+          ],
+          comment: comment.trim(),
+        },
       );
     }
   }
@@ -711,9 +908,11 @@ export function addDemoReviewComment(
     workspace.history,
     role,
     user,
+    documentId,
     "review_comment_added",
     `Added a review comment to ${document.title}.`,
     at,
+    { content_title: document.title, comment: text.trim() },
   );
   commitWorkspace({ ...workspace, comments, history });
 }
@@ -741,8 +940,13 @@ export function resolveDemoFinding(
     throw new Error("Only the creator can resolve findings on their own editable draft.");
   }
 
-  const replacesText = status === "accepted" || status === "edited";
-  if (replacesText && !finalText?.trim()) {
+  const replacesText =
+    (status === "accepted" || status === "edited") &&
+    finalText !== null;
+  if (
+    (status === "edited" || (status === "accepted" && finalText !== null)) &&
+    !finalText?.trim()
+  ) {
     throw new Error("Enter a non-empty correction before saving.");
   }
 
@@ -807,7 +1011,15 @@ export function resolveDemoFinding(
   const actionDetail =
     status === "dismissed"
       ? `Dismissed finding ${finding.id} in ${document.title}.`
-      : `${status === "accepted" ? "Accepted" : "Edited"} finding ${finding.id} in ${document.title}.`;
+      : status === "accepted" && !replacesText
+        ? `Accepted finding ${finding.id} in ${document.title} without a replacement; the document text was not changed.`
+        : `${status === "accepted" ? "Accepted" : "Edited"} finding ${finding.id} in ${document.title}.`;
+  const auditAction: DemoAuditAction =
+    status === "accepted"
+      ? "finding_accepted"
+      : status === "edited"
+        ? "finding_edited"
+        : "finding_dismissed";
   const nextWorkspace: DemoWorkspace = {
     ...workspace,
     documents: workspace.documents.map((item) =>
@@ -819,9 +1031,28 @@ export function resolveDemoFinding(
       workspace.history,
       role,
       user,
-      status === "dismissed" ? "finding_dismissed" : `finding_${status}`,
+      document.id,
+      auditAction,
       actionDetail,
       updatedDocument.updated_at,
+      {
+        content_title: document.title,
+        finding_id: finding.id,
+        finding_title: `${finding.check.replaceAll("_", " ")}: ${finding.text}`,
+        comment:
+          status === "accepted" && !replacesText
+            ? "No replacement was available; the finding was accepted without changing document text."
+            : undefined,
+        changes: replacesText
+          ? [
+              {
+                field: "text",
+                previous: finding.text,
+                next: finalText,
+              },
+            ]
+          : undefined,
+      },
     ),
   };
   commitWorkspace(nextWorkspace);
@@ -897,9 +1128,11 @@ export function recordDemoReview(
       workspace.history,
       role,
       user,
+      currentDocument.id,
       "reviewed",
       `Ran the local demonstration checks for known sample phrases in ${currentDocument.title}.`,
       reviewedAt,
+      { content_title: currentDocument.title },
     ),
   };
   commitWorkspace(nextWorkspace);

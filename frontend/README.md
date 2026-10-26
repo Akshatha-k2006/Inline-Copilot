@@ -34,6 +34,10 @@ Write & Review, dashboard, queue, and history use one shared local demonstration
 workspace. Workflow actions, knowledge changes, comments, findings and audit
 entries persist in this browser's `localStorage`; this is not server persistence.
 Clearing this site's browser storage removes saved demo state.
+Audit Trail filters events by content and presents them oldest first, using the
+stable event ID to order events with the same timestamp. It records the demo
+actor and role selected when each successful mock action occurred; these are
+not authenticated or tamper-proof identities.
 
 The demo role switcher is not authentication. Creator Asha can edit the sample
 draft, run fixed known-phrase checks, resolve findings and submit eligible
@@ -94,6 +98,8 @@ npm run dev
 The API defaults to `http://localhost:8000`, matching `NEXT_PUBLIC_API_URL`.
 Run `npm run test:kb` to check collection CRUD, sample loading, reload reads, and
 persistence across a mock-server restart.
+Run `npm run test:mock` to validate fixture IDs, finding citations, knowledge
+references, audit timestamps, and content relationships.
 
 ## Deploy (Vercel)
 

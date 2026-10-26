@@ -99,7 +99,7 @@ export default function FindingsPanel({
           <h3 id="resolved-findings-heading">Resolved findings ({resolvedFindings.length})</h3>
           <ul>
             {resolvedFindings.map((finding) => (
-              <li key={finding.id}>
+              <li key={finding.id} id={`finding-card-${finding.id}`}>
                 <span className={`finding-status status-${finding.status}`}>
                   {finding.status}
                 </span>
