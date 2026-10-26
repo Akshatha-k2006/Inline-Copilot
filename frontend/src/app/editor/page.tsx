@@ -1,9 +1,5 @@
-import PagePlaceholder from "@/components/PagePlaceholder";
+import Editor from "@/components/editor/Editor";
 
 export default function EditorPage() {
-  return (
-    <PagePlaceholder title="Editor">
-      Write or paste content, run a review, and resolve each flagged issue.
-    </PagePlaceholder>
-  );
+  return <Editor />;
 }

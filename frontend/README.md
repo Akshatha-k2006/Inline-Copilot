@@ -13,7 +13,9 @@ npm run dev          # http://localhost:3000
 
 ## What is here
 
-- `src/components/TopBar.tsx`: app name, navigation (Knowledge base, Editor, Review queue, Audit), role switcher
+- `src/components/TopBar.tsx`: CoRESpace sidebar navigation and role switcher
+- `src/components/editor/Editor.tsx`: Write & Review form, sample-draft loading, API-backed review and finding actions
+- `src/components/editor/FindingsPanel.tsx` and `FindingCard.tsx`: accessible review summary and finding controls
 - `src/app/knowledge/page.tsx`: editable Guidelines, Glossary, Facts and Assets tabs
 - `src/lib/brand-data.ts`: sample brand data and knowledge item types
 - `mock_kb.mjs`: persistent local stand-in for the knowledge API
@@ -22,6 +24,17 @@ npm run dev          # http://localhost:3000
 - `src/lib/roles.ts`: the four roles and the display name sent as `X-User`
 - `src/lib/types.ts`: types copied from `docs/API_CONTRACT.md`
 - `src/components/BackendStatus.tsx`: home-page check that the backend is reachable
+
+The Write & Review page calls the editor endpoints represented by
+`mocks/content.json`, `mocks/review.json`, `mocks/seed-load.json`, and
+`mocks/findings.json`: `POST /api/seed/load`, content create/read/update,
+`POST /api/content/{id}/review`, and `PATCH /api/findings/{id}`. These routes
+are not currently registered by the backend in this checkout. Until the backend
+implements them, the editor will show a recoverable error and will not invent
+review results. If a finding update returns 404, its resolution is applied only
+in the current browser session and the UI explicitly says it was not saved.
+The content type selector currently offers Marketing Copy only; content type is
+not part of the existing content response shape and is not sent to the API.
 
 Call the backend like this:
 

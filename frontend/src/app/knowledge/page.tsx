@@ -102,6 +102,9 @@ export default function KnowledgeBasePage() {
   }, []);
 
   useEffect(() => {
+    const requestedTab = new URLSearchParams(window.location.search).get("tab");
+    const matchingTab = TABS.find((tab) => tab.key === requestedTab);
+    if (matchingTab) setActiveTab(matchingTab.key);
     void refresh();
     function onBrandDataChanged() {
       void refresh();
