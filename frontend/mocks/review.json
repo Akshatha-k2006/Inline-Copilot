@@ -1,0 +1,156 @@
+{
+  "endpoint": "POST /api/content/1/review",
+  "response": {
+    "content_version": 1,
+    "findings": [
+      {
+        "id": 11,
+        "content_id": 1,
+        "check": "terminology",
+        "severity": "high",
+        "start": 5,
+        "end": 16,
+        "text": "LuminaBulbs",
+        "explanation": "The product name is singular, even when referring to several bulbs.",
+        "source": {
+          "type": "term",
+          "id": 4,
+          "label": "Glossary: LuminaBulbs → LuminaBulb"
+        },
+        "suggestion": "LuminaBulb",
+        "status": "open",
+        "final_text": null
+      },
+      {
+        "id": 12,
+        "content_id": 1,
+        "check": "unsupported_claim",
+        "severity": "high",
+        "start": 22,
+        "end": 55,
+        "text": "#1 best smart bulbs on the planet",
+        "explanation": "No approved evidence supports this ranking or comparison.",
+        "source": {
+          "type": "guideline",
+          "id": 3,
+          "label": "Claims policy"
+        },
+        "suggestion": "Remove the unsupported superlative",
+        "status": "open",
+        "final_text": null
+      },
+      {
+        "id": 13,
+        "content_id": 1,
+        "check": "unsupported_claim",
+        "severity": "high",
+        "start": 78,
+        "end": 105,
+        "text": "cut your energy bill by 90%",
+        "explanation": "The approved fact concerns energy use, not a guaranteed reduction in an energy bill.",
+        "source": {
+          "type": "fact",
+          "id": 1,
+          "label": "Fact: up to 75% less energy than incandescent bulbs"
+        },
+        "suggestion": "Use the approved claim: up to 75% less energy than incandescent bulbs",
+        "status": "open",
+        "final_text": null
+      },
+      {
+        "id": 14,
+        "content_id": 1,
+        "check": "unsupported_claim",
+        "severity": "high",
+        "start": 120,
+        "end": 146,
+        "text": "guaranteed to last forever",
+        "explanation": "The approved fact specifies a rated lifespan, not a lifetime guarantee. The only approved guarantee is the 30-day money-back guarantee.",
+        "source": {
+          "type": "fact",
+          "id": 3,
+          "label": "Fact: rated for up to 25,000 hours of use"
+        },
+        "suggestion": "rated for up to 25,000 hours of use",
+        "status": "open",
+        "final_text": null
+      },
+      {
+        "id": 15,
+        "content_id": 1,
+        "check": "terminology",
+        "severity": "medium",
+        "start": 152,
+        "end": 165,
+        "text": "revolutionary",
+        "explanation": "This is a prohibited hype word.",
+        "source": {
+          "type": "term",
+          "id": 2,
+          "label": "Glossary: revolutionary → new"
+        },
+        "suggestion": "new",
+        "status": "open",
+        "final_text": null
+      },
+      {
+        "id": 16,
+        "content_id": 1,
+        "check": "terminology",
+        "severity": "medium",
+        "start": 173,
+        "end": 178,
+        "text": "cheap",
+        "explanation": "The term is prohibited because it implies low quality.",
+        "source": {
+          "type": "term",
+          "id": 1,
+          "label": "Glossary: cheap → affordable"
+        },
+        "suggestion": "affordable",
+        "status": "open",
+        "final_text": null
+      },
+      {
+        "id": 17,
+        "content_id": 1,
+        "check": "tone",
+        "severity": "low",
+        "start": 205,
+        "end": 208,
+        "text": "lol",
+        "explanation": "Text-speak does not fit the brand's tone.",
+        "source": {
+          "type": "term",
+          "id": 3,
+          "label": "Glossary: lol"
+        },
+        "suggestion": "",
+        "status": "open",
+        "final_text": null
+      },
+      {
+        "id": 18,
+        "content_id": 1,
+        "check": "outdated_info",
+        "severity": "high",
+        "start": 210,
+        "end": 240,
+        "text": "Over 2 million happy customers",
+        "explanation": "The supporting fact is past its review date and must be re-approved before use.",
+        "source": {
+          "type": "fact",
+          "id": 2,
+          "label": "Fact: more than 1.2 million customers served"
+        },
+        "suggestion": "Verify the current customer count and use an approved fact",
+        "status": "open",
+        "final_text": null
+      }
+    ],
+    "engine": {
+      "rules": "ok",
+      "llm": "disabled"
+    }
+  }
+}

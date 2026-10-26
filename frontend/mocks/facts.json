@@ -1,0 +1,52 @@
+{
+  "GET /api/facts": [
+    {
+      "id": 1,
+      "statement": "LuminaBulb uses up to 75% less energy than incandescent bulbs.",
+      "source": "Lab report LT-2025-03 (sample)",
+      "owner": "Priya Nair, Product",
+      "last_reviewed": "2026-03-15",
+      "review_by": "2027-03-15"
+    },
+    {
+      "id": 2,
+      "statement": "More than 1.2 million customers served.",
+      "source": "Annual report 2024 (sample)",
+      "owner": "Rohan Das, Marketing Ops",
+      "last_reviewed": "2025-01-10",
+      "review_by": "2025-12-31"
+    },
+    {
+      "id": 3,
+      "statement": "LuminaBulb is rated for up to 25,000 hours of use.",
+      "source": "Lab report LT-2025-03 (sample)",
+      "owner": "Priya Nair, Product",
+      "last_reviewed": "2026-03-15",
+      "review_by": "2027-03-15"
+    },
+    {
+      "id": 4,
+      "statement": "Lumina Home was founded in 2019.",
+      "source": "Company records (sample)",
+      "owner": "Rohan Das, Marketing Ops",
+      "last_reviewed": "2026-01-20",
+      "review_by": "2027-01-20"
+    },
+    {
+      "id": 5,
+      "statement": "Every LuminaBulb comes with a 30-day money-back guarantee.",
+      "source": "Returns policy v3 (sample)",
+      "owner": "Meera Iyer, Customer Care",
+      "last_reviewed": "2026-02-02",
+      "review_by": "2027-02-02"
+    }
+  ],
+  "POST /api/facts": {
+    "id": 6,
+    "statement": "Sample approved claim.",
+    "source": "Demo report (sample)",
+    "owner": "Product Team",
+    "last_reviewed": "2026-10-01",
+    "review_by": "2027-10-01"
+  }
+}

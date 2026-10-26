@@ -1,0 +1,29 @@
+{
+  "endpoint": "GET /api/content/1/audit",
+  "response": [
+    {
+      "id": 1,
+      "at": "2026-10-26T06:00:00Z",
+      "actor": "Asha",
+      "role": "creator",
+      "action": "created",
+      "detail": "Created Spring launch post (sample)."
+    },
+    {
+      "id": 2,
+      "at": "2026-10-26T06:05:00Z",
+      "actor": "Asha",
+      "role": "creator",
+      "action": "reviewed",
+      "detail": "Ran the brand compliance review."
+    },
+    {
+      "id": 3,
+      "at": "2026-10-26T06:10:00Z",
+      "actor": "Asha",
+      "role": "creator",
+      "action": "finding_edited",
+      "detail": "Changed LuminaBulbs to LuminaBulb."
+    }
+  ]
+}

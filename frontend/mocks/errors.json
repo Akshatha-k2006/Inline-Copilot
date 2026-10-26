@@ -1,0 +1,22 @@
+{
+  "403_role_not_allowed": {
+    "error": "role_not_allowed",
+    "message": "Your role is not allowed to perform this action."
+  },
+  "404_not_found": {
+    "error": "not_found",
+    "message": "The requested resource was not found."
+  },
+  "409_open_findings_exist": {
+    "error": "open_findings_exist",
+    "message": "Resolve all open high-severity findings before submitting."
+  },
+  "400_validation_error": {
+    "error": "validation_error",
+    "message": "The request contains invalid data."
+  },
+  "500_internal_error": {
+    "error": "internal_error",
+    "message": "An unexpected error occurred."
+  }
+}

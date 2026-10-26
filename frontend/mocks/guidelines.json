@@ -1,0 +1,28 @@
+{
+  "GET /api/guidelines": [
+    {
+      "id": 1,
+      "kind": "tone",
+      "title": "Tone of voice",
+      "body": "Warm, clear and confident. Write like a helpful neighbour who knows lighting. No slang or text-speak, no hype words, no more than one exclamation mark per piece."
+    },
+    {
+      "id": 2,
+      "kind": "messaging",
+      "title": "Messaging pillars",
+      "body": "Every piece supports at least one pillar: 1) Real energy savings, 2) Simple set-up, 3) Trust and honesty. Describe the product as smart lighting. Lead with the customer benefit, not the technology."
+    },
+    {
+      "id": 3,
+      "kind": "claims",
+      "title": "Claims policy",
+      "body": "Every number, comparison and guarantee must match an approved fact. Superlatives such as best, number one or most are not allowed without approved evidence. The only guarantee we offer is the 30-day money-back guarantee. Facts past their review date must be re-approved before use."
+    }
+  ],
+  "POST /api/guidelines": {
+    "id": 4,
+    "kind": "messaging",
+    "title": "Customer benefit first",
+    "body": "Lead with the customer benefit."
+  }
+}

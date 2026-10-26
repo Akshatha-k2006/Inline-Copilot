@@ -1,0 +1,50 @@
+{
+  "POST /api/content/1/submit": {
+    "id": 1,
+    "title": "Spring launch post (sample)",
+    "body": "Meet LuminaBulb, a smart lighting option for your home.",
+    "status": "in_review",
+    "version": 2,
+    "created_by": "Asha",
+    "updated_at": "2026-10-26T06:15:00Z"
+  },
+  "POST /api/content/1/decision": {
+    "request": {
+      "decision": "approve",
+      "comment": "Reviewed against the approved brand guidelines."
+    },
+    "response": {
+      "id": 1,
+      "title": "Spring launch post (sample)",
+      "body": "Meet LuminaBulb, a smart lighting option for your home.",
+      "status": "approved",
+      "version": 2,
+      "created_by": "Asha",
+      "updated_at": "2026-10-26T06:30:00Z"
+    }
+  },
+  "POST /api/content/1/decision_request_changes": {
+    "request": {
+      "decision": "request_changes",
+      "comment": "Please correct the unsupported claims."
+    },
+    "response": {
+      "id": 1,
+      "title": "Spring launch post (sample)",
+      "body": "Meet LuminaBulb, a smart lighting option for your home.",
+      "status": "draft",
+      "version": 2,
+      "created_by": "Asha",
+      "updated_at": "2026-10-26T06:30:00Z"
+    }
+  },
+  "POST /api/content/1/ready": {
+    "id": 1,
+    "title": "Spring launch post (sample)",
+    "body": "Meet LuminaBulb, a smart lighting option for your home.",
+    "status": "ready_to_publish",
+    "version": 2,
+    "created_by": "Asha",
+    "updated_at": "2026-10-26T06:35:00Z"
+  }
+}
