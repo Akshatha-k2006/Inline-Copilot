@@ -18,7 +18,8 @@ npm run dev          # http://localhost:3000
 - `src/components/editor/HighlightedDraft.tsx`: severity-coded sample phrase highlights linked to finding cards
 - `src/components/editor/FindingsPanel.tsx` and `FindingCard.tsx`: review summary, fact-source details, and local finding controls
 - `src/lib/mock-findings.ts`: deterministic demo checks for the fictional sample draft, resolved against current mock knowledge records
-- `src/lib/mock-data.ts`: shared in-memory knowledge, document, queue, findings, and review-history state for the demonstration
+- `src/lib/mock-data.ts`: shared localStorage-backed knowledge, document, finding, review, comment, and audit state for the demonstration
+- `src/lib/workflow.ts`: centralized mock workflow permissions, review validity, status labels, and submission blockers
 - `src/app/page.tsx`, `src/app/queue/page.tsx`, and `src/app/audit/page.tsx`: demonstration dashboard statistics, review queue, and history based on that shared state
 - `src/app/knowledge/page.tsx`: editable Guidelines, Glossary, Facts and Assets tabs under the single Guidelines navigation item
 - `src/lib/brand-data.ts`: API-shaped knowledge types and shared sample records mapped from fixtures in `mocks/`
@@ -29,6 +30,28 @@ npm run dev          # http://localhost:3000
 - `src/lib/types.ts`: types copied from `docs/API_CONTRACT.md`
 - `src/components/BackendStatus.tsx`: home-page check that the backend is reachable
 
+Write & Review, dashboard, queue, and history use one shared local demonstration
+workspace. Workflow actions, knowledge changes, comments, findings and audit
+entries persist in this browser's `localStorage`; this is not server persistence.
+Clearing this site's browser storage removes saved demo state.
+
+The demo role switcher is not authentication. Creator Asha can edit the sample
+draft, run fixed known-phrase checks, resolve findings and submit eligible
+content. Only Reviewer Ravi can comment, approve, or request changes. Brand
+Manager and Admin can inspect review information; Brand Manager and Admin can
+manage knowledge, but neither bypasses reviewer decisions. The mock lifecycle
+is Draft → In Review → Changes Requested → In Review → Ready to publish.
+Approval requires a current mock review and no unresolved high-severity issue.
+A dismissed high-severity finding still blocks submission if its text remains.
+Resubmissions retain prior submitted snapshots for reviewer comparison. The
+prototype does not publish content.
+
+Demo checks only match known fixture phrases and current mock knowledge; they do
+not comprehensively verify arbitrary text. Source references, facts, owners,
+dates, reviewers and workflow outcomes are demonstration data, not verified
+evidence. Changes Requested comments and decisions are stored as mock records.
+There is no backend workflow API yet; existing backend requests still use the
+API layer and do not silently fall back to these mocks.
 Write & Review, the dashboard, queue, and history use shared local demonstration
 data from the fixtures in `mocks/`. A sample review updates the document
 timestamp, findings, dashboard counts, and history together for the current
@@ -55,7 +78,7 @@ await api.post("/api/content/1/submit");
 Errors are thrown as `ApiError` with `status`, `code` and a readable `message`.
 
 Use **Load sample brand** on the home screen or in the Guidelines page to reset
-the shared in-memory mock knowledge records.
+the shared browser-local knowledge records (Brand Manager or Admin demo role).
 
 The knowledge editor and Write & Review currently use local mock data only;
 they do not fall back to mock data after an API error. The API layer and optional

@@ -9,12 +9,22 @@ import {
   isReplacementSuggestion,
 } from "@/lib/mock-findings";
 import {
+  getDocumentFindings,
+  getWorkflowBlockersForDocument,
   recordDemoReview,
   resetDemoDocument,
   resolveDemoFinding,
+  saveDemoDraft,
+  transitionDemoDocument,
   useDemoWorkspace,
 } from "@/lib/mock-data";
+import { useRole } from "@/lib/role";
 import type { FindingStatus } from "@/lib/types";
+import {
+  canEditContent,
+  contentStatusLabel,
+  reviewIsCurrent,
+} from "@/lib/workflow";
 import FindingsPanel from "./FindingsPanel";
 import HighlightedDraft from "./HighlightedDraft";
 
@@ -22,12 +32,10 @@ const DEFAULT_TITLE = "Untitled draft";
 
 export default function Editor() {
   const workspace = useDemoWorkspace();
+  const { role, user } = useRole();
   const [title, setTitle] = useState(DEMO_DRAFT.title);
   const [body, setBody] = useState(DEMO_DRAFT.body);
   const [contentType, setContentType] = useState("Marketing Copy");
-  const [findings, setFindings] = useState<DemoFinding[] | null>(
-    workspace.findings,
-  );
   const [reviewing, setReviewing] = useState(false);
   const [operationError, setOperationError] = useState("");
   const [reviewedCustomText, setReviewedCustomText] = useState(false);
@@ -39,18 +47,44 @@ export default function Editor() {
   const currentDocument = workspace.documents.find(
     (item) => item.id === DEMO_DRAFT.id,
   );
+  const mayEdit = Boolean(
+    currentDocument && canEditContent(role, user, currentDocument),
+  );
+  const review = workspace.reviews.find(
+    (item) => item.document_id === currentDocument?.id,
+  );
+  const reviewCurrent = Boolean(
+    currentDocument && reviewIsCurrent(currentDocument, review),
+  );
+  const findings =
+    currentDocument &&
+    currentDocument.body === body &&
+    workspace.findingsBody === body
+      ? getDocumentFindings(workspace, currentDocument.id)
+      : null;
+  const comments = currentDocument
+    ? workspace.comments.filter(
+        (comment) => comment.document_id === currentDocument.id,
+      )
+    : [];
+  const workflowBlockers = currentDocument
+    ? getWorkflowBlockersForDocument(workspace, currentDocument.id)
+    : ["The demonstration document is unavailable."];
+  const canSubmit =
+    mayEdit &&
+    currentDocument !== undefined &&
+    (currentDocument.status === "draft" ||
+      currentDocument.status === "changes_requested");
 
   useEffect(() => {
     if (!currentDocument) return;
     setTitle(currentDocument.title);
     setBody(currentDocument.body);
-    setFindings(workspace.findings);
     setSelectedFindingId(null);
-  }, [currentDocument?.title, currentDocument?.body, workspace.findings]);
+  }, [currentDocument?.title, currentDocument?.body]);
 
   function resetReviewForEdit() {
     reviewRevision.current += 1;
-    setFindings(null);
     setSelectedFindingId(null);
     setReviewedCustomText(false);
   }
@@ -58,11 +92,25 @@ export default function Editor() {
   function changeTitle(value: string) {
     setTitle(value);
     resetReviewForEdit();
+    persistDraftChange(value, body);
   }
 
   function changeBody(value: string) {
     setBody(value);
     resetReviewForEdit();
+    persistDraftChange(title, value);
+  }
+
+  function persistDraftChange(nextTitle: string, nextBody: string) {
+    if (!currentDocument || !mayEdit || !workspace.isHydrated) return;
+    try {
+      saveDemoDraft(currentDocument.id, nextTitle, nextBody, role, user);
+      setOperationError("");
+    } catch (error) {
+      setOperationError(
+        error instanceof Error ? error.message : "Could not save this draft.",
+      );
+    }
   }
 
   function selectFinding(finding: DemoFinding, scrollToText = false) {
@@ -83,13 +131,12 @@ export default function Editor() {
   }
 
   function loadSampleDraft() {
-    if (!workspace.isHydrated) return;
+    if (!workspace.isHydrated || !mayEdit || !currentDocument) return;
     setOperationError("");
     try {
-      const sample = resetDemoDocument();
+      const sample = resetDemoDocument(role, user);
       setTitle(sample.document.title);
       setBody(sample.document.body);
-      setFindings(sample.findings);
       setReviewedCustomText(false);
       setSelectedFindingId(null);
     } catch (error) {
@@ -102,20 +149,19 @@ export default function Editor() {
   }
 
   async function runReview() {
-    if (!body.trim() || reviewInFlight.current) return;
+    if (!mayEdit || !currentDocument || !body.trim() || reviewInFlight.current) return;
     const currentRevision = reviewRevision.current;
     const submittedBody = body;
 
     reviewInFlight.current = true;
     setReviewing(true);
-    setFindings(null);
     setSelectedFindingId(null);
 
     await new Promise<void>((resolve) => window.setTimeout(resolve, 350));
     if (reviewRevision.current === currentRevision) {
       try {
-        const demoFindings = recordDemoReview(submittedBody);
-        setFindings(demoFindings);
+        saveDemoDraft(currentDocument.id, title, submittedBody, role, user);
+        const demoFindings = recordDemoReview(submittedBody, role, user);
         setReviewedCustomText(demoFindings.length === 0);
         setOperationError("");
       } catch (error) {
@@ -136,12 +182,32 @@ export default function Editor() {
     if (!workspace.isHydrated) return;
     setBusyFindingIds((ids) => [...ids, finding.id]);
     try {
-      const result = resolveDemoFinding(finding.id, status, finalText);
+      const result = resolveDemoFinding(
+        finding.id,
+        status,
+        finalText,
+        role,
+        user,
+      );
       setBody(result.document.body);
-      setFindings(result.findings);
       setSelectedFindingId(null);
     } finally {
       setBusyFindingIds((ids) => ids.filter((id) => id !== finding.id));
+    }
+  }
+
+  function submitForReview() {
+    if (!canSubmit || !currentDocument) return;
+    setOperationError("");
+    try {
+      saveDemoDraft(currentDocument.id, title, body, role, user);
+      const action =
+        currentDocument.status === "changes_requested" ? "resubmit" : "submit";
+      transitionDemoDocument(currentDocument.id, action, role, user);
+    } catch (error) {
+      setOperationError(
+        error instanceof Error ? error.message : "Could not submit this draft.",
+      );
     }
   }
 
@@ -155,9 +221,19 @@ export default function Editor() {
           <p className="eyebrow">CoRESpace / Workspace</p>
           <h1>Write &amp; Review</h1>
           <p className="lead">
-            Check your content against your brand guidelines and approved facts.
+            Review the sample draft with the active demo role. Mock checks are limited to fixed known phrases.
           </p>
         </div>
+        {mayEdit && (
+          <button
+            type="button"
+            className="button"
+            onClick={() => void loadSampleDraft()}
+            disabled={reviewing || !workspace.isHydrated}
+          >
+            Load demonstration draft
+          </button>
+        )}
         <button
           type="button"
           className="button"
@@ -169,7 +245,19 @@ export default function Editor() {
       </header>
 
       <p className="editor-demo-banner" role="note">
-        {DEMO_FINDINGS_NOTICE} Live backend review is not connected.
+        {DEMO_FINDINGS_NOTICE} This role switcher is a prototype, not authentication. No backend review or publishing is connected.
+      </p>
+      {operationError && <p className="form-error" role="alert">{operationError}</p>}
+      {!workspace.isHydrated && (
+        <p className="editor-notice" role="status">Loading saved demonstration changes...</p>
+      )}
+      {workspace.persistenceWarning && (
+        <p className="editor-notice" role="alert">
+          Saved mock changes could not be restored: {workspace.persistenceWarning}
+        </p>
+      )}
+      <p className="editor-notice" role="note">
+        Finding actions are saved only in this browser&apos;s local demonstration data, not to a server.
       </p>
       {operationError && <p className="form-error" role="alert">{operationError}</p>}
       {!workspace.isHydrated && (
@@ -185,6 +273,26 @@ export default function Editor() {
       </p>
       {reviewedCustomText && (
         <p className="editor-notice" role="status">{CUSTOM_CONTENT_NOTICE}</p>
+      )}
+      {currentDocument && (
+        <div className="workflow-status-line">
+          <span className={`content-status status-${currentDocument.status}`}>
+            {contentStatusLabel(currentDocument.status)}
+          </span>
+          <span>Version {currentDocument.version}</span>
+          {review && (
+            <span>
+              {reviewCurrent
+                ? "Current mock review"
+                : "Review is stale; run the known demo checks again"}
+            </span>
+          )}
+        </div>
+      )}
+      {!mayEdit && (
+        <p className="editor-notice" role="note">
+          This document is read-only for {role.replaceAll("_", " ")}. Only its creator can edit or submit a draft.
+        </p>
       )}
 
       <div className="editor-layout">
@@ -206,6 +314,7 @@ export default function Editor() {
                 value={title}
                 onChange={(event) => changeTitle(event.target.value)}
                 placeholder="Give your draft a title"
+                readOnly={!mayEdit}
                 disabled={!workspace.isHydrated}
               />
             </label>
@@ -215,7 +324,7 @@ export default function Editor() {
                 id="content-type"
                 value={contentType}
                 onChange={(event) => setContentType(event.target.value)}
-                disabled={!workspace.isHydrated}
+                disabled={!mayEdit || !workspace.isHydrated}
               >
                 <option>Marketing Copy</option>
               </select>
@@ -230,6 +339,7 @@ export default function Editor() {
                 onChange={(event) => changeBody(event.target.value)}
                 placeholder="Paste or write your content here..."
                 rows={14}
+                readOnly={!mayEdit}
                 disabled={!workspace.isHydrated}
               />
             </label>
@@ -248,29 +358,59 @@ export default function Editor() {
             <span className="character-count" aria-live="polite">
               {body.length.toLocaleString()} characters
             </span>
-            <div className="editor-buttons">
-              <button
-                type="button"
-                className="button"
-                onClick={() => {
-                  changeBody("");
-                  setTitle(DEFAULT_TITLE);
-                }}
-                disabled={!body || !workspace.isHydrated}
-              >
-                Clear
-              </button>
+            {mayEdit && (
+              <div className="editor-buttons">
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() => {
+                    changeBody("");
+                    changeTitle(DEFAULT_TITLE);
+                  }}
+                  disabled={!body || !workspace.isHydrated}
+                >
+                  Clear
+                </button>
+                <button
+                  type="button"
+                  className="button button-primary"
+                  onClick={() => void runReview()}
+                  disabled={emptyContent || reviewing || !workspace.isHydrated}
+                >
+                  {reviewing && <span className="loading-spinner" aria-hidden="true" />}
+                  {reviewing ? "Reviewing demo content..." : "Run Demo Review"}
+                </button>
+              </div>
+            )}
+          </div>
+          {canSubmit && (
+            <section className="workflow-action-card" aria-labelledby="submit-heading">
+              <h3 id="submit-heading">
+                {currentDocument?.status === "changes_requested"
+                  ? "Resubmit revised content"
+                  : "Submit for review"}
+              </h3>
+              <p>
+                A current demonstration review and no unresolved high-severity findings are required.
+                Dismissing a high-severity finding does not count as correcting it.
+              </p>
+              {workflowBlockers.length > 0 && (
+                <ul className="workflow-blockers">
+                  {workflowBlockers.map((blocker) => <li key={blocker}>{blocker}</li>)}
+                </ul>
+              )}
               <button
                 type="button"
                 className="button button-primary"
-                onClick={() => void runReview()}
-                disabled={emptyContent || reviewing || !workspace.isHydrated}
+                onClick={submitForReview}
+                disabled={!workspace.isHydrated || workflowBlockers.length > 0}
               >
-                {reviewing && <span className="loading-spinner" aria-hidden="true" />}
-                {reviewing ? "Reviewing demo content..." : "Run Demo Review"}
+                {currentDocument?.status === "changes_requested"
+                  ? "Resubmit for review"
+                  : "Submit for review"}
               </button>
-            </div>
-          </div>
+            </section>
+          )}
         </section>
 
         <FindingsPanel
@@ -280,12 +420,26 @@ export default function Editor() {
               ? busyFindingIds
               : findings?.map((finding) => finding.id) ?? []
           }
+          readOnly={!mayEdit}
           selectedFindingId={selectedFindingId}
           reviewedCustomText={reviewedCustomText}
           onSelect={(finding) => selectFinding(finding, true)}
-          onResolve={resolveFinding}
+          onResolve={mayEdit ? resolveFinding : undefined}
         />
       </div>
+      {comments.length > 0 && (
+        <section className="card workflow-comments" aria-labelledby="review-comments-heading">
+          <h2 id="review-comments-heading">Review comments and requested changes</h2>
+          <ul>
+            {comments.map((comment) => (
+              <li key={comment.id}>
+                <p>{comment.text}</p>
+                <small>{comment.author} · {comment.role.replaceAll("_", " ")} · {comment.kind.replaceAll("_", " ")}</small>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </section>
   );
 }

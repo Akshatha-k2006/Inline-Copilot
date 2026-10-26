@@ -3,16 +3,22 @@
 import Link from "next/link";
 import BackendStatus from "@/components/BackendStatus";
 import SampleBrandButton from "@/components/SampleBrandButton";
-import { MOCK_DATA_NOTICE, useDemoWorkspace } from "@/lib/mock-data";
+import {
+  getQueuedDocuments,
+  MOCK_DATA_NOTICE,
+  useDemoWorkspace,
+} from "@/lib/mock-data";
 
 export default function Home() {
   const workspace = useDemoWorkspace();
-  const queuedDocuments = workspace.documents.filter((document) =>
-    workspace.queueDocumentIds.includes(document.id),
+  const queuedDocuments = getQueuedDocuments(workspace);
+  const currentDocument = workspace.documents[0];
+  const findingsCurrent = Boolean(
+    currentDocument && workspace.findingsBody === currentDocument.body,
   );
-  const openFindings = workspace.findings.filter(
-    (finding) => finding.status === "open",
-  );
+  const openFindings = findingsCurrent
+    ? workspace.findings.filter((finding) => finding.status === "open")
+    : [];
   const reviewRuns = workspace.history.filter(
     (entry) => entry.action === "reviewed",
   ).length;
@@ -42,7 +48,7 @@ export default function Home() {
         <article className="demo-stat-card">
           <span>Open sample findings</span>
           <strong>{openFindings.length}</strong>
-          <small>Across the demonstration review</small>
+          <small>{findingsCurrent ? "Across current matching mock checks" : "No current mock review results"}</small>
         </article>
       </section>
 

@@ -4,8 +4,8 @@ export type Role = "creator" | "reviewer" | "brand_manager" | "admin";
 
 export type ContentStatus =
   | "draft"
-  | "self_checked"
   | "in_review"
+  | "changes_requested"
   | "approved"
   | "ready_to_publish";
 

@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { canViewReviewQueue } from "@/lib/workflow";
+import { useRole } from "@/lib/role";
 import RoleSwitcher from "./RoleSwitcher";
 
 const NAV = [
@@ -14,6 +16,10 @@ const NAV = [
 
 export default function TopBar() {
   const pathname = usePathname();
+  const { role, user, label } = useRole();
+  const visibleNav = NAV.filter(
+    (item) => item.key !== "queue" || canViewReviewQueue(role),
+  );
 
   return (
     <aside className="topbar">
@@ -29,7 +35,7 @@ export default function TopBar() {
 
       <nav className="nav" aria-label="Main">
         <ul>
-          {NAV.map((item) => {
+          {visibleNav.map((item) => {
             const active =
               item.key === "home"
                 ? pathname === "/"
@@ -58,8 +64,8 @@ export default function TopBar() {
       <div className="sidebar-profile">
         <span className="profile-avatar" aria-hidden="true">A</span>
         <span className="profile-details">
-          <strong>Asha</strong>
-          <span>Demo workspace</span>
+          <strong>{user.replace(/\s+\([^)]*\)$/, "")}</strong>
+          <span>{label} · demo role, not authentication</span>
         </span>
         <RoleSwitcher />
       </div>
