@@ -1,5 +1,6 @@
 import Link from "next/link";
 import BackendStatus from "@/components/BackendStatus";
+import SampleBrandButton from "@/components/SampleBrandButton";
 
 export default function Home() {
   return (
@@ -12,9 +13,14 @@ export default function Home() {
       </p>
 
       <div className="card">
+        <div className="home-actions">
+          <h2>Try it now</h2>
+          <SampleBrandButton />
+        </div>
+        <p>Load the sample brand in one click, then explore its guidelines, glossary, facts and assets.</p>
         <h2>Try it in five steps</h2>
         <ol className="steps">
-          <li>Open the Knowledge base and load the sample brand.</li>
+          <li>Open the Knowledge base to view or edit brand information.</li>
           <li>
             Open the Editor and run a review on the sample draft, or paste your
             own text.
