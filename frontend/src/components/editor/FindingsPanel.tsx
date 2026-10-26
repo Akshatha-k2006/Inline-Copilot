@@ -13,7 +13,6 @@ interface FindingsPanelProps {
   onResolve: (
     finding: DemoFinding,
     status: Exclude<FindingStatus, "open">,
-    status: FindingStatus,
     finalText: string | null,
   ) => Promise<void>;
 }
@@ -46,7 +45,6 @@ export default function FindingsPanel({
           </h2>
         </div>
         {activeFindings.length > 0 && (
-        {findings && findings.length > 0 && (
           <span className="finding-count">{highCount} error severity</span>
         )}
       </div>
@@ -74,14 +72,7 @@ export default function FindingsPanel({
               ? "The local demo has findings for its sample draft only. This does not mean your custom content has passed a review."
               : resolvedFindings.length > 0
                 ? "Resolved findings remain below for reference. This does not indicate a verified review result."
-                : "There are no findings to display."}
-            {reviewedCustomText ? "i" : "✓"}
-          </span>
-          <h3>{reviewedCustomText ? "No demo findings for this text" : "No findings"}</h3>
-          <p>
-            {reviewedCustomText
-              ? "The local demo has findings for its sample draft only. This does not mean your custom content has passed a review."
-              : "There are no findings to display."}
+                  : "There are no findings to display."}
           </p>
         </div>
       ) : (

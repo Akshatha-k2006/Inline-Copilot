@@ -4,8 +4,6 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { DemoFinding } from "@/lib/mock-findings";
 import { isReplacementSuggestion } from "@/lib/mock-findings";
-import { useState } from "react";
-import type { DemoFinding } from "@/lib/mock-findings";
 import type { FindingStatus, Severity } from "@/lib/types";
 
 interface FindingCardProps {
@@ -17,7 +15,6 @@ interface FindingCardProps {
   onResolve: (
     finding: DemoFinding,
     status: Exclude<FindingStatus, "open">,
-    status: FindingStatus,
     finalText: string | null,
   ) => Promise<void>;
 }
@@ -94,7 +91,6 @@ export default function FindingCard({
         if ((event.target as HTMLElement).closest("button, a, textarea")) return;
         onSelect(finding);
       }}
-      onClick={() => onSelect(finding)}
       onKeyDown={(event) => {
         if (
           event.target === event.currentTarget &&
@@ -205,9 +201,6 @@ export default function FindingCard({
       )}
       {resolved ? (
         <p className="finding-resolved-note">This finding is {finding.status}.</p>
-        <p className="finding-resolved-note">
-          This finding is {finding.status}. Demo changes are not saved.
-        </p>
       ) : (
         <div className="finding-actions">
           {finding.range_valid === false ? (

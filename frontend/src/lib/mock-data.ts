@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useSyncExternalStore } from "react";
-import { useSyncExternalStore } from "react";
 import auditFixture from "../../mocks/audit.json";
 import contentFixture from "../../mocks/content.json";
 import queueFixture from "../../mocks/queue.json";
@@ -15,7 +14,6 @@ import {
 } from "./brand-data";
 import { DEMO_DRAFT, getDemoFindings, type DemoFinding } from "./mock-findings";
 import type { Content, FindingStatus, Role } from "./types";
-import type { Content, Role } from "./types";
 
 export const MOCK_DATA_NOTICE =
   "Demonstration data only. Documents, checks, findings, sources, and timestamps are fictional and are not verified results.";
@@ -62,9 +60,6 @@ let workspace: DemoWorkspace = {
 const listeners = new Set<() => void>();
 const STORAGE_KEY = "corespace-demo-workspace-v1";
 let hydrated = false;
-};
-
-const listeners = new Set<() => void>();
 const timestampFormatter = new Intl.DateTimeFormat("en-US", {
   dateStyle: "medium",
   timeStyle: "short",
@@ -159,8 +154,6 @@ export function useDemoWorkspace(): DemoWorkspace {
     hydrateWorkspace();
   }, []);
   return snapshot;
-export function useDemoWorkspace(): DemoWorkspace {
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }
 
 export function getQueuedDocuments(data: DemoWorkspace): Content[] {
@@ -213,8 +206,6 @@ function commitKnowledge(knowledge: BrandData): void {
   });
 
   commitWorkspace({ ...workspace, knowledge, findings });
-  workspace = { ...workspace, knowledge, findings };
-  notify();
 }
 
 export function saveMockKnowledgeItem(
@@ -448,9 +439,6 @@ export function resolveDemoFinding(
   };
   commitWorkspace(nextWorkspace);
   return { document: updatedDocument, findings: updatedFindings };
-export function updateDemoFindings(findings: DemoFinding[]): void {
-  workspace = { ...workspace, findings };
-  notify();
 }
 
 export function recordDemoReview(body: string): DemoFinding[] {
@@ -471,7 +459,6 @@ export function recordDemoReview(body: string): DemoFinding[] {
     1;
 
   const nextWorkspace: DemoWorkspace = {
-  workspace = {
     ...workspace,
     documents: workspace.documents.map((document) =>
       document.id === currentDocument.id
@@ -492,7 +479,6 @@ export function recordDemoReview(body: string): DemoFinding[] {
     ],
   };
   commitWorkspace(nextWorkspace);
-  notify();
 
   return findings;
 }
