@@ -1,4 +1,3 @@
-import logging
 import json
 import re
 import socket
@@ -14,7 +13,6 @@ from app.services.fact_checker import _fact_is_outdated
 RELEVANT_GUIDELINE_TERMS = {"tone", "messaging", "brand", "claim", "claims"}
 VALID_CHECKS = {"tone", "messaging", "unsupported_claim"}
 VALID_SEVERITIES = {"high", "medium", "low", "warning"}
-logger = logging.getLogger(__name__)
 
 
 class LLMTimeoutError(Exception):
@@ -26,9 +24,10 @@ class LLMReviewError(Exception):
 
 
 class LLMProviderError(LLMReviewError):
-    def __init__(self, status_code: int):
+    def __init__(self, status_code: int, category: str):
         super().__init__()
         self.status_code = status_code
+        self.category = category
 
 
 class LLMTransportError(LLMReviewError):
@@ -36,7 +35,69 @@ class LLMTransportError(LLMReviewError):
 
 
 class LLMResponseError(LLMReviewError):
-    pass
+    def __init__(self, category: str):
+        super().__init__()
+        self.category = category
+
+
+def _provider_error_category(status_code: int, body: bytes) -> str:
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        payload = None
+
+    error = payload
+    if isinstance(error, list) and error and isinstance(error[0], dict):
+        error = error[0].get("error")
+    elif isinstance(error, dict):
+        error = error.get("error", error)
+    if not isinstance(error, dict):
+        error = {}
+
+    status = error.get("status")
+    status = status.upper() if isinstance(status, str) else ""
+    message = error.get("message")
+    message = message.lower() if isinstance(message, str) else ""
+
+    if (
+        status_code == 401
+        or status == "UNAUTHENTICATED"
+        or any(
+            term in message
+            for term in ("api key not valid", "invalid api key", "api_key_invalid")
+        )
+    ):
+        return "authentication_rejected"
+    if (
+        status_code == 403
+        or status == "PERMISSION_DENIED"
+        or any(term in message for term in ("permission denied", "access denied"))
+    ):
+        return "project_access_denied"
+    if (
+        status_code == 429
+        or status == "RESOURCE_EXHAUSTED"
+        or any(term in message for term in ("quota", "rate limit", "rate_limit"))
+    ):
+        return "quota_or_rate_limit"
+    if (
+        status_code in {400, 422}
+        or status == "INVALID_ARGUMENT"
+        or any(
+            term in message
+            for term in ("unsupported parameter", "unknown parameter")
+        )
+    ):
+        if "response_format" in message:
+            return "unsupported_response_format"
+        return "invalid_request_or_parameter"
+    if status_code == 404 or status == "NOT_FOUND":
+        if "model" in message:
+            return "model_or_resource_not_found"
+        if any(term in message for term in ("endpoint", "path")):
+            return "endpoint_not_found"
+        return "resource_not_found"
+    return "provider_http_error"
 
 
 def _applicable_guidelines(db: Session) -> list[Guideline]:
@@ -98,7 +159,6 @@ def _request_review(
     request_body = {
         "model": settings.llm_model,
         "temperature": 0,
-        "response_format": {"type": "json_object"},
         "messages": [
             {
                 "role": "system",
@@ -152,24 +212,24 @@ def _request_review(
     except HTTPError as exc:
         if isinstance(exc.reason, (TimeoutError, socket.timeout)):
             raise LLMTimeoutError from exc
-        logger.warning(
-            "Hosted LLM request failed: category=provider status=%d",
-            exc.code,
-        )
-        raise LLMProviderError(exc.code) from exc
+        category = _provider_error_category(exc.code, exc.read(8192))
+        raise LLMProviderError(exc.code, category) from exc
     except URLError as exc:
         if isinstance(exc.reason, (TimeoutError, socket.timeout)):
             raise LLMTimeoutError from exc
         raise LLMTransportError from exc
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:
-        raise LLMResponseError from exc
+        raise LLMResponseError("invalid_json") from exc
     except OSError as exc:
         raise LLMTransportError from exc
 
     try:
-        return payload["choices"][0]["message"]["content"]
+        content = payload["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError) as exc:
-        raise LLMResponseError from exc
+        raise LLMResponseError("unexpected_response_structure") from exc
+    if not isinstance(content, str):
+        raise LLMResponseError("unexpected_response_structure")
+    return content
 
 
 def _validated_findings(
@@ -181,10 +241,10 @@ def _validated_findings(
     try:
         parsed = json.loads(response) if isinstance(response, str) else response
     except json.JSONDecodeError as exc:
-        raise LLMResponseError from exc
+        raise LLMResponseError("invalid_json") from exc
 
     if not isinstance(parsed, dict) or not isinstance(parsed.get("findings"), list):
-        raise LLMResponseError("Invalid findings response")
+        raise LLMResponseError("finding_validation")
 
     guideline_by_id = {guideline.id: guideline for guideline in guidelines}
     current_facts = {
@@ -196,7 +256,7 @@ def _validated_findings(
 
     for item in parsed["findings"]:
         if not isinstance(item, dict):
-            raise LLMResponseError("Invalid finding")
+            raise LLMResponseError("finding_validation")
 
         check = item.get("check")
         guideline_id = item.get("guideline_id")
@@ -207,7 +267,8 @@ def _validated_findings(
         fact_id = item.get("fact_id")
 
         if (
-            check not in VALID_CHECKS
+            not isinstance(check, str)
+            or check not in VALID_CHECKS
             or not isinstance(guideline_id, int)
             or isinstance(guideline_id, bool)
             or guideline_id not in guideline_by_id
@@ -215,26 +276,27 @@ def _validated_findings(
             or not matched_text.strip()
             or not isinstance(explanation, str)
             or not explanation.strip()
+            or not isinstance(severity, str)
             or severity not in VALID_SEVERITIES
             or (
                 suggested_fix is not None
                 and not isinstance(suggested_fix, str)
             )
         ):
-            raise LLMResponseError("Invalid finding fields")
+            raise LLMResponseError("finding_validation")
 
         guideline = guideline_by_id[guideline_id]
         topics = _guideline_topics(guideline)
         if check == "tone" and not topics & {"tone", "brand"}:
-            raise LLMResponseError("Finding has an unrelated source guideline")
+            raise LLMResponseError("finding_validation")
         if check == "messaging" and not topics & {"messaging", "brand"}:
-            raise LLMResponseError("Finding has an unrelated source guideline")
+            raise LLMResponseError("finding_validation")
         if check == "unsupported_claim" and not topics & {
             "claim",
             "claims",
             "brand",
         }:
-            raise LLMResponseError("Finding has an unrelated source guideline")
+            raise LLMResponseError("finding_validation")
 
         start = item.get("start_offset")
         end = item.get("end_offset")
@@ -250,8 +312,8 @@ def _validated_findings(
             if start is not None or end is not None:
                 raise LLMResponseError("Finding text is not present at supplied offsets")
             start = text.find(matched_text)
-            if start < 0 or text.find(matched_text, start + 1) >= 0:
-                raise LLMResponseError("Finding text does not identify a unique span")
+            if start < 0:
+                raise LLMResponseError("finding_validation")
             end = start + len(matched_text)
 
         suggestion_fact = None
