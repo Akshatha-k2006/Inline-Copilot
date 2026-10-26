@@ -22,6 +22,25 @@ Each item returned by the API includes an `id`.
   `{ guidelines, glossary, facts, assets }` sample payload.
 - `GET /api/health` returns `{ "status": "ok" }`.
 
+## Content review
+
+`POST /api/content/{id}/review` returns the content version, persisted
+findings, and engine statuses:
+
+```json
+{
+  "content_id": 1,
+  "content_version": 1,
+  "findings": [],
+  "engine": { "rules": "ok", "llm": "ok" }
+}
+```
+
+The LLM status is `disabled` when `LLM_API_KEY` is not configured, `timeout`
+when the request exceeds `LLM_TIMEOUT_SECONDS`, `error` for other provider or
+response-validation failures, and `ok` when guideline review succeeds.
+Rule-based terminology and claim checks continue when the LLM is unavailable.
+
 The standalone mock service in `frontend/mock_kb.mjs` implements these routes and
 persists data to `frontend/mock-kb-data.json` by default. Its integration check
 uses a temporary database and does not alter the developer's saved mock data.
