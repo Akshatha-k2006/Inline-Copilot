@@ -157,16 +157,38 @@ The shared backend transition service authorizes `creator` for
 `approved → ready_to_publish`. Callers must obtain the role through the
 existing `X-Role` role dependency and provide the actor from `X-User`.
 
-Submitting `self_checked` content into review returns `409` while any finding
-for the current content version has severity `high` and status `open`.
-That response uses
-`{ "error": "open_high_severity_findings", "message": "Content cannot be submitted while high-severity findings remain open." }`.
+`POST /api/content/{id}/submit` accepts an empty request body and submits
+content for review. Only a creator can submit content in `self_checked` status.
+On success it returns `200`:
+
+```json
+{
+  "content_id": 1,
+  "status": "in_review",
+  "content_version": 2
+}
+```
+
+Submission does not change the content text or version. It returns `404` with
+`{ "error": "not_found", "message": "Content not found." }` when the content
+does not exist, and `403` with the existing `forbidden` error shape when the
+role is missing, invalid, or not `creator`. The request requires the existing
+`X-User` actor header; a missing actor header returns `422` with the standard
+`validation_error` response. The current backend dependency validates role
+headers but does not provide a separate identity-authentication mechanism.
+
 Invalid transitions return `409` with
 `{ "error": "invalid_status_transition", "message": "Status transition is not allowed." }`.
-The transition and its `AuditEvent` are committed atomically. The event uses
-action `content_status_changed`, the actor and content ID fields, a database
-timestamp, and details containing `actor_role`, `previous_status`, and
-`new_status`.
+Submission is blocked with `409` if an open, high-severity finding exists for
+the current content version:
+`{ "error": "open_high_severity_findings", "message": "Content cannot be submitted while high-severity findings remain open." }`.
+Database failures return `500` with
+`{ "error": "workflow_failed", "message": "Unable to submit content for review." }`.
+
+The status transition and its `AuditEvent` are committed atomically. The event
+uses action `content_status_changed`, the actor and content ID fields, a
+database timestamp, and details containing `actor_role`, `previous_status`,
+and `new_status`.
 
 ## Frontend workflow prototype
 
@@ -182,12 +204,11 @@ authentication.
 
 Review records, comments, decisions, prior submitted versions, and workflow
 audit events are stored in browser `localStorage`. They are not sent to the
-backend, do not represent
-verified checks, and do not publish content. Only the backend review route
-above and the shared content status-transition service are implemented on the
-backend. The frontend submission, decision, comment, and audit workflows remain
-local demonstrations and have no backend endpoints in this contract. The
-transition service is not itself an HTTP endpoint.
+backend, do not represent verified checks, and do not publish content. The
+backend review and submit routes are defined above. The frontend decision,
+comment, and audit workflows remain local demonstrations and have no backend
+endpoints in this contract. Other status transitions are handled by the shared
+transition service and do not yet have dedicated endpoints.
 
 The frontend audit timeline uses the shared workflow history collection. Each
 event is associated with a content ID and stores the demo actor name and role

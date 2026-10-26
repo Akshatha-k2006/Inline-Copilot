@@ -39,6 +39,12 @@ class AssetResponse(AssetCreate):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ContentStatusResponse(BaseModel):
+    content_id: int
+    status: str
+    content_version: int
+
+
 class FindingActionRequest(BaseModel):
     action: Literal["accept", "edit", "dismiss"]
     replacement: str | None = None

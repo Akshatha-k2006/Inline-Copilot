@@ -13,6 +13,7 @@ from app.db import Base, get_db
 from app.dependencies import get_role
 from app.exception_handlers import register_exception_handlers
 from app.models import AuditEvent, Content, Finding
+from app.routers.content_workflow import router as content_workflow_router
 from app.services.content_workflow import transition_content_status
 
 
@@ -38,6 +39,7 @@ class ContentWorkflowTests(unittest.TestCase):
 
         self.app = FastAPI()
         register_exception_handlers(self.app)
+        self.app.include_router(content_workflow_router, prefix="/api")
 
         def override_get_db():
             yield self.db
@@ -249,6 +251,143 @@ class ContentWorkflowTests(unittest.TestCase):
             },
         )
         self.assertEqual(self.content.status, "self_checked")
+        self.assertEqual(self.db.query(AuditEvent).count(), 0)
+
+    def test_submit_endpoint_succeeds_with_exact_response_and_audit(self):
+        self.content.status = "self_checked"
+        original_body = self.content.body
+        original_version = self.content.version
+        self.db.commit()
+
+        status, payload = self.request(
+            "/api/content/1/submit",
+            role="creator",
+            user="submitter",
+        )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(
+            payload,
+            {
+                "content_id": 1,
+                "status": "in_review",
+                "content_version": original_version,
+            },
+        )
+        self.assertEqual(self.content.body, original_body)
+        self.assertEqual(self.content.version, original_version)
+        event = self.db.query(AuditEvent).one()
+        self.assertEqual(event.content_id, self.content.id)
+        self.assertEqual(event.actor, "submitter")
+        self.assertEqual(event.action, "content_status_changed")
+        self.assertEqual(
+            event.details,
+            {
+                "actor_role": "creator",
+                "previous_status": "self_checked",
+                "new_status": "in_review",
+            },
+        )
+        self.assertIsNotNone(event.created_at)
+
+    def test_submit_endpoint_rejects_non_creator(self):
+        self.content.status = "self_checked"
+        self.db.commit()
+
+        status, payload = self.request(
+            "/api/content/1/submit",
+            role="reviewer",
+        )
+
+        self.assertEqual(status, 403)
+        self.assertEqual(payload["error"], "forbidden")
+        self.assertEqual(self.content.status, "self_checked")
+        self.assertEqual(self.db.query(AuditEvent).count(), 0)
+
+    def test_submit_endpoint_invalid_status_uses_exact_409_response(self):
+        status, payload = self.request("/api/content/1/submit")
+
+        self.assertEqual(status, 409)
+        self.assertEqual(
+            payload,
+            {
+                "error": "invalid_status_transition",
+                "message": "Status transition is not allowed.",
+            },
+        )
+        self.assertEqual(self.content.status, "draft")
+        self.assertEqual(self.db.query(AuditEvent).count(), 0)
+
+    def test_submit_endpoint_blocker_error_has_documented_response(self):
+        self.content.status = "self_checked"
+        self.db.add(
+            Finding(
+                content_id=self.content.id,
+                content_version=self.content.version,
+                check_type="unsupported_claim",
+                severity="high",
+                message="Unsupported claim",
+                evidence={"matched_text": "claim"},
+                status="open",
+            )
+        )
+        self.db.commit()
+
+        status, payload = self.request("/api/content/1/submit")
+
+        self.assertEqual(status, 409)
+        self.assertEqual(
+            payload,
+            {
+                "error": "open_high_severity_findings",
+                "message": (
+                    "Content cannot be submitted while high-severity findings "
+                    "remain open."
+                ),
+            },
+        )
+        self.assertEqual(self.content.status, "self_checked")
+        self.assertEqual(self.db.query(AuditEvent).count(), 0)
+
+    def test_submit_endpoint_requires_role_and_actor_headers(self):
+        self.content.status = "self_checked"
+        self.db.commit()
+
+        missing_role_status, missing_role_payload = self.request(
+            "/api/content/1/submit",
+            role=None,
+        )
+        missing_user_status, missing_user_payload = self.request(
+            "/api/content/1/submit",
+            user=None,
+        )
+
+        self.assertEqual(missing_role_status, 403)
+        self.assertEqual(missing_role_payload["error"], "forbidden")
+        self.assertEqual(missing_user_status, 422)
+        self.assertEqual(missing_user_payload["error"], "validation_error")
+        self.assertEqual(self.content.status, "self_checked")
+        self.assertEqual(self.db.query(AuditEvent).count(), 0)
+
+    def test_submit_endpoint_rolls_back_when_audit_commit_fails(self):
+        self.content.status = "self_checked"
+        self.db.commit()
+
+        with patch.object(
+            self.db, "commit", side_effect=SQLAlchemyError("audit write failed")
+        ):
+            status, payload = self.request("/api/content/1/submit")
+
+        self.db.expire_all()
+        self.assertEqual(status, 500)
+        self.assertEqual(
+            payload,
+            {
+                "error": "workflow_failed",
+                "message": "Unable to submit content for review.",
+            },
+        )
+        self.assertEqual(self.db.get(Content, 1).status, "self_checked")
         self.assertEqual(self.db.query(AuditEvent).count(), 0)
 
     def test_non_open_or_old_version_high_finding_does_not_block_submission(self):
