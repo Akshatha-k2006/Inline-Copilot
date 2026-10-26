@@ -26,6 +26,8 @@ function getSegments(body: string, findings: DemoFinding[]): FindingSegment[] {
   const sorted = findings
     .filter(
       (finding) =>
+        finding.status === "open" &&
+        finding.range_valid !== false &&
         Number.isInteger(finding.start) &&
         Number.isInteger(finding.end) &&
         finding.start >= 0 &&

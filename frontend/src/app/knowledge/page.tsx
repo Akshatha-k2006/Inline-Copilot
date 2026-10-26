@@ -9,6 +9,8 @@ import {
   Guideline,
 } from "@/lib/brand-data";
 import SampleBrandButton from "@/components/SampleBrandButton";
+import { useRole } from "@/lib/role";
+import { canManageKnowledge } from "@/lib/workflow";
 import {
   removeMockKnowledgeItem,
   saveMockKnowledgeItem,
@@ -110,6 +112,8 @@ function displayDate(date: string): string {
 
 export default function KnowledgeBasePage() {
   const workspace = useDemoWorkspace();
+  const { role } = useRole();
+  const mayManageKnowledge = canManageKnowledge(role);
   const data = workspace.knowledge;
   const [activeTab, setActiveTab] = useState<TabKey>("guidelines");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -125,12 +129,14 @@ export default function KnowledgeBasePage() {
   }, []);
 
   function beginAdd() {
+    if (!mayManageKnowledge) return;
     setEditingId(null);
     setValues(emptyValues(activeTab));
     setFormOpen(true);
   }
 
   function beginEdit(item: KnowledgeItem) {
+    if (!mayManageKnowledge) return;
     setEditingId(item.id);
     setValues(
       Object.fromEntries(
@@ -151,7 +157,7 @@ export default function KnowledgeBasePage() {
     );
 
     try {
-      saveMockKnowledgeItem(activeTab, editingId, payload);
+      saveMockKnowledgeItem(activeTab, editingId, payload, role);
       setFormOpen(false);
       setEditingId(null);
     } catch (err) {
@@ -165,7 +171,7 @@ export default function KnowledgeBasePage() {
     setSaving(true);
     setError("");
     try {
-      removeMockKnowledgeItem(activeTab, id);
+      removeMockKnowledgeItem(activeTab, id, role);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not delete this entry.");
     } finally {
@@ -188,8 +194,13 @@ export default function KnowledgeBasePage() {
         <SampleBrandButton />
       </div>
       <p className="mock-data-notice" role="note">
-        Fictional demonstration records only. Facts, source references, owners and review dates are not verified. Changes remain in this app session and are not sent to a backend.
+        Fictional demonstration records only. Facts, source references, owners and review dates are not verified. Changes are local to this browser and are not sent to a backend.
       </p>
+      {!mayManageKnowledge && (
+        <p className="editor-notice" role="note">
+          Knowledge records are read-only for {role.replaceAll("_", " ")}. Switch to Brand Manager or Admin to manage them.
+        </p>
+      )}
 
       <div className="knowledge-tabs" role="tablist" aria-label="Brand knowledge">
         {TABS.map((tab) => (
@@ -229,16 +240,18 @@ export default function KnowledgeBasePage() {
         <div className="panel-heading">
           <div>
             <h2>{currentTab.label}</h2>
-            <p className="muted">Changes are shared with mock review results for this app session.</p>
+            <p className="muted">Changes are shared with mock review results and persisted in this browser.</p>
           </div>
-          <button
-            type="button"
-            className="button button-primary"
-            onClick={beginAdd}
-            disabled={saving}
-          >
-            Add {currentTab.itemLabel}
-          </button>
+          {mayManageKnowledge && (
+            <button
+              type="button"
+              className="button button-primary"
+              onClick={beginAdd}
+              disabled={saving}
+            >
+              Add {currentTab.itemLabel}
+            </button>
+          )}
         </div>
 
         {error && (
@@ -247,7 +260,7 @@ export default function KnowledgeBasePage() {
           </p>
         )}
 
-        {formOpen && (
+        {formOpen && mayManageKnowledge && (
           <form className="entry-form" onSubmit={submit}>
             <h3>{editingId ? "Edit entry" : `Add ${currentTab.itemLabel}`}</h3>
             {FIELDS[activeTab].map((field) => (
@@ -326,18 +339,22 @@ export default function KnowledgeBasePage() {
           <div className="empty-state">
             <h3>No {currentTab.label.toLowerCase()} yet</h3>
             <p>
-              Add your first {activeTab === "facts" ? "approved fact" : activeTab === "assets" ? "brand asset" : activeTab === "glossary" ? "glossary term" : "guideline"}, or load the sample brand to see how the knowledge base works.
+              {mayManageKnowledge
+                ? `Add your first ${currentTab.itemLabel}, or load the sample brand to see how the knowledge base works.`
+                : "No demonstration records are available in this subsection."}
             </p>
-            <div className="empty-actions">
-              <button
-                type="button"
-                className="button button-primary"
-                onClick={beginAdd}
-              >
-                Add your first {currentTab.itemLabel}
-              </button>
-              <SampleBrandButton />
-            </div>
+            {mayManageKnowledge && (
+              <div className="empty-actions">
+                <button
+                  type="button"
+                  className="button button-primary"
+                  onClick={beginAdd}
+                >
+                  Add your first {currentTab.itemLabel}
+                </button>
+                <SampleBrandButton />
+              </div>
+            )}
           </div>
         ) : (
           <ul className="entry-list">
@@ -421,7 +438,7 @@ export default function KnowledgeBasePage() {
                     </>
                   )}
                 </div>
-                <div className="entry-actions">
+                {mayManageKnowledge && <div className="entry-actions">
                   <button
                     type="button"
                     className="button"
@@ -438,7 +455,7 @@ export default function KnowledgeBasePage() {
                   >
                     Delete
                   </button>
-                </div>
+                </div>}
               </li>
             ))}
           </ul>

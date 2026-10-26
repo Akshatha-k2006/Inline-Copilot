@@ -23,6 +23,7 @@ export type DemoKnowledgeSource =
 export type DemoFinding = Finding & {
   knowledge_source: DemoKnowledgeSource;
   fact_details?: DemoFactDetails;
+  range_valid?: boolean;
 };
 
 export const DEMO_DRAFT = contentFixture["POST /api/content"];
@@ -64,7 +65,7 @@ function matchesCurrentMockRule(
   if (source.type === "term") {
     return (
       source.record.status === "prohibited" &&
-      finding.text.toLocaleLowerCase() === source.record.term.toLocaleLowerCase()
+      source.record.term.trim().length > 0
     );
   }
 
@@ -97,24 +98,34 @@ function currentSuggestion(
   source: DemoKnowledgeSource,
 ): string | null | undefined {
   if (source.type === "term") return source.record.preferredTerm;
-  if (source.type === "fact" && finding.check !== "outdated_info") {
-    return `Use the current mock fact: ${source.record.claim}`;
-  }
+  if (source.type === "fact") return null;
   return finding.suggestion;
+}
+
+export function isReplacementSuggestion(value: string | null | undefined): value is string {
+  return Boolean(
+    value?.trim() &&
+      !/^(remove|verify|use the approved claim|use the current mock fact|replace|rewrite)\b/i.test(
+        value.trim(),
+      ),
+  );
 }
 
 export function getDemoFindings(
   body: string,
   knowledge: BrandData,
 ): DemoFinding[] {
-  if (body !== DEMO_DRAFT.body) return [];
-
   return fixtureFindings.flatMap((finding) => {
     const knowledgeSource = findKnowledgeSource(finding.source, knowledge);
     if (!knowledgeSource || !matchesCurrentMockRule(finding, knowledgeSource)) {
       return [];
     }
 
+    const phrase =
+      knowledgeSource.type === "term"
+        ? knowledgeSource.record.term
+        : finding.text;
+    if (!phrase.trim()) return [];
     const fact =
       knowledgeSource.type === "fact" ? knowledgeSource.record : undefined;
     const source = finding.source
@@ -123,21 +134,39 @@ export function getDemoFindings(
     const explanation = currentExplanation(finding, knowledgeSource);
     const suggestion = currentSuggestion(finding, knowledgeSource);
 
-    return [{
-      ...finding,
-      source,
-      explanation,
-      suggestion,
-      knowledge_source: knowledgeSource,
-      fact_details: fact
-        ? {
-            owner: fact.owner,
-            review_date: fact.reviewDate,
-            last_reviewed: fact.lastReviewed,
-            source: fact.source,
-          }
-        : undefined,
-    }];
+    const occurrences: DemoFinding[] = [];
+    let fromIndex = 0;
+    let occurrence = 0;
+    while (fromIndex < body.length) {
+      const start = body.toLocaleLowerCase().indexOf(
+        phrase.toLocaleLowerCase(),
+        fromIndex,
+      );
+      if (start < 0) break;
+      const end = start + phrase.length;
+      occurrences.push({
+        ...finding,
+        id: occurrence === 0 ? finding.id : 100_000 + finding.id * 1_000 + occurrence,
+        start,
+        end,
+        text: body.slice(start, end),
+        source,
+        explanation,
+        suggestion,
+        knowledge_source: knowledgeSource,
+        fact_details: fact
+          ? {
+              owner: fact.owner,
+              review_date: fact.reviewDate,
+              last_reviewed: fact.lastReviewed,
+              source: fact.source,
+            }
+          : undefined,
+      });
+      occurrence += 1;
+      fromIndex = end;
+    }
+    return occurrences;
   });
 }
 
@@ -145,4 +174,4 @@ export const DEMO_FINDINGS_NOTICE =
   "Demonstration data only. These fictional sample findings are not verified analysis.";
 
 export const CUSTOM_CONTENT_NOTICE =
-  "No demonstration findings are available for custom text. This is not a live content review.";
+  "Only fixed, deterministic demonstration phrase checks run here. No result is a live or comprehensive content review.";

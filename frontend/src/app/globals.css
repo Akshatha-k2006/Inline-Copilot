@@ -501,6 +501,136 @@ a {
   border-radius: var(--radius);
 }
 
+.workflow-status-line,
+.workflow-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.workflow-status-line {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.content-status {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #f0f2f8;
+  color: #39445f;
+  font-size: 0.82rem;
+  font-weight: 750;
+  text-transform: capitalize;
+}
+
+.status-in_review {
+  background: #fff5e6;
+  color: #855000;
+}
+
+.status-changes_requested {
+  background: #fff0f1;
+  color: #a51d32;
+}
+
+.status-approved {
+  background: #eef5ff;
+  color: #1f578e;
+}
+
+.status-ready_to_publish {
+  background: #eaf7ef;
+  color: #12683c;
+}
+
+.workflow-action-card,
+.review-detail {
+  display: grid;
+  gap: 14px;
+  width: 100%;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.workflow-action-card h3,
+.review-detail h3 {
+  margin: 0;
+}
+
+.workflow-action-card p,
+.review-document-body {
+  margin: 0;
+}
+
+.workflow-blockers {
+  margin: 0;
+  padding: 12px 12px 12px 32px;
+  border: 1px solid #f2d6a8;
+  border-radius: 8px;
+  background: #fff9ed;
+  color: #704509;
+}
+
+.review-document-body {
+  max-height: 320px;
+  overflow: auto;
+  padding: 14px;
+  border-radius: 8px;
+  background: #f6f7fa;
+  color: var(--text);
+  font: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.review-version-comparison {
+  display: grid;
+  gap: 10px;
+}
+
+.review-version-comparison h4,
+.review-version-comparison h5 {
+  margin: 0 0 8px;
+}
+
+.review-version-comparison > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.review-version-comparison > div > section {
+  min-width: 0;
+}
+
+.workflow-comments ul {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workflow-comments li {
+  padding: 12px;
+  border-left: 3px solid var(--teal);
+  background: #f6f7fa;
+}
+
+.workflow-comments li p {
+  margin: 0 0 6px;
+  white-space: pre-wrap;
+}
+
+.workflow-comments li small {
+  color: var(--muted);
+}
+
 .entry-content {
   min-width: 0;
 }
@@ -1056,6 +1186,42 @@ a {
   overflow-wrap: anywhere;
 }
 
+.finding-comparison {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.finding-comparison > section {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.finding-comparison h4 {
+  margin: 0;
+  font-size: 0.84rem;
+}
+
+.finding-comparison-suggestion {
+  background: #f2fbf7;
+  border-color: #b9e3cb !important;
+}
+
+.finding-comparison-suggestion p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.finding-suggestion {
+  display: grid;
+  gap: 8px;
+}
+
 .finding-explanation,
 .finding-source,
 .finding-suggestion p {
@@ -1111,6 +1277,42 @@ a {
 .finding-fact-details dd {
   margin: 2px 0 0;
   overflow-wrap: anywhere;
+}
+
+.resolved-findings {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
+.resolved-findings h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.resolved-findings ul {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.resolved-findings li {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  overflow-wrap: anywhere;
+}
+
+.resolved-findings q {
+  color: var(--text);
 }
 
 .finding-suggestion {
@@ -1213,6 +1415,10 @@ a {
 }
 
 @media (max-width: 600px) {
+  .finding-comparison {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .knowledge-heading,
   .panel-heading,
   .entry-card,
@@ -1223,6 +1429,10 @@ a {
 
   .mock-history-count {
     align-items: flex-start;
+  }
+
+  .review-version-comparison > div {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .mock-history-item {

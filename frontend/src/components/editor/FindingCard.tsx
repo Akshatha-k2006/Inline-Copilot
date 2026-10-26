@@ -1,19 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { DemoFinding } from "@/lib/mock-findings";
+import { isReplacementSuggestion } from "@/lib/mock-findings";
 import type { FindingStatus, Severity } from "@/lib/types";
 
 interface FindingCardProps {
   id: string;
   finding: DemoFinding;
   busy: boolean;
+  readOnly?: boolean;
   selected: boolean;
   onSelect: (finding: DemoFinding) => void;
-  onResolve: (
+  onResolve?: (
     finding: DemoFinding,
-    status: FindingStatus,
+    status: Exclude<FindingStatus, "open">,
     finalText: string | null,
   ) => Promise<void>;
 }
@@ -28,6 +30,7 @@ export default function FindingCard({
   id,
   finding,
   busy,
+  readOnly = false,
   selected,
   onSelect,
   onResolve,
@@ -35,8 +38,21 @@ export default function FindingCard({
   const [editing, setEditing] = useState(false);
   const [suggestion, setSuggestion] = useState(finding.suggestion ?? "");
   const [actionError, setActionError] = useState("");
+  const hasSuggestedReplacement = isReplacementSuggestion(finding.suggestion);
 
-  async function resolve(status: FindingStatus, finalText: string | null) {
+  useEffect(() => {
+    setSuggestion(hasSuggestedReplacement ? finding.suggestion! : "");
+  }, [finding.id, finding.suggestion, hasSuggestedReplacement]);
+
+  async function resolve(
+    status: Exclude<FindingStatus, "open">,
+    finalText: string | null,
+  ) {
+    if (status !== "dismissed" && !finalText?.trim()) {
+      setActionError("Enter a non-empty correction before saving.");
+      return;
+    }
+    if (!onResolve) return;
     setActionError("");
     try {
       await onResolve(finding, status, finalText);
@@ -74,7 +90,10 @@ export default function FindingCard({
       className={`finding-card severity-${severity}${selected ? " selected" : ""}`}
       aria-label={`${severityLabel} severity finding: ${checkLabel}`}
       tabIndex={0}
-      onClick={() => onSelect(finding)}
+      onClick={(event) => {
+        if ((event.target as HTMLElement).closest("button, a, textarea")) return;
+        onSelect(finding);
+      }}
       onKeyDown={(event) => {
         if (
           event.target === event.currentTarget &&
@@ -97,9 +116,23 @@ export default function FindingCard({
         </span>
       </div>
 
-      {finding.text && (
-        <blockquote className="finding-quote">{finding.text}</blockquote>
-      )}
+      <div className="finding-comparison" aria-label="Original and suggested text">
+        <section className="finding-comparison-original">
+          <h4>Original text</h4>
+          <blockquote className="finding-quote">{finding.text}</blockquote>
+        </section>
+        <section className="finding-comparison-suggestion">
+          <h4>Suggested replacement</h4>
+          {hasSuggestedReplacement ? (
+            <p>{finding.suggestion}</p>
+          ) : (
+            <p className="muted">
+              No replacement text is available for this finding.
+              {readOnly ? "" : " You can enter your own correction."}
+            </p>
+          )}
+        </section>
+      </div>
       {finding.explanation && <p className="finding-explanation">{finding.explanation}</p>}
       {finding.source?.label && (
         <p className="finding-source">
@@ -153,41 +186,45 @@ export default function FindingCard({
         </dl>
       )}
 
-      {(finding.suggestion || editing) && (
+      {editing && (
         <div className="finding-suggestion">
-          <strong>Suggested fix</strong>
-          {editing ? (
-            <label className="sr-only" htmlFor={`suggestion-${finding.id}`}>
-              Edit suggested fix
-            </label>
-          ) : null}
-          {editing ? (
-            <textarea
-              id={`suggestion-${finding.id}`}
-              value={suggestion}
-              onChange={(event) => setSuggestion(event.target.value)}
-              rows={3}
-            />
-          ) : (
-            <p>{finding.final_text ?? finding.suggestion}</p>
-          )}
+          <label htmlFor={`suggestion-${finding.id}`}>Your correction</label>
+          <textarea
+            id={`suggestion-${finding.id}`}
+            value={suggestion}
+            onChange={(event) => setSuggestion(event.target.value)}
+            rows={3}
+            required
+          />
         </div>
       )}
 
       {actionError && <p className="form-error" role="alert">{actionError}</p>}
-      {resolved ? (
-        <p className="finding-resolved-note">
-          This finding is {finding.status}. Demo changes are not saved.
+      {finding.range_valid === false && finding.status === "open" && (
+        <p className="form-error" role="alert">
+          This finding overlaps a previous correction. Its text range could not be safely recalculated; dismiss it or run a fresh demo review.
         </p>
-      ) : (
+      )}
+      {resolved ? (
+        <p className="finding-resolved-note">This finding is {finding.status}.</p>
+      ) : onResolve && !readOnly ? (
         <div className="finding-actions">
-          {editing ? (
+          {finding.range_valid === false ? (
+            <button
+              type="button"
+              className="button"
+              onClick={() => void resolve("dismissed", null)}
+              disabled={busy}
+            >
+              Dismiss
+            </button>
+          ) : editing ? (
             <>
               <button
                 type="button"
                 className="button button-primary"
                 onClick={() => void resolve("edited", suggestion)}
-                disabled={busy}
+                disabled={busy || !suggestion.trim()}
               >
                 Save edit
               </button>
@@ -205,7 +242,7 @@ export default function FindingCard({
             </>
           ) : (
             <>
-              {finding.suggestion && (
+              {hasSuggestedReplacement && (
                 <button
                   type="button"
                   className="button button-primary"
@@ -218,7 +255,10 @@ export default function FindingCard({
               <button
                 type="button"
                 className="button"
-                onClick={() => setEditing(true)}
+                onClick={() => {
+                  setSuggestion(hasSuggestedReplacement ? finding.suggestion! : "");
+                  setEditing(true);
+                }}
                 disabled={busy}
               >
                 Edit
@@ -234,6 +274,8 @@ export default function FindingCard({
             </>
           )}
         </div>
+      ) : (
+        <p className="finding-resolved-note">Finding actions are unavailable in this role.</p>
       )}
     </article>
   );

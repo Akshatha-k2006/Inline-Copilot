@@ -44,3 +44,21 @@ Rule-based terminology and claim checks continue when the LLM is unavailable.
 The standalone mock service in `frontend/mock_kb.mjs` implements these routes and
 persists data to `frontend/mock-kb-data.json` by default. Its integration check
 uses a temporary database and does not alter the developer's saved mock data.
+
+## Frontend workflow prototype (not a backend API)
+
+The current frontend includes a browser-local workflow demonstration. Its
+content states are `draft`, `in_review`, `changes_requested`, and
+`ready_to_publish`; `approved` is retained as a valid API-shaped status but the
+mock reviewer approval transitions directly to `ready_to_publish` after
+required checks pass. Creator submission requires a current demonstration
+review and no unresolved high-severity findings. A dismissed high-severity
+finding remains blocking while its flagged text is still present. Only the
+Reviewer demo role can approve or request changes; the role switcher is not
+authentication.
+
+Review records, comments, decisions, prior submitted versions, and workflow
+audit events are stored in browser `localStorage`. They are not sent to the
+backend, do not represent
+verified checks, and do not publish content. No content-review workflow
+endpoints are defined by this contract yet.

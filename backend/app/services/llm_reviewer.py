@@ -7,7 +7,8 @@ from urllib.request import Request, urlopen
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.models import Guideline
+from app.models import Fact, Guideline
+from app.services.fact_checker import _fact_is_outdated
 
 RELEVANT_GUIDELINE_TERMS = {"tone", "messaging", "brand", "claim", "claims"}
 VALID_CHECKS = {"tone", "messaging", "unsupported_claim"}
@@ -114,7 +115,38 @@ def _guideline_topics(guideline: Guideline) -> set[str]:
     )
 
 
-def _request_review(text: str, guidelines: list[Guideline]) -> object:
+def _fact_supports_text(fact: Fact, matched_text: str) -> bool:
+    stop_words = {
+        "about",
+        "above",
+        "and",
+        "are",
+        "best",
+        "by",
+        "claim",
+        "for",
+        "from",
+        "more",
+        "than",
+        "the",
+        "this",
+        "was",
+        "with",
+    }
+    claim_terms = {
+        term
+        for term in re.findall(r"\b[a-z0-9]{4,}\b", matched_text.lower())
+        if term not in stop_words
+    }
+    fact_terms = set(re.findall(r"\b[a-z0-9]{4,}\b", fact.statement.lower()))
+    return bool(claim_terms & fact_terms)
+
+
+def _request_review(
+    text: str,
+    guidelines: list[Guideline],
+    facts: list[Fact],
+) -> object:
     serialized_guidelines = [
         {
             "id": guideline.id,
@@ -136,9 +168,12 @@ def _request_review(text: str, guidelines: list[Guideline]) -> object:
                     "array. Each finding must have check (tone, messaging, "
                     "or unsupported_claim), guideline_id, matched_text, "
                     "explanation, and severity (high, medium, or low). "
-                    "Optionally include start_offset, end_offset, and "
-                    "suggested_fix. matched_text must be an exact substring "
-                    "of the content. Use only supplied guideline IDs. Do not "
+                    "Include offsets for the exact matched span. A "
+                    "suggested_fix must replace only matched_text, never "
+                    "rewrite surrounding text. For unsupported_claim, only "
+                    "suggest wording copied verbatim from a supplied current "
+                    "fact and include that fact's fact_id. Otherwise omit "
+                    "the suggestion. Use only supplied guideline IDs. Do not "
                     "report terminology findings; deterministic checks handle "
                     "those."
                 ),
@@ -146,7 +181,15 @@ def _request_review(text: str, guidelines: list[Guideline]) -> object:
             {
                 "role": "user",
                 "content": json.dumps(
-                    {"content": text, "guidelines": serialized_guidelines}
+                    {
+                        "content": text,
+                        "guidelines": serialized_guidelines,
+                        "approved_facts": [
+                            {"id": fact.id, "statement": fact.statement}
+                            for fact in facts
+                            if not _fact_is_outdated(fact)
+                        ],
+                    }
                 ),
             },
         ],
@@ -193,6 +236,7 @@ def _validated_findings(
     response: object,
     text: str,
     guidelines: list[Guideline],
+    facts: list[Fact] | None = None,
 ) -> list[dict]:
     try:
         parsed = json.loads(response) if isinstance(response, str) else response
@@ -203,6 +247,11 @@ def _validated_findings(
         raise LLMResponseError("finding_validation")
 
     guideline_by_id = {guideline.id: guideline for guideline in guidelines}
+    current_facts = {
+        fact.id: fact
+        for fact in facts or []
+        if not _fact_is_outdated(fact)
+    }
     validated = []
 
     for item in parsed["findings"]:
@@ -215,6 +264,7 @@ def _validated_findings(
         explanation = item.get("explanation")
         severity = item.get("severity", "medium")
         suggested_fix = item.get("suggested_fix")
+        fact_id = item.get("fact_id")
 
         if (
             not isinstance(check, str)
@@ -259,10 +309,29 @@ def _validated_findings(
             and text[start:end] == matched_text
         )
         if not valid_offsets:
+            if start is not None or end is not None:
+                raise LLMResponseError("Finding text is not present at supplied offsets")
             start = text.find(matched_text)
             if start < 0:
                 raise LLMResponseError("finding_validation")
             end = start + len(matched_text)
+
+        suggestion_fact = None
+        if check == "unsupported_claim" and suggested_fix is not None:
+            if isinstance(fact_id, int) and not isinstance(fact_id, bool):
+                candidate_fact = current_facts.get(fact_id)
+                if (
+                    candidate_fact
+                    and suggested_fix in candidate_fact.statement
+                    and _fact_supports_text(candidate_fact, matched_text)
+                ):
+                    suggestion_fact = candidate_fact
+                else:
+                    suggested_fix = None
+            else:
+                suggested_fix = None
+        elif check != "unsupported_claim":
+            fact_id = None
 
         validated.append(
             {
@@ -273,6 +342,15 @@ def _validated_findings(
                 "start_offset": start,
                 "end_offset": end,
                 "suggested_fix": suggested_fix,
+                "suggestion_source": (
+                    {
+                        "type": "fact",
+                        "id": suggestion_fact.id,
+                        "text": suggestion_fact.statement,
+                    }
+                    if suggestion_fact
+                    else None
+                ),
                 "source": {
                     "type": "guideline",
                     "id": guideline.id,
@@ -294,5 +372,6 @@ def review_with_llm(text: str, db: Session) -> list[dict]:
     if not guidelines:
         return []
 
-    response = _request_review(text, guidelines)
-    return _validated_findings(response, text, guidelines)
+    facts = db.query(Fact).order_by(Fact.id).all()
+    response = _request_review(text, guidelines, facts)
+    return _validated_findings(response, text, guidelines, facts)
