@@ -1,49 +1,28 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
-import RoleSwitcher from "./RoleSwitcher";
+import { useRole } from "@/lib/role";
+import { isRole, ROLE_OPTIONS } from "@/lib/roles";
 
-const NAV = [
-  { href: "/knowledge", label: "Knowledge base" },
-  { href: "/editor", label: "Editor" },
-  { href: "/queue", label: "Review queue" },
-  { href: "/audit", label: "Audit" },
-];
-
-export default function TopBar() {
-  const pathname = usePathname();
+export default function RoleSwitcher() {
+  const { role, setRole } = useRole();
 
   return (
-    <header className="topbar">
-      <Link href="/" className="brand">
-        <span className="brand-mark" aria-hidden="true">
-          IC
-        </span>
-        <span className="brand-name">Inline Copilot</span>
-      </Link>
-
-      <nav className="nav" aria-label="Main">
-        <ul>
-          {NAV.map((item) => {
-            const active =
-              pathname === item.href || pathname.startsWith(`${item.href}/`);
-            return (
-              <li key={item.href}>
-                <Link
-                  href={item.href}
-                  className={active ? "nav-link active" : "nav-link"}
-                  aria-current={active ? "page" : undefined}
-                >
-                  {item.label}
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      </nav>
-
-      <RoleSwitcher />
-    </header>
+    <label className="role-switcher">
+      <span className="role-label">Demo role</span>
+      <select
+        className="role-select"
+        value={role}
+        onChange={(event) => {
+          if (isRole(event.target.value)) setRole(event.target.value);
+        }}
+        aria-label="Choose demo role"
+      >
+        {ROLE_OPTIONS.map((option) => (
+          <option key={option.role} value={option.role}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

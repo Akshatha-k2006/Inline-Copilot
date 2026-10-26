@@ -22,7 +22,7 @@ export default function Home() {
         <ol className="steps">
           <li>Open the Knowledge base to view or edit brand information.</li>
           <li>
-            Open the Editor and run a review on the sample draft, or paste your
+            Open Write &amp; Review and run a review on the sample draft, or paste your
             own text.
           </li>
           <li>Accept, edit or dismiss each flag.</li>
@@ -30,6 +30,9 @@ export default function Home() {
           <li>Approve the content or request changes.</li>
         </ol>
         <p>
+          <Link href="/editor" className="button button-primary">
+            Open Write &amp; Review
+          </Link>{" "}
           <Link href="/knowledge" className="button button-primary">
             Open the Knowledge base
           </Link>

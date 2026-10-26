@@ -1,4 +1,4 @@
-import type { Health, Role } from "./types";
+import type { Content, ContentDraft, Health, ReviewResponse, Role, SeedResponse } from "./types";
 import { DEFAULT_ROLE, ROLE_STORAGE_KEY, isRole, optionFor } from "./roles";
 
 /** Backend base URL, from NEXT_PUBLIC_API_URL (no trailing slash). */
@@ -130,4 +130,12 @@ export const api = {
   patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body),
   delete: <T>(path: string) => request<T>("DELETE", path),
   health: () => request<Health>("GET", "/api/health"),
+  seedSample: () => request<SeedResponse>("POST", "/api/seed/load"),
+  getContent: (id: number) => request<Content>("GET", `/api/content/${id}`),
+  createContent: (draft: ContentDraft) =>
+    request<Content>("POST", "/api/content", draft),
+  updateContent: (id: number, draft: ContentDraft) =>
+    request<Content>("PUT", `/api/content/${id}`, draft),
+  reviewContent: (id: number) =>
+    request<ReviewResponse>("POST", `/api/content/${id}/review`),
 };

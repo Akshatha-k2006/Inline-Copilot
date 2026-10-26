@@ -29,6 +29,24 @@ export interface Content {
   updated_at: string;
 }
 
+export interface ContentDraft {
+  title: string;
+  body: string;
+}
+
+export interface SeedResponse {
+  content_id: number;
+}
+
+export interface ReviewResponse {
+  content_version: number;
+  findings: Finding[];
+  engine?: {
+    rules?: string;
+    llm?: string;
+  };
+}
+
 export interface FindingSource {
   type: "term" | "guideline" | "fact";
   id: number;
@@ -43,11 +61,11 @@ export interface Finding {
   start: number;
   end: number;
   text: string;
-  explanation: string;
-  source: FindingSource;
-  suggestion: string | null;
+  explanation?: string;
+  source?: FindingSource;
+  suggestion?: string | null;
   status: FindingStatus;
-  final_text: string | null;
+  final_text?: string | null;
 }
 
 export interface Health {
