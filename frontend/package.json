@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "mock:kb": "node mock_kb.mjs",
-    "test:kb": "node check_kb.mjs"
+    "test:kb": "node check_kb.mjs",
+    "test:mock": "node check_mock_integrity.mjs"
   },
   "dependencies": {
     "next": "^16.4.3",

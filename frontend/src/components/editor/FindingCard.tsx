@@ -48,7 +48,10 @@ export default function FindingCard({
     status: Exclude<FindingStatus, "open">,
     finalText: string | null,
   ) {
-    if (status !== "dismissed" && !finalText?.trim()) {
+    if (
+      (status === "edited" || (status === "accepted" && finalText !== null)) &&
+      !finalText?.trim()
+    ) {
       setActionError("Enter a non-empty correction before saving.");
       return;
     }
@@ -128,7 +131,9 @@ export default function FindingCard({
           ) : (
             <p className="muted">
               No replacement text is available for this finding.
-              {readOnly ? "" : " You can enter your own correction."}
+              {readOnly
+                ? ""
+                : " You can edit your own correction, dismiss it, or accept the finding without changing the document text."}
             </p>
           )}
         </section>
@@ -242,16 +247,24 @@ export default function FindingCard({
             </>
           ) : (
             <>
-              {hasSuggestedReplacement && (
-                <button
-                  type="button"
-                  className="button button-primary"
-                  onClick={() => void resolve("accepted", finding.suggestion ?? null)}
-                  disabled={busy}
-                >
-                  Accept
-                </button>
-              )}
+              <button
+                type="button"
+                className="button button-primary"
+                onClick={() =>
+                  void resolve(
+                    "accepted",
+                    hasSuggestedReplacement ? finding.suggestion! : null,
+                  )
+                }
+                aria-label={
+                  hasSuggestedReplacement
+                    ? "Accept suggested correction"
+                    : "Accept finding without changing document text"
+                }
+                disabled={busy}
+              >
+                Accept
+              </button>
               <button
                 type="button"
                 className="button"

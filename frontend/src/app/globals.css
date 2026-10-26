@@ -322,12 +322,28 @@ a {
   border-left: 2px solid var(--border);
 }
 
+.audit-filter {
+  max-width: 520px;
+}
+
 .mock-history-item {
   display: grid;
   grid-template-columns: minmax(150px, 200px) minmax(0, 1fr);
   gap: 16px;
   padding: 16px 0 16px 20px;
   position: relative;
+}
+
+.audit-event-type {
+  display: inline-flex;
+  margin-bottom: 6px;
+  padding: 3px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #f6f7fa;
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 700;
 }
 
 .mock-history-item::before {
@@ -350,11 +366,47 @@ a {
 .mock-history-item h2 {
   margin: 0 0 6px;
   font-size: 1.1rem;
-  text-transform: capitalize;
 }
 
 .mock-history-item p {
   margin: 4px 0;
+  overflow-wrap: anywhere;
+}
+
+.audit-changes {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.audit-changes > div {
+  display: grid;
+  gap: 3px;
+}
+
+.audit-changes dt {
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-transform: capitalize;
+}
+
+.audit-changes dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.audit-changes q {
+  white-space: pre-wrap;
+}
+
+.audit-comment {
+  margin: 10px 0 0;
+  padding: 10px 12px;
+  border-left: 3px solid var(--teal);
+  background: #f6f7fa;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .steps {

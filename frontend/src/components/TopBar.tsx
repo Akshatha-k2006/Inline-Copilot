@@ -11,7 +11,7 @@ const NAV = [
   { href: "/editor", label: "Write & Review", key: "editor" },
   { href: "/knowledge?tab=guidelines", label: "Guidelines", key: "guidelines" },
   { href: "/queue", label: "Review queue", key: "queue" },
-  { href: "/audit", label: "Review History", key: "audit" },
+  { href: "/audit", label: "Audit Trail", key: "audit" },
 ];
 
 export default function TopBar() {

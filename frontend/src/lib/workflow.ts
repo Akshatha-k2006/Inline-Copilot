@@ -66,14 +66,15 @@ export function getSubmissionBlockers(
       finding.content_id === document.id &&
       finding.severity === "high" &&
       (finding.status === "open" ||
-        (finding.status === "dismissed" &&
+        ((finding.status === "dismissed" ||
+          (finding.status === "accepted" && !finding.final_text)) &&
           document.body
             .toLocaleLowerCase()
             .includes(finding.text.toLocaleLowerCase()))),
   );
   if (blockingFindings.length > 0) {
     blockers.push(
-      `${blockingFindings.length} high-severity finding${blockingFindings.length === 1 ? "" : "s"} still need correction. Dismissing a finding does not resolve it.`,
+      `${blockingFindings.length} high-severity finding${blockingFindings.length === 1 ? "" : "s"} still need correction. Accepting without a replacement or dismissing a finding does not correct its text.`,
     );
   }
   return blockers;

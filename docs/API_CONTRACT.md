@@ -62,3 +62,16 @@ audit events are stored in browser `localStorage`. They are not sent to the
 backend, do not represent
 verified checks, and do not publish content. No content-review workflow
 endpoints are defined by this contract yet.
+
+The frontend audit timeline uses the shared workflow history collection. Each
+event is associated with a content ID and stores the demo actor name and role
+at action time, ISO 8601 timestamp, action type, and available finding,
+comment, or previous/new-value details. Events are displayed oldest first;
+events sharing a timestamp are ordered by their stable numeric event ID.
+Finding decisions, draft edits/resets, mock review runs, submissions and
+resubmissions, comments, requested changes, approval, and Ready to publish
+transitions are recorded only after the corresponding local mock operation
+succeeds. This browser-local history is not authenticated, tamper-proof, or
+server-persistent. A future backend integration should provide a durable
+content-scoped audit API and server-verified actor identity rather than relying
+on the demo role selector.
