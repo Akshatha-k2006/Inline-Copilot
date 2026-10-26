@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, model_validator
@@ -43,6 +43,34 @@ class ContentStatusResponse(BaseModel):
     content_id: int
     status: str
     content_version: int
+
+
+class ReviewDecisionRequest(BaseModel):
+    decision: Literal["approve", "request_changes"]
+    comment: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def validate_comment(self) -> "ReviewDecisionRequest":
+        if self.comment is not None:
+            self.comment = self.comment.strip() or None
+        if self.decision == "request_changes" and self.comment is None:
+            raise ValueError("Requesting changes requires a non-empty comment.")
+        return self
+
+
+class ReviewCommentResponse(BaseModel):
+    id: int
+    author: str
+    body: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ReviewDecisionResponse(ContentStatusResponse):
+    comment: ReviewCommentResponse | None
 
 
 class FindingActionRequest(BaseModel):

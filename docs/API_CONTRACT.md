@@ -190,6 +190,54 @@ uses action `content_status_changed`, the actor and content ID fields, a
 database timestamp, and details containing `actor_role`, `previous_status`,
 and `new_status`.
 
+`POST /api/content/{id}/decision` accepts a review decision:
+
+```json
+{
+  "decision": "request_changes",
+  "comment": "Please clarify the supporting claim."
+}
+```
+
+`decision` must be `approve` or `request_changes`. `comment` is optional for
+approval and required, non-empty after trimming, for a request for changes.
+When supplied, a comment is saved to the existing content comments collection
+with the reviewer as its author. Only a reviewer may decide content while it
+is `in_review`: approval transitions it to `approved`, and requesting changes
+returns it to `draft`. Decisions do not change the content text or version.
+
+Successful requests return `200` with the resulting content status and the
+persisted comment when one was supplied:
+
+```json
+{
+  "content_id": 1,
+  "status": "draft",
+  "content_version": 2,
+  "comment": {
+    "id": 1,
+    "author": "reviewer-user",
+    "body": "Please clarify the supporting claim.",
+    "created_at": "2026-10-26T16:33:00Z"
+  }
+}
+```
+
+For approval without a comment, `comment` is `null`. A missing, invalid, or
+non-reviewer role returns `403` with the existing `forbidden` response. A
+missing `X-User` header returns `422` with the standard `validation_error`
+response. Missing content returns `404` with
+`{ "error": "not_found", "message": "Content not found." }`. Invalid decisions,
+unknown request fields, and a missing or blank required comment return `422`
+with `{ "error": "validation_error", "message": "The request data is invalid." }`.
+An invalid status transition returns `409` with
+`{ "error": "invalid_status_transition", "message": "Status transition is not allowed." }`.
+Database failures return `500` with
+`{ "error": "workflow_failed", "message": "Unable to save review decision." }`.
+The status change, optional comment, and `content_status_changed` audit event
+are committed atomically; the event records the actor, content ID, role,
+previous status, and new status.
+
 ## Frontend workflow prototype
 
 The current frontend includes a browser-local workflow demonstration. Its
@@ -205,10 +253,8 @@ authentication.
 Review records, comments, decisions, prior submitted versions, and workflow
 audit events are stored in browser `localStorage`. They are not sent to the
 backend, do not represent verified checks, and do not publish content. The
-backend review and submit routes are defined above. The frontend decision,
-comment, and audit workflows remain local demonstrations and have no backend
-endpoints in this contract. Other status transitions are handled by the shared
-transition service and do not yet have dedicated endpoints.
+backend review, submit, and decision routes are defined above. Standalone
+comment and other status transitions do not have dedicated backend endpoints.
 
 The frontend audit timeline uses the shared workflow history collection. Each
 event is associated with a content ID and stores the demo actor name and role
