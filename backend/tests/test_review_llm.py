@@ -74,6 +74,20 @@ class ReviewLLMTests(unittest.TestCase):
                     status="prohibited",
                     explanation="Not on brand.",
                 ),
+                Term(
+                    id=2,
+                    term="casualword",
+                    replacement="friendly wording",
+                    status="prohibited",
+                    explanation="Use a professional expression.",
+                ),
+                Term(
+                    id=3,
+                    term="lol",
+                    replacement=None,
+                    status="prohibited",
+                    explanation="Text-speak does not fit the brand's tone.",
+                ),
                 Fact(id=1, statement="Approved fact", source="Test source"),
                 Content(
                     id=1,
@@ -126,6 +140,7 @@ class ReviewLLMTests(unittest.TestCase):
                         "severity": "medium",
                         "start_offset": 8,
                         "end_offset": 16,
+                        "suggested_fix": "overstated",
                     }
                 ]
             }
@@ -156,6 +171,7 @@ class ReviewLLMTests(unittest.TestCase):
             [guideline["id"] for guideline in user_payload["guidelines"]],
             [1, 2, 3],
         )
+        self.assertEqual(user_payload["approved_facts"][0]["id"], 1)
         self.assertEqual(user_payload["content"], "This is too loud and says badword is best.")
         self.assertEqual(result["engine"]["llm"], "ok")
         finding = next(item for item in result["findings"] if item["check"] == "tone")
@@ -163,6 +179,161 @@ class ReviewLLMTests(unittest.TestCase):
         self.assertEqual(finding["start_offset"], 8)
         self.assertEqual(finding["end_offset"], 16)
         self.assertEqual(finding["evidence"]["source"]["id"], 1)
+        self.assertEqual(finding["suggested_fix"], "overstated")
+        self.assertFalse(finding["evidence"]["requires_manual_review"])
+        self.assertEqual(
+            user_payload["content"][:finding["start_offset"]]
+            + finding["suggested_fix"]
+            + user_payload["content"][finding["end_offset"]:],
+            "This is overstated and says badword is best.",
+        )
+
+    def test_terminology_uses_preferred_replacement_for_exact_span(self):
+        with patch("app.routers.review.review_with_llm", return_value=[]):
+            result = review_content(1, self.db)
+        original = self.db.get(Content, 1).body
+        finding = next(item for item in result["findings"] if item["check"] == "terminology")
+
+        self.assertEqual(finding["suggested_fix"], "better word")
+        self.assertFalse(finding["evidence"]["requires_manual_review"])
+        rewritten = (
+            original[:finding["start_offset"]]
+            + finding["suggested_fix"]
+            + original[finding["end_offset"]:]
+        )
+        self.assertEqual(
+            rewritten,
+            "This is too loud and says better word is best.",
+        )
+
+    def test_multiple_and_repeated_terms_target_only_each_flagged_occurrence(self):
+        content = self.db.get(Content, 1)
+        content.body = "badword, casualword; then badword."
+        self.db.commit()
+
+        with patch("app.routers.review.review_with_llm", return_value=[]):
+            result = review_content(1, self.db)
+        findings = [item for item in result["findings"] if item["check"] == "terminology"]
+        self.assertEqual(
+            [(item["start_offset"], item["end_offset"], item["suggested_fix"])
+             for item in findings],
+            [(0, 7, "better word"), (9, 19, "friendly wording"), (26, 33, "better word")],
+        )
+
+        rewritten = content.body
+        for item in reversed(findings):
+            rewritten = (
+                rewritten[:item["start_offset"]]
+                + item["suggested_fix"]
+                + rewritten[item["end_offset"]:]
+            )
+        self.assertEqual(
+            rewritten,
+            "better word, friendly wording; then better word.",
+        )
+
+    def test_slang_without_preferred_term_is_removed_at_its_own_span(self):
+        content = self.db.get(Content, 1)
+        content.body = "Nice lol, that really helps."
+        self.db.commit()
+
+        with patch("app.routers.review.review_with_llm", return_value=[]):
+            result = review_content(1, self.db)
+        slang_finding = next(
+            item for item in result["findings"] if item["check"] == "terminology"
+        )
+        self.assertEqual(slang_finding["suggested_fix"], "")
+        self.assertFalse(slang_finding["evidence"]["requires_manual_review"])
+        rewritten = (
+            content.body[:slang_finding["start_offset"]]
+            + slang_finding["suggested_fix"]
+            + content.body[slang_finding["end_offset"]:]
+        )
+        self.assertEqual(rewritten, "Nice , that really helps.")
+
+    def test_unsupported_claim_uses_only_a_cited_approved_fact_span(self):
+        content = self.db.get(Content, 1)
+        fact = self.db.get(Fact, 1)
+        fact.statement = "Energy savings are 75%."
+        content.body = "Energy savings are exactly 100 percent."
+        self.db.commit()
+        matched_text = "Energy savings are exactly 100 percent"
+        start_offset = content.body.index(matched_text)
+        with (
+            patch.object(llm_reviewer.settings, "llm_api_key", "test-key"),
+            patch.object(
+                llm_reviewer,
+                "urlopen",
+                return_value=FakeResponse(
+                    {
+                        "choices": [
+                            {
+                                "message": {
+                                    "content": json.dumps(
+                                        {
+                                            "findings": [
+                                                {
+                                                    "check": "unsupported_claim",
+                                                    "guideline_id": 3,
+                                                    "fact_id": 1,
+                                                    "matched_text": matched_text,
+                                                    "explanation": "The claim is not supported.",
+                                                    "severity": "medium",
+                                                    "start_offset": start_offset,
+                                                    "end_offset": start_offset + len(matched_text),
+                                                    "suggested_fix": "Energy savings are 75%",
+                                                }
+                                            ]
+                                        }
+                                    )
+                                }
+                            }
+                        ]
+                    }
+                ),
+            ),
+        ):
+            result = review_content(1, self.db)
+
+        claim = next(item for item in result["findings"] if item["check"] == "unsupported_claim")
+        self.assertEqual(claim["suggested_fix"], "Energy savings are 75%")
+        self.assertEqual(claim["evidence"]["suggestion_source"]["id"], 1)
+        self.assertFalse(claim["evidence"]["requires_manual_review"])
+
+    def test_unsupported_claim_without_supported_replacement_requires_manual_review(self):
+        content = self.db.get(Content, 1)
+        content.body = "It is the best."
+        self.db.commit()
+
+        with patch("app.routers.review.review_with_llm", return_value=[]):
+            result = review_content(1, self.db)
+        claim = next(item for item in result["findings"] if item["check"] == "unsupported_claim")
+
+        self.assertIsNone(claim["suggested_fix"])
+        self.assertTrue(claim["evidence"]["requires_manual_review"])
+
+    def test_invalid_span_is_not_given_a_suggestion(self):
+        from app.services.suggestion_generator import generate_suggestions
+
+        result = generate_suggestions(
+            "prefix badword suffix",
+            [
+                {
+                    "check": "terminology",
+                    "matched_text": "badword",
+                    "start_offset": 0,
+                    "end_offset": 7,
+                    "suggested_fix": "better word",
+                    "source": {
+                        "type": "glossary",
+                        "preferred_term": "better word",
+                    },
+                }
+            ],
+        )
+
+        self.assertIsNone(result[0]["suggested_fix"])
+        self.assertTrue(result[0]["evidence"]["requires_manual_review"])
 
     def test_missing_key_disables_llm_and_keeps_rule_findings(self):
         with (
@@ -205,6 +376,10 @@ class ReviewLLMTests(unittest.TestCase):
         self.assertEqual(result["engine"]["llm"], "error")
         self.assertNotIn("secret", json.dumps(result))
         self.assertIn("terminology", [item["check"] for item in result["findings"]])
+        claim = next(
+            item for item in result["findings"] if item["check"] == "unsupported_claim"
+        )
+        self.assertTrue(claim["evidence"]["requires_manual_review"])
 
     def test_http_provider_error_logs_category_and_status_only(self):
         provider_error = HTTPError(

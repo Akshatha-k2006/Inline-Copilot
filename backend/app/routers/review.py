@@ -16,6 +16,7 @@ from app.services.llm_reviewer import (
     LLMTransportError,
     review_with_llm,
 )
+from app.services.suggestion_generator import generate_suggestions
 
 router = APIRouter(tags=["Review"])
 logger = logging.getLogger(__name__)
@@ -106,16 +107,26 @@ def review_content(content_id: int, db: Session = Depends(get_db)):
         if not duplicate:
             all_findings.append(llm_finding)
 
+    all_findings = generate_suggestions(content.body, all_findings)
+
     for item in all_findings:
+        evidence = {
+            "matched_text": item["matched_text"],
+            "source": item["source"],
+            "requires_manual_review": item["evidence"].get(
+                "requires_manual_review",
+                item["suggested_fix"] is None,
+            ),
+        }
+        if item.get("suggestion_source"):
+            evidence["suggestion_source"] = item["suggestion_source"]
+
         finding = Finding(
             content_id=content.id,
             check_type=item["check"],
             severity=item["severity"],
             message=item["message"],
-            evidence={
-                "matched_text": item["matched_text"],
-                "source": item["source"],
-            },
+            evidence=evidence,
             suggested_fix=item["suggested_fix"],
             start_offset=item["start_offset"],
             end_offset=item["end_offset"],
