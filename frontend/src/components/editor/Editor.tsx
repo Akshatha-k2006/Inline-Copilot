@@ -6,8 +6,12 @@ import {
   CUSTOM_CONTENT_NOTICE,
   DEMO_DRAFT,
   DEMO_FINDINGS_NOTICE,
-  getDemoFindings,
 } from "@/lib/mock-findings";
+import {
+  recordDemoReview,
+  updateDemoFindings,
+  useDemoWorkspace,
+} from "@/lib/mock-data";
 import type { FindingStatus } from "@/lib/types";
 import FindingsPanel from "./FindingsPanel";
 import HighlightedDraft from "./HighlightedDraft";
@@ -22,11 +26,12 @@ function canApplySuggestion(value: string | null): value is string {
 }
 
 export default function Editor() {
+  const workspace = useDemoWorkspace();
   const [title, setTitle] = useState(DEMO_DRAFT.title);
   const [body, setBody] = useState(DEMO_DRAFT.body);
   const [contentType, setContentType] = useState("Marketing Copy");
   const [findings, setFindings] = useState<DemoFinding[] | null>(
-    getDemoFindings(DEMO_DRAFT.body),
+    workspace.findings,
   );
   const [reviewing, setReviewing] = useState(false);
   const [reviewedCustomText, setReviewedCustomText] = useState(false);
@@ -73,7 +78,7 @@ export default function Editor() {
   function loadSampleDraft() {
     changeTitle(DEMO_DRAFT.title);
     changeBody(DEMO_DRAFT.body);
-    setFindings(getDemoFindings(DEMO_DRAFT.body));
+    setFindings(workspace.findings);
     setReviewedCustomText(false);
     setSelectedFindingId(null);
   }
@@ -90,7 +95,7 @@ export default function Editor() {
 
     await new Promise<void>((resolve) => window.setTimeout(resolve, 350));
     if (reviewRevision.current === currentRevision) {
-      const demoFindings = getDemoFindings(submittedBody);
+      const demoFindings = recordDemoReview(submittedBody);
       setFindings(demoFindings);
       setReviewedCustomText(demoFindings.length === 0);
     }
@@ -110,38 +115,38 @@ export default function Editor() {
 
     if (replaceText) {
       const delta = finalText.length - (finding.end - finding.start);
+      const updatedFindings = (findings ?? []).map((item) => {
+        if (item.id === finding.id) {
+          return {
+            ...item,
+            text: finalText,
+            end: finding.start + finalText.length,
+            status,
+            final_text: finalText,
+          };
+        }
+        if (item.start >= finding.end) {
+          return {
+            ...item,
+            start: item.start + delta,
+            end: item.end + delta,
+          };
+        }
+        return item;
+      });
       setBody(
         `${body.slice(0, finding.start)}${finalText}${body.slice(finding.end)}`,
       );
-      setFindings((current) =>
-        current?.map((item) => {
-          if (item.id === finding.id) {
-            return {
-              ...item,
-              text: finalText,
-              end: finding.start + finalText.length,
-              status,
-              final_text: finalText,
-            };
-          }
-          if (item.start >= finding.end) {
-            return {
-              ...item,
-              start: item.start + delta,
-              end: item.end + delta,
-            };
-          }
-          return item;
-        }) ?? null,
-      );
+      setFindings(updatedFindings);
+      updateDemoFindings(updatedFindings);
     } else {
-      setFindings((current) =>
-        current?.map((item) =>
+      const updatedFindings = (findings ?? []).map((item) =>
           item.id === finding.id
             ? { ...item, status, final_text: finalText }
             : item,
-        ) ?? null,
       );
+      setFindings(updatedFindings);
+      updateDemoFindings(updatedFindings);
     }
     setBusyFindingIds((ids) => ids.filter((id) => id !== finding.id));
   }

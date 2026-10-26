@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import type { DemoFinding } from "@/lib/mock-findings";
 import type { FindingStatus, Severity } from "@/lib/types";
@@ -53,6 +54,19 @@ export default function FindingCard({
   const severityLabel = SEVERITY_LABELS[severity] ?? "Unspecified";
   const resolved = finding.status !== "open";
   const checkLabel = finding.check.replaceAll("_", " ");
+  const knowledgeSource = finding.knowledge_source;
+  const knowledgeHref =
+    knowledgeSource.type === "guideline"
+      ? "/knowledge?tab=guidelines"
+      : knowledgeSource.type === "term"
+        ? "/knowledge?tab=glossary"
+        : "/knowledge?tab=facts";
+  const knowledgeLabel =
+    knowledgeSource.type === "guideline"
+      ? "View guideline"
+      : knowledgeSource.type === "term"
+        ? "View glossary term"
+        : "View fact";
 
   return (
     <article
@@ -92,12 +106,46 @@ export default function FindingCard({
           <strong>Source:</strong> {finding.source.label}
         </p>
       )}
+      <div className="finding-knowledge-source">
+        {knowledgeSource.type === "guideline" && (
+          <p>{knowledgeSource.record.description}</p>
+        )}
+        {knowledgeSource.type === "term" && (
+          <>
+            <p>{knowledgeSource.record.definition}</p>
+            <p>
+              Status: <strong>{knowledgeSource.record.status ?? "unspecified"}</strong>
+              {knowledgeSource.record.preferredTerm
+                ? ` · Preferred wording: ${knowledgeSource.record.preferredTerm}`
+                : ""}
+            </p>
+          </>
+        )}
+        {knowledgeSource.type === "fact" && (
+          <p>Current mock fact: {knowledgeSource.record.claim}</p>
+        )}
+        <Link href={knowledgeHref} className="finding-source-link">
+          {knowledgeLabel}
+        </Link>
+      </div>
       {finding.fact_details && (
         <dl className="finding-fact-details">
+          {finding.fact_details.source && (
+            <div>
+              <dt>Mock source reference</dt>
+              <dd>{finding.fact_details.source}</dd>
+            </div>
+          )}
           <div>
             <dt>Fact owner</dt>
             <dd>{finding.fact_details.owner}</dd>
           </div>
+          {finding.fact_details.last_reviewed && (
+            <div>
+              <dt>Last reviewed</dt>
+              <dd>{finding.fact_details.last_reviewed}</dd>
+            </div>
+          )}
           <div>
             <dt>Review by</dt>
             <dd>{finding.fact_details.review_date}</dd>

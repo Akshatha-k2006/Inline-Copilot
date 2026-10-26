@@ -1,33 +1,45 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { FormEvent, useEffect, useState } from "react";
 import {
-  BRAND_DATA_EVENT,
   BrandAsset,
   BrandData,
   BrandFact,
-  EMPTY_BRAND_DATA,
   GlossaryTerm,
   Guideline,
 } from "@/lib/brand-data";
-import { loadBrandData } from "@/lib/knowledge";
 import SampleBrandButton from "@/components/SampleBrandButton";
+import {
+  removeMockKnowledgeItem,
+  saveMockKnowledgeItem,
+  useDemoWorkspace,
+} from "@/lib/mock-data";
 
 type TabKey = keyof BrandData;
 type FormValues = Record<string, string>;
 type KnowledgeItem = Guideline | GlossaryTerm | BrandFact | BrandAsset;
 
-const TABS: { key: TabKey; label: string; itemLabel: string }[] = [
-  { key: "guidelines", label: "Guidelines", itemLabel: "guideline" },
-  { key: "glossary", label: "Glossary", itemLabel: "term" },
-  { key: "facts", label: "Facts", itemLabel: "fact" },
-  { key: "assets", label: "Assets", itemLabel: "asset" },
+const TABS: {
+  key: TabKey;
+  label: string;
+  itemLabel: string;
+  queryValue: string;
+}[] = [
+  { key: "guidelines", label: "Guidelines", itemLabel: "guideline", queryValue: "guidelines" },
+  { key: "glossary", label: "Glossary", itemLabel: "term", queryValue: "glossary" },
+  { key: "facts", label: "Facts", itemLabel: "fact", queryValue: "facts" },
+  { key: "assets", label: "Assets", itemLabel: "asset", queryValue: "assets" },
 ];
 
 const FIELDS: Record<
   TabKey,
-  { name: string; label: string; type?: string; required?: boolean }[]
+  {
+    name: string;
+    label: string;
+    type?: string;
+    required?: boolean;
+    options?: { value: string; label: string }[];
+  }[]
 > = {
   guidelines: [
     { name: "title", label: "Guideline", required: true },
@@ -37,81 +49,80 @@ const FIELDS: Record<
       type: "textarea",
       required: true,
     },
+    { name: "kind", label: "Category (optional)" },
   ],
   glossary: [
     { name: "term", label: "Term", required: true },
     { name: "definition", label: "Definition", type: "textarea", required: true },
-    { name: "preferredTerm", label: "Preferred wording", required: true },
+    { name: "preferredTerm", label: "Preferred wording" },
+    {
+      name: "status",
+      label: "Terminology status",
+      type: "select",
+      required: true,
+      options: [
+        { value: "prohibited", label: "Prohibited" },
+        { value: "approved", label: "Approved" },
+      ],
+    },
+    { name: "guidelineId", label: "Related guideline ID (optional)" },
   ],
   facts: [
     { name: "claim", label: "Approved fact", type: "textarea", required: true },
     { name: "owner", label: "Owner", required: true },
     { name: "reviewDate", label: "Review date", type: "date", required: true },
+    { name: "source", label: "Source reference (optional)" },
+    { name: "lastReviewed", label: "Last reviewed (optional)", type: "date" },
   ],
   assets: [
     { name: "name", label: "Asset name", required: true },
     { name: "description", label: "Description", type: "textarea", required: true },
     { name: "url", label: "Asset URL (optional)" },
+    { name: "kind", label: "Asset type (optional)" },
+    { name: "notes", label: "Usage notes (optional)", type: "textarea" },
   ],
 };
 
 function emptyValues(tab: TabKey): FormValues {
-  return Object.fromEntries(FIELDS[tab].map((field) => [field.name, ""]));
+  return Object.fromEntries(
+    FIELDS[tab].map((field) => [
+      field.name,
+      field.options?.[0]?.value ?? "",
+    ]),
+  );
 }
 
 function isOutdated(reviewDate: string): boolean {
-  const date = new Date(`${reviewDate}T00:00:00`);
+  const date = new Date(`${reviewDate}T00:00:00Z`);
   if (Number.isNaN(date.getTime())) return false;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return date < today;
+  return reviewDate < new Date().toISOString().slice(0, 10);
 }
 
 function displayDate(date: string): string {
-  const parsed = new Date(`${date}T00:00:00`);
-  return Number.isNaN(parsed.getTime()) ? date : parsed.toLocaleDateString();
-}
-
-function collectionPath(tab: TabKey): string {
-  return `/api/${tab}`;
+  const parsed = new Date(`${date}T00:00:00Z`);
+  return Number.isNaN(parsed.getTime())
+    ? date
+    : new Intl.DateTimeFormat("en-US", {
+        dateStyle: "medium",
+        timeZone: "UTC",
+      }).format(parsed);
 }
 
 export default function KnowledgeBasePage() {
-  const [data, setData] = useState<BrandData>(EMPTY_BRAND_DATA);
+  const workspace = useDemoWorkspace();
+  const data = workspace.knowledge;
   const [activeTab, setActiveTab] = useState<TabKey>("guidelines");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [values, setValues] = useState<FormValues>({});
   const [formOpen, setFormOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [loadFailed, setLoadFailed] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const refresh = useCallback(async () => {
-    try {
-      const result = await loadBrandData();
-      setData(result);
-      setLoadFailed(false);
-      setError("");
-    } catch (err) {
-      setLoadFailed(true);
-      setError(err instanceof Error ? err.message : "Could not load the brand knowledge.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
   useEffect(() => {
     const requestedTab = new URLSearchParams(window.location.search).get("tab");
-    const matchingTab = TABS.find((tab) => tab.key === requestedTab);
+    const matchingTab = TABS.find((tab) => tab.queryValue === requestedTab);
     if (matchingTab) setActiveTab(matchingTab.key);
-    void refresh();
-    function onBrandDataChanged() {
-      void refresh();
-    }
-    window.addEventListener(BRAND_DATA_EVENT, onBrandDataChanged);
-    return () => window.removeEventListener(BRAND_DATA_EVENT, onBrandDataChanged);
-  }, [refresh]);
+  }, []);
 
   function beginAdd() {
     setEditingId(null);
@@ -121,30 +132,26 @@ export default function KnowledgeBasePage() {
 
   function beginEdit(item: KnowledgeItem) {
     setEditingId(item.id);
-    const itemValues = { ...item } as Record<string, string>;
-    delete itemValues.id;
-    setValues(itemValues);
+    setValues(
+      Object.fromEntries(
+        Object.entries(item)
+          .filter(([key]) => key !== "id")
+          .map(([key, value]) => [key, typeof value === "string" ? value : ""]),
+      ),
+    );
     setFormOpen(true);
   }
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
+  function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
     setError("");
     const payload = Object.fromEntries(
       Object.entries(values).map(([key, value]) => [key, value.trim()]),
     );
-    const url = editingId
-      ? `${collectionPath(activeTab)}/${encodeURIComponent(editingId)}`
-      : collectionPath(activeTab);
 
     try {
-      if (editingId) {
-        await api.put<KnowledgeItem>(url, payload);
-      } else {
-        await api.post<KnowledgeItem>(url, payload);
-      }
-      await refresh();
+      saveMockKnowledgeItem(activeTab, editingId, payload);
       setFormOpen(false);
       setEditingId(null);
     } catch (err) {
@@ -154,14 +161,11 @@ export default function KnowledgeBasePage() {
     }
   }
 
-  async function removeItem(id: string) {
+  function removeItem(id: string) {
     setSaving(true);
     setError("");
     try {
-      await api.delete<void>(
-        `${collectionPath(activeTab)}/${encodeURIComponent(id)}`,
-      );
-      await refresh();
+      removeMockKnowledgeItem(activeTab, id);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not delete this entry.");
     } finally {
@@ -176,13 +180,16 @@ export default function KnowledgeBasePage() {
     <section className="page">
       <div className="knowledge-heading">
         <div>
-          <h1>Knowledge base</h1>
+          <h1>Guidelines &amp; knowledge</h1>
           <p className="lead">
-            Manage the approved guidance, language, facts and assets for your brand.
+            Manage demonstration guidelines, glossary terms, facts and brand assets.
           </p>
         </div>
         <SampleBrandButton />
       </div>
+      <p className="mock-data-notice" role="note">
+        Fictional demonstration records only. Facts, source references, owners and review dates are not verified. Changes remain in this app session and are not sent to a backend.
+      </p>
 
       <div className="knowledge-tabs" role="tablist" aria-label="Brand knowledge">
         {TABS.map((tab) => (
@@ -198,6 +205,11 @@ export default function KnowledgeBasePage() {
             }
             onClick={() => {
               setActiveTab(tab.key);
+              window.history.replaceState(
+                null,
+                "",
+                `/knowledge?tab=${tab.queryValue}`,
+              );
               setFormOpen(false);
               setEditingId(null);
               setError("");
@@ -217,13 +229,13 @@ export default function KnowledgeBasePage() {
         <div className="panel-heading">
           <div>
             <h2>{currentTab.label}</h2>
-            <p className="muted">Changes are saved to the brand service.</p>
+            <p className="muted">Changes are shared with mock review results for this app session.</p>
           </div>
           <button
             type="button"
             className="button button-primary"
             onClick={beginAdd}
-            disabled={loading || saving}
+            disabled={saving}
           >
             Add {currentTab.itemLabel}
           </button>
@@ -250,6 +262,34 @@ export default function KnowledgeBasePage() {
                     }
                     rows={3}
                   />
+                ) : field.options ? (
+                  <select
+                    required={field.required}
+                    value={values[field.name] ?? field.options[0].value}
+                    onChange={(event) =>
+                      setValues({ ...values, [field.name]: event.target.value })
+                    }
+                  >
+                    {field.options.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                ) : field.name === "guidelineId" ? (
+                  <select
+                    value={values[field.name] ?? ""}
+                    onChange={(event) =>
+                      setValues({ ...values, [field.name]: event.target.value })
+                    }
+                  >
+                    <option value="">No related guideline</option>
+                    {data.guidelines.map((guideline) => (
+                      <option key={guideline.id} value={guideline.id}>
+                        {guideline.title}
+                      </option>
+                    ))}
+                  </select>
                 ) : (
                   <input
                     type={field.type ?? "text"}
@@ -282,17 +322,7 @@ export default function KnowledgeBasePage() {
           </form>
         )}
 
-        {loading ? (
-          <p className="muted" role="status">Loading brand knowledge...</p>
-        ) : loadFailed ? (
-          <div className="empty-state">
-            <h3>Could not load the knowledge base</h3>
-            <p>Check that the brand service is running, then try again.</p>
-            <button type="button" className="button" onClick={() => void refresh()}>
-              Try again
-            </button>
-          </div>
-        ) : items.length === 0 ? (
+        {items.length === 0 ? (
           <div className="empty-state">
             <h3>No {currentTab.label.toLowerCase()} yet</h3>
             <p>
@@ -318,6 +348,9 @@ export default function KnowledgeBasePage() {
                     <>
                       <h3>{(item as Guideline).title}</h3>
                       <p>{(item as Guideline).description}</p>
+                      {(item as Guideline).kind && (
+                        <p className="entry-meta">Category: {(item as Guideline).kind}</p>
+                      )}
                     </>
                   )}
                   {activeTab === "glossary" && (
@@ -325,9 +358,21 @@ export default function KnowledgeBasePage() {
                       <h3>{(item as GlossaryTerm).term}</h3>
                       <p>{(item as GlossaryTerm).definition}</p>
                       <p className="entry-meta">
-                        Preferred wording:{" "}
-                        <strong>{(item as GlossaryTerm).preferredTerm}</strong>
+                        Preferred wording: <strong>{(item as GlossaryTerm).preferredTerm || "None"}</strong>
                       </p>
+                      <p className="entry-meta">
+                        Status: <strong>{(item as GlossaryTerm).status ?? "unspecified"}</strong>
+                      </p>
+                      {(item as GlossaryTerm).guidelineId && (
+                        <p className="entry-meta">
+                          Related guideline:{" "}
+                          <strong>
+                            {data.guidelines.find(
+                              (guideline) => guideline.id === (item as GlossaryTerm).guidelineId,
+                            )?.title ?? `#${(item as GlossaryTerm).guidelineId}`}
+                          </strong>
+                        </p>
+                      )}
                     </>
                   )}
                   {activeTab === "facts" && (
@@ -346,6 +391,16 @@ export default function KnowledgeBasePage() {
                         {isOutdated((item as BrandFact).reviewDate) && (
                           <span className="outdated-badge">Outdated</span>
                         )}
+                        {(item as BrandFact).source && (
+                          <span>
+                            Source: <strong>{(item as BrandFact).source}</strong>
+                          </span>
+                        )}
+                        {(item as BrandFact).lastReviewed && (
+                          <span>
+                            Last reviewed: <strong>{displayDate((item as BrandFact).lastReviewed!)}</strong>
+                          </span>
+                        )}
                       </div>
                     </>
                   )}
@@ -355,6 +410,13 @@ export default function KnowledgeBasePage() {
                       <p>{(item as BrandAsset).description}</p>
                       {(item as BrandAsset).url && (
                         <p className="entry-meta">{(item as BrandAsset).url}</p>
+                      )}
+                      {(item as BrandAsset).kind && (
+                        <p className="entry-meta">Type: {(item as BrandAsset).kind}</p>
+                      )}
+                      {(item as BrandAsset).notes &&
+                        (item as BrandAsset).notes !== (item as BrandAsset).description && (
+                        <p className="entry-meta">Notes: {(item as BrandAsset).notes}</p>
                       )}
                     </>
                   )}
@@ -371,7 +433,7 @@ export default function KnowledgeBasePage() {
                   <button
                     type="button"
                     className="button button-danger"
-                    onClick={() => void removeItem(item.id)}
+                    onClick={() => removeItem(item.id)}
                     disabled={saving}
                   >
                     Delete

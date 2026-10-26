@@ -17,9 +17,11 @@ npm run dev          # http://localhost:3000
 - `src/components/editor/Editor.tsx`: Write & Review form and local demonstration review
 - `src/components/editor/HighlightedDraft.tsx`: severity-coded sample phrase highlights linked to finding cards
 - `src/components/editor/FindingsPanel.tsx` and `FindingCard.tsx`: review summary, fact-source details, and local finding controls
-- `src/lib/mock-findings.ts`: demo fixture adapter; findings are shown only for the matching fictional sample draft
-- `src/app/knowledge/page.tsx`: editable Guidelines, Glossary, Facts and Assets tabs
-- `src/lib/brand-data.ts`: sample brand data and knowledge item types
+- `src/lib/mock-findings.ts`: deterministic demo checks for the fictional sample draft, resolved against current mock knowledge records
+- `src/lib/mock-data.ts`: shared in-memory knowledge, document, queue, findings, and review-history state for the demonstration
+- `src/app/page.tsx`, `src/app/queue/page.tsx`, and `src/app/audit/page.tsx`: demonstration dashboard statistics, review queue, and history based on that shared state
+- `src/app/knowledge/page.tsx`: editable Guidelines, Glossary, Facts and Assets tabs under the single Guidelines navigation item
+- `src/lib/brand-data.ts`: API-shaped knowledge types and shared sample records mapped from fixtures in `mocks/`
 - `mock_kb.mjs`: persistent local stand-in for the knowledge API
 - `src/components/RoleSwitcher.tsx`: demo role switcher, no login
 - `src/lib/api.ts`: the only place that calls the backend. Reads `NEXT_PUBLIC_API_URL` and sends `X-Role` and `X-User` on every request
@@ -27,11 +29,16 @@ npm run dev          # http://localhost:3000
 - `src/lib/types.ts`: types copied from `docs/API_CONTRACT.md`
 - `src/components/BackendStatus.tsx`: home-page check that the backend is reachable
 
-The Write & Review page currently runs in local demo mode and makes no backend
-requests. Its sample draft and findings come from the fixtures in `mocks/`;
-findings are only shown for the exact fictional draft text. Pasted content does
-not receive generated or verified results. Finding actions are local and are
-not saved. The content type selector currently offers Marketing Copy only.
+Write & Review, the dashboard, queue, and history use shared local demonstration
+data from the fixtures in `mocks/`. A sample review updates the document
+timestamp, findings, dashboard counts, and history together for the current
+app session (until a page reload). Findings are only shown for the exact
+fictional sample draft.
+Pasted content does not receive generated or verified results. Finding actions
+and knowledge edits are local to the app session and are not saved. Finding
+sources, fact claims, people and dates are fictional demonstration data, not
+verified citations or facts. The content type selector currently offers
+Marketing Copy only.
 
 Call the backend like this:
 
@@ -45,11 +52,14 @@ await api.post("/api/content/1/submit");
 
 Errors are thrown as `ApiError` with `status`, `code` and a readable `message`.
 
-Use **Load sample brand** on the home screen or in the Knowledge base to populate
-the demo data. The frontend reads and writes through the API; the mock service
-persists edits to `mock-kb-data.json`.
+Use **Load sample brand** on the home screen or in the Guidelines page to reset
+the shared in-memory mock knowledge records.
 
-To run the frontend with the stand-in knowledge API, use two terminals:
+The knowledge editor and Write & Review currently use local mock data only;
+they do not fall back to mock data after an API error. The API layer and optional
+mock knowledge server remain available for separate integration work.
+
+To run the standalone mock knowledge API checks:
 
 ```
 npm run mock:kb

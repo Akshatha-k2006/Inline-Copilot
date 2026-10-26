@@ -1,16 +1,17 @@
 "use client";
 
-import type { Finding, Severity } from "@/lib/types";
+import type { DemoFinding } from "@/lib/mock-findings";
+import type { Severity } from "@/lib/types";
 
 interface HighlightedDraftProps {
   body: string;
-  findings: Finding[];
+  findings: DemoFinding[];
   selectedFindingId: number | null;
-  onSelect: (finding: Finding) => void;
+  onSelect: (finding: DemoFinding) => void;
 }
 
 interface FindingSegment {
-  finding: Finding;
+  finding: DemoFinding;
   start: number;
   end: number;
 }
@@ -21,7 +22,7 @@ const SEVERITY_LABELS: Record<Severity, string> = {
   low: "Info",
 };
 
-function getSegments(body: string, findings: Finding[]): FindingSegment[] {
+function getSegments(body: string, findings: DemoFinding[]): FindingSegment[] {
   const sorted = findings
     .filter(
       (finding) =>

@@ -253,6 +253,110 @@ a {
   padding: 20px;
 }
 
+.mock-data-notice {
+  margin: 0;
+  padding: 12px 16px;
+  border: 1px solid #e5d8a9;
+  border-radius: var(--radius);
+  background: #fff9e8;
+  color: #514725;
+}
+
+.demo-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: 12px;
+}
+
+.demo-stat-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.demo-stat-card strong,
+.mock-history-count strong {
+  font-size: 1.8rem;
+  line-height: 1.1;
+}
+
+.demo-stat-card small {
+  color: var(--muted);
+}
+
+.mock-document-card {
+  align-items: flex-start;
+}
+
+.mock-document-preview {
+  max-width: 80ch;
+  color: var(--muted);
+}
+
+.mock-history-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.mock-history-count {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+}
+
+.mock-history-list {
+  display: grid;
+  gap: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0 0 0 8px;
+  border-left: 2px solid var(--border);
+}
+
+.mock-history-item {
+  display: grid;
+  grid-template-columns: minmax(150px, 200px) minmax(0, 1fr);
+  gap: 16px;
+  padding: 16px 0 16px 20px;
+  position: relative;
+}
+
+.mock-history-item::before {
+  position: absolute;
+  top: 22px;
+  left: -7px;
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--surface);
+  border-radius: 50%;
+  background: var(--teal);
+  content: "";
+}
+
+.mock-history-item time,
+.mock-history-item .muted {
+  color: var(--muted);
+}
+
+.mock-history-item h2 {
+  margin: 0 0 6px;
+  font-size: 1.1rem;
+  text-transform: capitalize;
+}
+
+.mock-history-item p {
+  margin: 4px 0;
+}
+
 .steps {
   margin: 0 0 16px;
   padding-left: 1.25rem;
@@ -964,6 +1068,26 @@ a {
   font-size: 0.86rem;
 }
 
+.finding-knowledge-source {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fbfaf6;
+  overflow-wrap: anywhere;
+}
+
+.finding-knowledge-source p {
+  margin: 0;
+}
+
+.finding-source-link {
+  width: fit-content;
+  color: var(--teal);
+  font-weight: 650;
+}
+
 .finding-fact-details {
   display: flex;
   flex-wrap: wrap;
@@ -1091,9 +1215,19 @@ a {
 @media (max-width: 600px) {
   .knowledge-heading,
   .panel-heading,
-  .entry-card {
+  .entry-card,
+  .mock-history-summary {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .mock-history-count {
+    align-items: flex-start;
+  }
+
+  .mock-history-item {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 6px;
   }
 
   .entry-actions {
