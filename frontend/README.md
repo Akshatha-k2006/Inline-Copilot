@@ -50,6 +50,11 @@ A dismissed high-severity finding still blocks submission if its text remains.
 Resubmissions retain prior submitted snapshots for reviewer comparison. The
 prototype does not publish content.
 
+The dashboard's getting-started guide follows the five numbered steps in the
+repository README. Dismissing it stores a browser-local preference under
+`corespace-getting-started-dismissed-v1`; use **Show getting-started guide** on
+the dashboard to reopen it. The preference is not account- or server-synced.
+
 Demo checks only match known fixture phrases and current mock knowledge; they do
 not comprehensively verify arbitrary text. Source references, facts, owners,
 dates, reviewers and workflow outcomes are demonstration data, not verified
