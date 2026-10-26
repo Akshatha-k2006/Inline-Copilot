@@ -1,0 +1,34 @@
+{
+  "endpoint": "PATCH /api/findings/11",
+  "request": {
+    "status": "edited",
+    "final_text": "LuminaBulb"
+  },
+  "response": {
+    "id": 11,
+    "content_id": 1,
+    "check": "terminology",
+    "severity": "high",
+    "start": 5,
+    "end": 16,
+    "text": "LuminaBulbs",
+    "explanation": "The product name is singular, even when referring to several bulbs.",
+    "source": {
+      "type": "term",
+      "id": 4,
+      "label": "Glossary: LuminaBulbs → LuminaBulb"
+    },
+    "suggestion": "LuminaBulb",
+    "status": "edited",
+    "final_text": "LuminaBulb",
+    "content": {
+      "id": 1,
+      "title": "Spring launch post (sample)",
+      "body": "Meet LuminaBulb, the #1 best smart bulbs on the planet! They will definitely cut your energy bill by 90%, and they are guaranteed to last forever. Our revolutionary app is cheap and super easy to set up, lol. Over 2 million happy customers since 2019 can't be wrong. Get yours today!",
+      "status": "draft",
+      "version": 2,
+      "created_by": "Asha",
+      "updated_at": "2026-10-26T06:10:00Z"
+    }
+  }
+}

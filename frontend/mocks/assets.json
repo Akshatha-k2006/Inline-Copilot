@@ -1,0 +1,25 @@
+{
+  "GET /api/assets": [
+    {
+      "id": 1,
+      "name": "Logo (primary)",
+      "kind": "logo",
+      "url": "",
+      "notes": "Do not recolour or stretch."
+    },
+    {
+      "id": 2,
+      "name": "Brand palette",
+      "kind": "palette",
+      "url": "",
+      "notes": "Warm amber #F2A93B, deep slate #26323B, soft white #FAF8F3."
+    }
+  ],
+  "POST /api/assets": {
+    "id": 3,
+    "name": "Spring campaign image",
+    "kind": "image",
+    "url": "/files/spring-campaign.png",
+    "notes": "Use only for approved campaigns."
+  }
+}

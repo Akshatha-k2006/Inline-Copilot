@@ -1,0 +1,6 @@
+{
+  "endpoint": "GET /api/health",
+  "response": {
+    "status": "ok"
+  }
+}

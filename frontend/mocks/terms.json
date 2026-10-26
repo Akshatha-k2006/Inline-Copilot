@@ -1,0 +1,60 @@
+{
+  "GET /api/terms": [
+    {
+      "id": 1,
+      "term": "cheap",
+      "status": "prohibited",
+      "preferred": "affordable",
+      "reason": "Implies low quality.",
+      "guideline_id": 1
+    },
+    {
+      "id": 2,
+      "term": "revolutionary",
+      "status": "prohibited",
+      "preferred": "new",
+      "reason": "Hype word. Describe the benefit instead.",
+      "guideline_id": 1
+    },
+    {
+      "id": 3,
+      "term": "lol",
+      "status": "prohibited",
+      "preferred": "",
+      "reason": "Text-speak does not fit our tone.",
+      "guideline_id": 1
+    },
+    {
+      "id": 4,
+      "term": "LuminaBulbs",
+      "status": "prohibited",
+      "preferred": "LuminaBulb",
+      "reason": "The product name is singular, even for several bulbs.",
+      "guideline_id": 2
+    },
+    {
+      "id": 5,
+      "term": "smart lighting",
+      "status": "approved",
+      "preferred": "",
+      "reason": "Approved category description.",
+      "guideline_id": 2
+    },
+    {
+      "id": 6,
+      "term": "energy-saving",
+      "status": "approved",
+      "preferred": "",
+      "reason": "Approved descriptor.",
+      "guideline_id": 2
+    }
+  ],
+  "POST /api/terms": {
+    "id": 7,
+    "term": "awesome",
+    "status": "prohibited",
+    "preferred": "use a specific benefit",
+    "reason": "Vague hype word.",
+    "guideline_id": 1
+  }
+}

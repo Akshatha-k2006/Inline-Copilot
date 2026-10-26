@@ -1,0 +1,11 @@
+{
+  "endpoint": "POST /api/seed/load",
+  "response": {
+    "content_id": 1,
+    "counts": {
+      "guidelines": 3,
+      "terms": 6,
+      "facts": 5
+    }
+  }
+}

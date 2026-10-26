@@ -1,0 +1,29 @@
+{
+  "POST /api/content": {
+    "id": 1,
+    "title": "Spring launch post (sample)",
+    "body": "Meet LuminaBulbs, the #1 best smart bulbs on the planet! They will definitely cut your energy bill by 90%, and they are guaranteed to last forever. Our revolutionary app is cheap and super easy to set up, lol. Over 2 million happy customers since 2019 can't be wrong. Get yours today!",
+    "status": "draft",
+    "version": 1,
+    "created_by": "Asha",
+    "updated_at": "2026-10-26T06:00:00Z"
+  },
+  "GET /api/content/1": {
+    "id": 1,
+    "title": "Spring launch post (sample)",
+    "body": "Meet LuminaBulbs, the #1 best smart bulbs on the planet! They will definitely cut your energy bill by 90%, and they are guaranteed to last forever. Our revolutionary app is cheap and super easy to set up, lol. Over 2 million happy customers since 2019 can't be wrong. Get yours today!",
+    "status": "draft",
+    "version": 1,
+    "created_by": "Asha",
+    "updated_at": "2026-10-26T06:00:00Z"
+  },
+  "PUT /api/content/1": {
+    "id": 1,
+    "title": "Spring launch post (sample)",
+    "body": "Meet LuminaBulb, a smart lighting option for your home.",
+    "status": "draft",
+    "version": 2,
+    "created_by": "Asha",
+    "updated_at": "2026-10-26T06:15:00Z"
+  }
+}

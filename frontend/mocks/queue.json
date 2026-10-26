@@ -1,0 +1,14 @@
+{
+  "endpoint": "GET /api/queue",
+  "response": [
+    {
+      "id": 2,
+      "title": "Spring campaign follow-up",
+      "body": "Meet LuminaBulbs, the #1 best smart bulbs on the planet! They will definitely cut your energy bill by 90%, and they are guaranteed to last forever. Our revolutionary app is cheap and super easy to set up, lol. Over 2 million happy customers since 2019 can't be wrong. Get yours today!",
+      "status": "in_review",
+      "version": 2,
+      "created_by": "Asha",
+      "updated_at": "2026-10-26T06:30:00Z"
+    }
+  ]
+}
