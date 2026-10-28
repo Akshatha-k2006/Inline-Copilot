@@ -31,7 +31,6 @@ export const API_URL = (
 let currentRole: Role | null = null;
 
 export function getRole(): Role {
-  if (process.env.NODE_ENV !== "development") return DEFAULT_ROLE;
   if (currentRole) return currentRole;
   try {
     const saved = window.localStorage.getItem(ROLE_STORAGE_KEY);
@@ -46,7 +45,6 @@ export function getRole(): Role {
 }
 
 export function setRole(role: Role): void {
-  if (process.env.NODE_ENV !== "development") return;
   currentRole = role;
   try {
     window.localStorage.setItem(ROLE_STORAGE_KEY, role);

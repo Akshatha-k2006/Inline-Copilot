@@ -857,7 +857,7 @@ export function transitionDemoDocument(
       if (comment.trim().length < 10) {
         throw new Error("Add a meaningful comment of at least 10 characters explaining the requested changes.");
       }
-      status = "draft";
+      status = "changes_requested";
       comments = appendReviewComment(
         comments,
         documentId,
@@ -1146,13 +1146,14 @@ export function resolveDemoFinding(
 }
 
 export function recordDemoReview(
+  documentId: number,
   body: string,
   role: Role,
   user: string,
 ): DemoFinding[] {
   const reviewedAt = new Date().toISOString();
   const currentDocument = workspace.documents.find(
-    (document) => document.id === DEMO_DRAFT.id,
+    (document) => document.id === documentId,
   );
 
   if (!currentDocument) {
@@ -1227,6 +1228,7 @@ export function recordDemoReview(
 }
 
 export function recordBackendReview(
+  documentId: number,
   body: string,
   generatedFindings: DemoFinding[],
   role: Role,
@@ -1234,7 +1236,7 @@ export function recordBackendReview(
 ): DemoFinding[] {
   const reviewedAt = new Date().toISOString();
   const currentDocument = workspace.documents.find(
-    (document) => document.id === DEMO_DRAFT.id,
+    (document) => document.id === documentId,
   );
   if (!currentDocument) {
     throw new Error("The content document is not available.");
