@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRole } from "@/lib/role";
 import {
   getDocumentFindings,
@@ -27,9 +27,12 @@ export default function Editor() {
   const [title, setTitle] = useState(document?.title ?? "");
   const [body, setBody] = useState(document?.body ?? "");
   const [creating, setCreating] = useState(false);
+  const [newTitle, setNewTitle] = useState("Untitled document");
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const newTitleInputRef = useRef<HTMLInputElement>(null);
 
   const findings = document ? getDocumentFindings(workspace, document.id) : [];
   const review = workspace.reviews.find((item) => item.document_id === document?.id);
@@ -103,11 +106,12 @@ export default function Editor() {
 
   function createDocument() {
     run(() => {
-      const created = createDemoDocument("Untitled document", "Start writing your on-brand content here.", role, user);
+      const created = createDemoDocument(newTitle.trim() || "Untitled document", "Start writing your on-brand content here.", role, user);
       setSelectedDocumentId(created.id);
       setTitle(created.title);
       setBody(created.body);
       setCreating(false);
+      setNewTitle("Untitled document");
     }, "Document created.");
   }
 
@@ -132,7 +136,7 @@ export default function Editor() {
       {error && <p className="form-error" role="alert">{error}</p>}
       <div className="editor-layout">
         <aside className="editor-document-list card">
-          <div className="panel-heading"><p className="eyebrow">My documents</p><button className="button" type="button" onClick={() => setCreating(true)} disabled={role !== "creator"}>New</button></div>
+          <div className="panel-heading"><p className="eyebrow">My documents</p><button className="button" type="button" onClick={() => { setCreating((current) => { const next = !current; if (next) { setNewTitle("Untitled document"); window.setTimeout(() => newTitleInputRef.current?.focus(), 0); } return next; }); }} disabled={role !== "creator"}>New</button></div>
           {workspace.documents.map((item) => <button className={`document-list-item${item.id === document.id ? " active" : ""}`} type="button" key={item.id} onClick={() => setSelectedDocumentId(item.id)}>
             <strong>{item.title}</strong>
             <span>{contentStatusLabel(item.status)}</span>
@@ -142,10 +146,23 @@ export default function Editor() {
         </aside>
         <section className="editor-main card">
           <div className="editor-toolbar">
-            <input aria-label="Document title" className="title-input" value={title} onChange={(event) => setTitle(event.target.value)} disabled={!canEdit} />
+            <input ref={titleInputRef} aria-label="Document title" className="title-input" value={title} onChange={(event) => setTitle(event.target.value)} disabled={!canEdit} placeholder="Untitled document" />
             <span className="autosave-indicator">Saved locally</span>
           </div>
-          {creating && <div className="card inline-create"><h2>Create a document</h2><p className="muted">A new local draft will be shared across the demo roles.</p><button className="button button-primary" type="button" onClick={createDocument}>Create draft</button><button className="button" type="button" onClick={() => setCreating(false)}>Cancel</button></div>}
+          {creating && (
+            <div className="card inline-create">
+              <h2>Create a document</h2>
+              <p className="muted">A new local draft will be shared across the demo roles.</p>
+              <label className="form-field" style={{ width: "100%" }}>
+                <span>Title</span>
+                <input ref={newTitleInputRef} value={newTitle} onChange={(event) => setNewTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); createDocument(); } }} />
+              </label>
+              <div className="form-actions">
+                <button className="button button-primary" type="button" onClick={createDocument}>Create draft</button>
+                <button className="button" type="button" onClick={() => { setCreating(false); setNewTitle("Untitled document"); }}>Cancel</button>
+              </div>
+            </div>
+          )}
           <textarea
             aria-label="Document body"
             className="document-editor"
@@ -153,6 +170,7 @@ export default function Editor() {
             onChange={(event) => setBody(event.target.value)}
             disabled={!canEdit}
             spellCheck
+            placeholder="Start writing your on-brand content here..."
           />
           <div className="editor-meta"><span>{body.trim().split(/\s+/).filter(Boolean).length} words · {readingTime} min read</span><span>{reviewState === "current" ? "Review is current" : "Review needed"}</span></div>
           {findings.length > 0 && (
