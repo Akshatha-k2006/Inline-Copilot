@@ -1,17 +1,20 @@
 
 import json
+import logging
 from datetime import date, datetime, time, timezone
 from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.dependencies import require_writer
-from app.models import Asset, Comment, Content, Fact, Finding, Guideline, Term
+from app.models import Asset, AuditEvent, Content, Fact, Guideline, Term
 
 router = APIRouter(tags=["seed"])
+logger = logging.getLogger(__name__)
 
 # Resolve the file relative to the backend directory.
 SEED_FILE = Path(__file__).resolve().parents[3] / "seed" / "brand.json"
@@ -31,90 +34,114 @@ def load_seed_data(
         with SEED_FILE.open("r", encoding="utf-8") as file:
             data = json.load(file)
 
-        # Remove previous sample data and dependent records.
-        # Preserve other content items, if any.
-        sample_content = db.get(Content, 1)
-        if sample_content:
-            db.delete(sample_content)
-            db.flush()
-
-        db.query(Guideline).delete(synchronize_session=False)
-        db.query(Term).delete(synchronize_session=False)
-        db.query(Fact).delete(synchronize_session=False)
-        db.query(Asset).delete(synchronize_session=False)
-        db.flush()
-
+        guideline_ids = {}
         for item in data["guidelines"]:
-            db.add(
-                Guideline(
-                    id=item["id"],
+            existing = (
+                db.query(Guideline)
+                .filter(Guideline.title == item["title"])
+                .first()
+            )
+            if existing is None:
+                existing = Guideline(
                     title=item["title"],
                     description=item["body"],
                     category=item["kind"],
                 )
-            )
+                db.add(existing)
+                db.flush()
+            guideline_ids[item["id"]] = existing.id
 
         for item in data["terms"]:
-            db.add(
-                Term(
-                    id=item["id"],
-                    term=item["term"],
-                    definition=item.get("definition", item.get("reason", "")),
-                    replacement=item.get("preferred") or None,
-                    status=item["status"],
-                    explanation=item.get("reason", ""),
-                )
+            existing = (
+                db.query(Term)
+                .filter(func.lower(Term.term) == item["term"].lower())
+                .first()
             )
+            if existing is None:
+                db.add(
+                    Term(
+                        term=item["term"],
+                        definition=item.get("definition", item.get("reason", "")),
+                        replacement=item.get("preferred") or None,
+                        status=item["status"],
+                        explanation=item.get("reason", ""),
+                        guideline_id=guideline_ids.get(item.get("guideline_id")),
+                    )
+                )
 
         for item in data["facts"]:
-            db.add(
-                Fact(
-                    id=item["id"],
-                    statement=item["statement"],
-                    source=item["source"],
-                    owner=item.get("owner", ""),
-                    review_by=parse_review_date(item["review_by"]),
-                )
+            existing = (
+                db.query(Fact)
+                .filter(Fact.statement == item["statement"])
+                .first()
             )
+            if existing is None:
+                db.add(
+                    Fact(
+                        statement=item["statement"],
+                        source=item["source"],
+                        owner=item.get("owner", ""),
+                        last_reviewed=(
+                            parse_review_date(item["last_reviewed"])
+                            if item.get("last_reviewed")
+                            else None
+                        ),
+                        review_by=parse_review_date(item["review_by"]),
+                    )
+                )
 
         for item in data["assets"]:
-            db.add(
-                Asset(
-                    id=item["id"],
-                    name=item["name"],
-                    asset_type=item["kind"],
-                    description=item.get("description", item.get("notes", "")),
-                    url=item.get("url", ""),
-                    metadata_json={"notes": item.get("notes", "")},
+            existing = db.query(Asset).filter(Asset.name == item["name"]).first()
+            if existing is None:
+                db.add(
+                    Asset(
+                        name=item["name"],
+                        asset_type=item["kind"],
+                        description=item.get("description", item.get("notes", "")),
+                        url=item.get("url", ""),
+                        metadata_json={"notes": item.get("notes", "")},
+                    )
                 )
-            )
 
         draft = data["sample_draft"]
-        db.add(
-            Content(
-                id=1,
+        sample_content = (
+            db.query(Content)
+            .filter(
+                Content.title == draft["title"],
+                Content.created_by == "Asha",
+            )
+            .order_by(Content.id)
+            .first()
+        )
+        db.flush()
+        if sample_content is None:
+            sample_content = Content(
                 title=draft["title"],
+                content_type="social_media",
                 body=draft["body"],
                 status="draft",
                 version=1,
                 created_by="Asha",
             )
+            db.add(sample_content)
+            db.flush()
+
+        expired_fact = (
+            db.query(Fact)
+            .filter(Fact.statement == data["facts"][1]["statement"])
+            .first()
         )
-
-        db.flush()
-
-        # Explicit IDs are required by the sample-data contract.
-        # Reset PostgreSQL sequences so future inserts won't collide.
-        if db.bind is not None and db.bind.dialect.name == "postgresql":
-            for table in ("guidelines", "terms", "facts", "assets", "content"):
-                db.execute(
-                    __import__("sqlalchemy").text(
-                        f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), "
-                        f"COALESCE((SELECT MAX(id) FROM {table}), 1), "
-                        f"EXISTS (SELECT 1 FROM {table}))"
-                    )
-                )
-
+        db.add(
+            AuditEvent(
+                actor=role,
+                action="sample_brand_loaded",
+                details={
+                    "actor_role": role,
+                    "brand": data["brand"],
+                    "sample_content_id": sample_content.id,
+                },
+            )
+        )
         db.commit()
 
         return {
@@ -127,19 +154,27 @@ def load_seed_data(
                 "assets": len(data["assets"]),
                 "content": 1,
             },
-            "expired_fact_id": 2,
-            "sample_content_id": 1,
+            "expired_fact_id": expired_fact.id,
+            "sample_content_id": sample_content.id,
         }
 
-    except FileNotFoundError:
+    except FileNotFoundError as exc:
         db.rollback()
+        logger.exception("Sample brand seed file is missing.")
         raise HTTPException(
             status_code=500,
-            detail=f"Seed file not found: {SEED_FILE}",
-        )
+            detail={
+                "error": "seed_failed",
+                "message": "The sample brand data file is unavailable.",
+            },
+        ) from exc
     except Exception as exc:
         db.rollback()
+        logger.exception("Unable to load sample brand data.")
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to load seed data: {exc}",
-        )
+            detail={
+                "error": "seed_failed",
+                "message": "Unable to load sample brand data.",
+            },
+        ) from exc

@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic import Field
@@ -8,6 +9,7 @@ BACKEND_ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
 
 class Settings(BaseSettings):
     database_url: str
+    app_env: Literal["development", "production"] = "production"
     cors_origins: str = "http://localhost:3000"
     llm_api_key: str | None = None
     llm_api_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"

@@ -86,7 +86,7 @@ class ContentApiTests(unittest.TestCase):
                     "raw_path": parsed_path.path.encode("ascii"),
                     "query_string": parsed_path.query.encode("ascii"),
                     "headers": headers,
-                    "client": ("testclient", 123),
+                    "client": ("127.0.0.1", 123),
                     "server": ("testserver", 80),
                 },
                 receive,

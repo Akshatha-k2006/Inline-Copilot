@@ -7,6 +7,7 @@ export interface Guideline {
   id: string;
   title: string;
   description: string;
+  category?: string;
   kind?: string;
 }
 
@@ -59,7 +60,7 @@ export const SAMPLE_BRAND: BrandData = {
     id: String(guideline.id),
     title: guideline.title,
     description: guideline.body,
-    kind: guideline.kind,
+    category: guideline.kind,
   })),
   glossary: termFixture["GET /api/terms"].map((term) => ({
     id: String(term.id),

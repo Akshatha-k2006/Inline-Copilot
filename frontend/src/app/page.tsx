@@ -8,12 +8,13 @@ import { loadBrandData } from "@/lib/knowledge";
 import { useRole } from "@/lib/role";
 import { canManageKnowledge, canViewReviewQueue } from "@/lib/workflow";
 import type { BrandData } from "@/lib/brand-data";
-import type { Content, Health, Role } from "@/lib/types";
+import type { Content, ContentAuditEvent, Health, Role } from "@/lib/types";
 
 interface DashboardData {
   health: Health;
   knowledge: BrandData;
   content: Content[];
+  audit: ContentAuditEvent[];
 }
 
 const ROLE_COPY: Record<
@@ -22,8 +23,7 @@ const ROLE_COPY: Record<
 > = {
   creator: {
     heading: "Create content with confidence",
-    summary:
-      "Create content and prepare clear, evidence-led work for review.",
+    summary: "Create content and prepare clear, evidence-led work for review.",
     workTitle: "Your content",
     workSummary:
       "Create and reopen your persisted content in the Write & Review workspace.",
@@ -90,9 +90,10 @@ export default function Home() {
       api.health({ signal: controller.signal }),
       loadBrandData({ signal: controller.signal }),
       api.listContent({ signal: controller.signal }),
+      api.getAudit({ signal: controller.signal }),
     ])
-      .then(([health, knowledge, content]) => {
-        setData({ health, knowledge, content });
+      .then(([health, knowledge, content, audit]) => {
+        setData({ health, knowledge, content, audit });
       })
       .catch((cause: unknown) => {
         if (cause instanceof DOMException && cause.name === "AbortError") return;
@@ -110,17 +111,73 @@ export default function Home() {
       });
 
     return () => controller.abort();
-  }, [isRoleLoaded, retry]);
+  }, [isRoleLoaded, retry, role]);
 
-  const counts = data
+  const contentCount = (status: Content["status"]) =>
+    data?.content.filter((item) => item.status === status).length ?? 0;
+  const returnedForChanges =
+    data?.audit.filter(
+      (event) =>
+        event.action === "content_status_changed" &&
+        event.details.previous_status === "in_review" &&
+        event.details.new_status === "draft",
+    ).length ?? 0;
+  const knowledgeCounts = data
     ? [
         { label: "Guidelines", value: data.knowledge.guidelines.length },
-        { label: "Glossary terms", value: data.knowledge.glossary.length },
+        { label: "Terminology entries", value: data.knowledge.glossary.length },
         { label: "Approved facts", value: data.knowledge.facts.length },
-        { label: "Brand assets", value: data.knowledge.assets.length },
+        {
+          label: "Facts requiring re-approval",
+          value: data.knowledge.facts.filter((fact) => fact.outdated).length,
+        },
+        { label: "Assets", value: data.knowledge.assets.length },
       ]
     : [];
-  const totalKnowledge = counts.reduce((total, item) => total + item.value, 0);
+  const totalKnowledge = knowledgeCounts
+    .filter((item) => item.label !== "Facts requiring re-approval")
+    .reduce((total, item) => total + item.value, 0);
+  const counts = !data
+    ? []
+    : role === "creator"
+      ? [
+          { label: "Your content", value: data.content.length },
+          {
+            label: "Needs attention",
+            value: contentCount("draft") + contentCount("self_checked"),
+          },
+          { label: "Awaiting review", value: contentCount("in_review") },
+          { label: "Approved", value: contentCount("approved") },
+        ]
+      : role === "reviewer"
+        ? [
+            { label: "Awaiting your review", value: contentCount("in_review") },
+            { label: "Approved content", value: contentCount("approved") },
+            { label: "Returned for changes", value: returnedForChanges },
+          ]
+        : role === "brand_manager"
+          ? knowledgeCounts
+          : [
+              { label: "Total content", value: data.content.length },
+              { label: "Draft", value: contentCount("draft") },
+              { label: "Self-checked", value: contentCount("self_checked") },
+              { label: "Awaiting review", value: contentCount("in_review") },
+              { label: "Approved", value: contentCount("approved") },
+              {
+                label: "Ready to publish",
+                value: contentCount("ready_to_publish"),
+              },
+              { label: "Returned for changes", value: returnedForChanges },
+              ...knowledgeCounts,
+            ];
+  const dashboardTitle =
+    role === "creator"
+      ? "Your workflow"
+      : role === "reviewer"
+        ? "Review activity"
+        : role === "brand_manager"
+          ? "Brand knowledge"
+          : "Operations overview";
 
   return (
     <section className="page dashboard">
@@ -134,11 +191,14 @@ export default function Home() {
         <span className="dashboard-role-badge">{label}</span>
       </header>
 
-      <section className="dashboard-data-section" aria-labelledby="snapshot-heading">
+      <section
+        className="dashboard-data-section"
+        aria-labelledby="snapshot-heading"
+      >
         <div className="dashboard-section-heading">
           <div>
             <p className="eyebrow">Live from your backend</p>
-            <h2 id="snapshot-heading">Brand knowledge snapshot</h2>
+            <h2 id="snapshot-heading">{dashboardTitle}</h2>
           </div>
           {data && (
             <span
@@ -170,33 +230,43 @@ export default function Home() {
           </div>
         ) : data ? (
           <>
-            <div className="dashboard-stat-grid" aria-label="Backend knowledge totals">
+            <div
+              className="dashboard-stat-grid"
+              aria-label={`${dashboardTitle} metrics from the backend`}
+            >
               {counts.map((item) => (
                 <article className="dashboard-stat-card" key={item.label}>
                   <span>{item.label}</span>
                   <strong>{item.value}</strong>
-                  <small>Records in the backend</small>
+                  <small>Current backend data</small>
                 </article>
               ))}
             </div>
             {totalKnowledge === 0 && (
               <p className="dashboard-empty-note" role="status">
-                The backend collections are empty. A Brand Manager or Admin can
-                add knowledge or load the sample brand.
+                {role === "creator" || role === "reviewer"
+                  ? "No content records are available for this role."
+                  : "The backend collections are empty. A Brand Manager or Admin can add knowledge or load the sample brand."}
               </p>
             )}
           </>
         ) : null}
       </section>
 
-      <section className="dashboard-work-grid" aria-label={`${label} dashboard`}>
+      <section
+        className="dashboard-work-grid"
+        aria-label={`${label} dashboard`}
+      >
         <article className="card dashboard-work-card">
           <p className="eyebrow">For {label}</p>
           <h2>{copy.workTitle}</h2>
           <p className="dashboard-work-summary">{copy.workSummary}</p>
 
           {role === "brand_manager" && (
-            <nav className="dashboard-knowledge-links" aria-label="Brand knowledge">
+            <nav
+              className="dashboard-knowledge-links"
+              aria-label="Brand knowledge"
+            >
               {KNOWLEDGE_LINKS.map((item) => (
                 <Link
                   className="button"
@@ -238,7 +308,8 @@ export default function Home() {
                 </Link>
               )}
               <span>
-                Submitted items and reviewer decisions are stored by the backend.
+                Submitted items and reviewer decisions are stored by the
+                backend.
               </span>
             </p>
           )}
@@ -253,21 +324,45 @@ export default function Home() {
         <article className="card dashboard-activity-card">
           <p className="eyebrow">Workflow</p>
           <h2>Recent activity</h2>
-          <p>
-            Review and workflow events are available in the backend audit trail.
-            Open the Audit Trail page to inspect persisted activity.
-          </p>
+          {loading ? (
+            <p className="muted" role="status">Loading persisted activity...</p>
+          ) : !data || data.audit.length === 0 ? (
+            <p className="muted">No recent activity is available for this role.</p>
+          ) : (
+            <ol className="dashboard-activity-list">
+              {data.audit.slice(-5).reverse().map((event) => {
+                const title =
+                  typeof event.details.resource_name === "string"
+                    ? event.details.resource_name
+                    : data.content.find(
+                        (item) => item.id === event.content_id,
+                      )?.title ?? `Content #${event.content_id ?? "workspace"}`;
+                return (
+                  <li key={event.id}>
+                    <span>{event.action.replaceAll("_", " ")}</span>
+                    <strong>{title}</strong>
+                    <small>
+                      {event.actor} · {new Date(event.created_at).toLocaleString()}
+                    </small>
+                  </li>
+                );
+              })}
+            </ol>
+          )}
           {role === "admin" && (
             <p className="muted">
-              No user-management endpoint is implemented; administrative
-              account controls are not available here.
+              No user-management endpoint is implemented; administrative account
+              controls are not available here.
             </p>
           )}
         </article>
       </section>
 
       {(role === "creator" || role === "reviewer") && (
-        <section className="dashboard-next-steps card" aria-labelledby="next-steps-heading">
+        <section
+          className="dashboard-next-steps card"
+          aria-labelledby="next-steps-heading"
+        >
           <div>
             <p className="eyebrow">Next steps</p>
             <h2 id="next-steps-heading">
@@ -281,18 +376,26 @@ export default function Home() {
                 : "Inspect backend submissions and make reviewer decisions in the persisted review queue."}
             </p>
           </div>
-          <Link className="button" href={role === "creator" ? "/editor" : "/queue"}>
+          <Link
+            className="button"
+            href={role === "creator" ? "/editor" : "/queue"}
+          >
             {role === "creator" ? "Open Write & Review" : "Open review queue"}
           </Link>
         </section>
       )}
 
       {data && (
-        <section className="dashboard-data-section" aria-labelledby="recent-content-heading">
+        <section
+          className="dashboard-data-section"
+          aria-labelledby="recent-content-heading"
+        >
           <div className="dashboard-section-heading">
             <div>
               <p className="eyebrow">Persisted in the backend</p>
-              <h2 id="recent-content-heading">Recent content ({data.content.length})</h2>
+              <h2 id="recent-content-heading">
+                Recent content ({data.content.length})
+              </h2>
             </div>
             <Link className="button" href="/editor">
               View all content
@@ -308,7 +411,11 @@ export default function Home() {
               {data.content.slice(0, 5).map((item) => (
                 <Link
                   className="entry-card"
-                  href={`/editor?id=${item.id}`}
+                  href={
+                    role === "reviewer"
+                      ? "/queue"
+                      : `/editor?id=${item.id}`
+                  }
                   key={item.id}
                 >
                   <div className="entry-content">
@@ -329,7 +436,10 @@ export default function Home() {
       )}
 
       {role === "brand_manager" && (
-        <section className="dashboard-next-steps card" aria-labelledby="readiness-heading">
+        <section
+          className="dashboard-next-steps card"
+          aria-labelledby="readiness-heading"
+        >
           <div>
             <p className="eyebrow">Content readiness</p>
             <h2 id="readiness-heading">Approved content and publishing</h2>

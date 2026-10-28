@@ -7,6 +7,7 @@ from app.db import get_db
 from app.dependencies import get_role, require_writer
 from app.models import Asset
 from app.schemas import AssetCreate, AssetResponse
+from app.services.audit import record_knowledge_change
 
 router = APIRouter(prefix="/assets", tags=["assets"])
 
@@ -18,6 +19,7 @@ def to_response(item: Asset) -> dict:
         "name": item.name,
         "description": item.description,
         "url": item.url or None,
+        "assetType": item.asset_type,
     }
 
 @router.get("", response_model=list[AssetResponse])
@@ -34,8 +36,11 @@ def create_asset(
         name=payload.name,
         description=payload.description,
         url=payload.url or "",
+        asset_type=payload.assetType,
     )
     db.add(item)
+    db.flush()
+    record_knowledge_change(db, role, "created", "asset", item.id, item.name)
     db.commit()
     db.refresh(item)
     return to_response(item)
@@ -54,6 +59,8 @@ def update_asset(
     item.name = payload.name
     item.description = payload.description
     item.url = payload.url or ""
+    item.asset_type = payload.assetType
+    record_knowledge_change(db, role, "updated", "asset", item.id, item.name)
     db.commit()
     db.refresh(item)
     return to_response(item)
@@ -68,6 +75,7 @@ def delete_asset(
     if item is None:
         raise HTTPException(status_code=404, detail="Asset not found")
 
+    record_knowledge_change(db, role, "deleted", "asset", item.id, item.name)
     db.delete(item)
     db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)

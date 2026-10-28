@@ -33,7 +33,7 @@ export function canEditContent(
   return (
     role === "creator" &&
     name === document.created_by &&
-    (document.status === "draft" || document.status === "changes_requested")
+    document.status === "draft"
   );
 }
 
@@ -75,7 +75,6 @@ export function getSubmissionBlockers(
   if (blockingFindings.length > 0) {
     blockers.push(
       `${blockingFindings.length} high-severity finding${blockingFindings.length === 1 ? "" : "s"} still need correction. Accepting without a replacement or dismissing a finding does not correct its text.`,
-      `${blockingFindings.length} high-severity finding${blockingFindings.length === 1 ? "" : "s"} still need correction. Dismissing a finding does not resolve it.`,
     );
   }
   return blockers;
@@ -86,7 +85,6 @@ export function contentStatusLabel(status: Content["status"]): string {
     draft: "Draft",
     self_checked: "Self-checked",
     in_review: "In Review",
-    changes_requested: "Changes Requested",
     approved: "Approved",
     ready_to_publish: "Ready to publish",
   };
