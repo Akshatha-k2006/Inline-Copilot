@@ -1,5 +1,4 @@
 import logging
-import re
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -22,7 +21,11 @@ logger = logging.getLogger(__name__)
 
 
 def _actor_name(value: str) -> str:
-    return re.sub(r"\s+\([^)]*\)$", "", value.strip())
+    actor = value.strip()
+    suffix_start = actor.rfind(" (")
+    if suffix_start == -1 or not actor.endswith(")"):
+        return actor
+    return actor[:suffix_start].rstrip()
 
 
 def _error(status: int, code: str, message: str) -> HTTPException:
