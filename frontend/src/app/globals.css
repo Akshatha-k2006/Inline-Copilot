@@ -225,6 +225,26 @@ a {
   width: 100%;
 }
 
+.editor-header,
+.editor-toolbar,
+.editor-meta {
+  align-items: flex-start;
+  flex-direction: column;
+}
+
+.title-input {
+  width: 100%;
+}
+
+.document-editor {
+  min-height: 420px;
+  font-size: 1rem;
+}
+
+.editor-actions .button {
+  flex: 1 1 100%;
+}
+
 /* Page layout */
 .container {
   width: 100%;
@@ -278,6 +298,40 @@ a {
 .demo-mode-banner span + span {
   padding-left: 10px;
   border-left: 1px solid #c9bdf7;
+}
+
+.backend-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.backend-status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #d29a28;
+}
+
+.backend-status-available .backend-status-dot {
+  background: #19945b;
+}
+
+.backend-status-unavailable .backend-status-dot {
+  background: #c94d55;
+}
+
+.backend-status-retry {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--teal);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
 }
 
 .demo-stat-grid {
@@ -1159,9 +1213,279 @@ a {
 
 .editor-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(340px, 0.95fr);
+  grid-template-columns: 190px minmax(0, 1fr) minmax(320px, 380px);
   align-items: start;
-  gap: 22px;
+  gap: 18px;
+}
+
+.editor-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.editor-header h1 {
+  margin-bottom: 6px;
+}
+
+.editor-header .lead {
+  margin: 0;
+  color: var(--muted);
+}
+
+.status-pill {
+  flex: none;
+  padding: 6px 11px;
+  border-radius: 999px;
+  background: #f0f2f8;
+  color: #39445f;
+  font-size: 0.82rem;
+  font-weight: 750;
+}
+
+.editor-document-list,
+.editor-main {
+  min-width: 0;
+}
+
+.editor-document-list {
+  position: sticky;
+  top: 24px;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  padding: 14px;
+}
+
+.document-list-item {
+  display: grid;
+  gap: 3px;
+  width: 100%;
+  padding: 11px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.document-list-item:hover,
+.document-list-item.active {
+  border-color: #d9d0ff;
+  background: #f5f2ff;
+}
+
+.document-list-item span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.editor-main {
+  display: grid;
+  gap: 14px;
+  padding: clamp(18px, 3vw, 30px);
+}
+
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.title-input {
+  min-width: 0;
+  flex: 1;
+  padding: 2px 0;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 1.35rem;
+  font-weight: 750;
+}
+
+.title-input:focus {
+  border-bottom-color: #9b83f2;
+  outline: 0;
+}
+
+.autosave-indicator,
+.editor-meta {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.editor-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.document-editor {
+  width: 100%;
+  min-height: min(62vh, 680px);
+  padding: 20px 2px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 1.08rem;
+  line-height: 1.85;
+  resize: vertical;
+}
+
+.document-editor:focus {
+  border-color: #9b83f2;
+  outline: 3px solid rgb(105 65 232 / 12%);
+}
+
+.editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.editor-side {
+  min-width: 0;
+}
+
+.editor-side .findings-panel {
+  position: sticky;
+  top: 24px;
+}
+
+.knowledge-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 14px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--border);
+}
+
+.knowledge-toolbar > input {
+  width: min(280px, 100%);
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  font: inherit;
+}
+
+.tab-list {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+}
+
+.tab {
+  padding: 10px 12px;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 650;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tab.active {
+  border-bottom-color: var(--teal);
+  color: var(--teal);
+}
+
+.tab span {
+  margin-left: 4px;
+  color: inherit;
+  font-size: 0.78rem;
+}
+
+.sample-data-label {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+
+.knowledge-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
+  gap: 14px;
+}
+
+.knowledge-card {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+}
+
+.knowledge-card h2 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.knowledge-card p {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.knowledge-form {
+  display: grid;
+  gap: 12px;
+}
+
+.inline-create {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.inline-create h2,
+.inline-create p {
+  width: 100%;
+  margin: 0;
+}
+
+.dismissal-form {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #f2d6a8;
+  border-radius: 9px;
+  background: #fff9ed;
+}
+
+.dismissal-form select {
+  min-height: 40px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #fff;
+  font: inherit;
+}
+
+.finding-card {
+  gap: 9px;
+  padding: 13px;
+}
+
+.finding-comparison > section,
+.finding-knowledge-source,
+.finding-fact-details {
+  padding: 8px 10px;
+}
+
+.finding-explanation {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
 .editor-card {
@@ -1919,9 +2243,23 @@ a {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .editor-document-list,
+  .editor-side .findings-panel {
+    position: static;
+  }
+
   .findings-panel {
     position: static;
     max-height: none;
+  }
+
+  .knowledge-toolbar {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+
+  .knowledge-toolbar > input {
+    width: 100%;
   }
 }
 

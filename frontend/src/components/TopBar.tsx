@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect } from "react";
 import { useRole } from "@/lib/role";
 import RoleSwitcher from "./RoleSwitcher";
 
@@ -19,12 +20,26 @@ const NAV = [
 
 export default function TopBar() {
   const pathname = usePathname();
-  const { role, user, label } = useRole();
+  const router = useRouter();
+  const { role, user, label, isRoleLoaded } = useRole();
   const visibleNav = NAV.filter((item) => {
     if (item.key === "queue") return role !== "creator";
     if (item.key === "audit") return role === "admin" || role === "brand_manager";
     return true;
   });
+
+  useEffect(() => {
+    if (!isRoleLoaded) return;
+    if (role === "creator" && (pathname === "/queue" || pathname === "/audit")) {
+      router.replace("/");
+    } else if (
+      role !== "admin" &&
+      role !== "brand_manager" &&
+      pathname === "/audit"
+    ) {
+      router.replace("/");
+    }
+  }, [isRoleLoaded, pathname, role, router]);
 
   return (
     <aside className="topbar">
@@ -45,10 +60,7 @@ export default function TopBar() {
               item.key === "home"
                 ? pathname === "/"
                 : item.key === "editor"
-                  ? pathname === "/editor" ||
-                    pathname.startsWith("/editor/") ||
-                    pathname === "/queue" ||
-                    pathname.startsWith("/queue/")
+                  ? pathname === "/editor" || pathname.startsWith("/editor/")
                   : item.key === "guidelines"
                     ? pathname === "/knowledge"
                     : item.key === "queue"

@@ -76,7 +76,7 @@ export default function Editor() {
       if (title !== document.title || body !== document.body) {
         saveDemoDraft(document.id, title, body, role, user);
       }
-      recordDemoReview(body, role, user);
+      recordDemoReview(document.id, body, role, user);
     }, "Review complete. Findings are based on the sample brand rules.");
   }
 
@@ -105,6 +105,8 @@ export default function Editor() {
     run(() => {
       const created = createDemoDocument("Untitled document", "Start writing your on-brand content here.", role, user);
       setSelectedDocumentId(created.id);
+      setTitle(created.title);
+      setBody(created.body);
       setCreating(false);
     }, "Document created.");
   }
@@ -153,7 +155,9 @@ export default function Editor() {
             spellCheck
           />
           <div className="editor-meta"><span>{body.trim().split(/\s+/).filter(Boolean).length} words · {readingTime} min read</span><span>{reviewState === "current" ? "Review is current" : "Review needed"}</span></div>
-          <HighlightedDraft body={body} findings={findings} selectedFindingId={selectedId} onSelect={onSelect} />
+          {findings.length > 0 && (
+            <HighlightedDraft body={body} findings={findings} selectedFindingId={selectedId} onSelect={onSelect} />
+          )}
           <div className="editor-actions">
             {canEdit && <button className="button" type="button" onClick={save}>Save draft</button>}
             {canEdit && <button className="button button-primary" type="button" onClick={reviewDraft}>Run full review</button>}

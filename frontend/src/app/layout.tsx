@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import "./globals.css";
 import { RoleProvider } from "@/lib/role";
 import TopBar from "@/components/TopBar";
+import BackendStatus from "@/components/BackendStatus";
 
 export const metadata: Metadata = {
   title: "Inline Copilot",
@@ -31,6 +32,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <strong>Demo Mode</strong>
               <span>Using sample data</span>
               <span>Authentication disabled</span>
+              <BackendStatus />
             </div>
             {children}
           </main>
