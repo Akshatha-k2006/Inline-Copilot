@@ -248,24 +248,17 @@ export default function FindingCard({
             </>
           ) : (
             <>
-              <button
-                type="button"
-                className="button button-primary"
-                onClick={() =>
-                  void resolve(
-                    "accepted",
-                    hasSuggestedReplacement ? finding.suggestion! : null,
-                  )
-                }
-                aria-label={
-                  hasSuggestedReplacement
-                    ? "Accept suggested correction"
-                    : "Accept finding without changing document text"
-                }
-                disabled={busy}
-              >
-                Accept
-              </button>
+              {hasSuggestedReplacement && (
+                <button
+                  type="button"
+                  className="button button-primary"
+                  onClick={() => void resolve("accepted", finding.suggestion!)}
+                  aria-label="Accept suggested correction"
+                  disabled={busy}
+                >
+                  Accept
+                </button>
+              )}
               <button
                 type="button"
                 className="button"

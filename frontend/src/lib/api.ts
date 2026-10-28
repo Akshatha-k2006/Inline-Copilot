@@ -139,9 +139,13 @@ async function request<T>(
       const data: unknown = await response.json();
       if (data && typeof data === "object") {
         const errorBody = data as Record<string, unknown>;
-        if (typeof errorBody.error === "string") code = errorBody.error;
-        if (typeof errorBody.message === "string") {
-          message = errorBody.message;
+        const detail =
+          data && typeof errorBody.detail === "object" && errorBody.detail
+            ? (errorBody.detail as Record<string, unknown>)
+            : errorBody;
+        if (typeof detail.error === "string") code = detail.error;
+        if (typeof detail.message === "string") {
+          message = detail.message;
         }
       }
     } catch {
@@ -166,9 +170,11 @@ export const api = {
     request<T>("PATCH", path, body, options),
   delete: <T>(path: string, options?: RequestOptions) =>
     request<T>("DELETE", path, undefined, options),
+
   health: (options?: RequestOptions) =>
     request<Health>("GET", "/api/health", undefined, options),
   seedSample: () => request<SeedResponse>("POST", "/api/seed/load"),
+
   listGuidelines: (options?: RequestOptions) =>
     request<ApiGuideline[]>("GET", "/api/guidelines", undefined, options),
   createGuideline: (body: Omit<ApiGuideline, "id">) =>
@@ -177,6 +183,7 @@ export const api = {
     request<ApiGuideline>("PUT", `/api/guidelines/${id}`, body),
   deleteGuideline: (id: number) =>
     request<void>("DELETE", `/api/guidelines/${id}`),
+
   listGlossary: (options?: RequestOptions) =>
     request<ApiGlossaryTerm[]>("GET", "/api/glossary", undefined, options),
   createGlossaryTerm: (body: Omit<ApiGlossaryTerm, "id">) =>
@@ -185,6 +192,7 @@ export const api = {
     request<ApiGlossaryTerm>("PUT", `/api/glossary/${id}`, body),
   deleteGlossaryTerm: (id: number) =>
     request<void>("DELETE", `/api/glossary/${id}`),
+
   listFacts: (options?: RequestOptions) =>
     request<ApiFact[]>("GET", "/api/facts", undefined, options),
   createFact: (body: Omit<ApiFact, "id" | "outdated">) =>
@@ -192,6 +200,7 @@ export const api = {
   updateFact: (id: number, body: Omit<ApiFact, "id" | "outdated">) =>
     request<ApiFact>("PUT", `/api/facts/${id}`, body),
   deleteFact: (id: number) => request<void>("DELETE", `/api/facts/${id}`),
+
   listAssets: (options?: RequestOptions) =>
     request<ApiAsset[]>("GET", "/api/assets", undefined, options),
   createAsset: (body: Omit<ApiAsset, "id">) =>
@@ -199,20 +208,24 @@ export const api = {
   updateAsset: (id: number, body: Omit<ApiAsset, "id">) =>
     request<ApiAsset>("PUT", `/api/assets/${id}`, body),
   deleteAsset: (id: number) => request<void>("DELETE", `/api/assets/${id}`),
-  reviewContent: (id: number) =>
-    request<ReviewResponse>("POST", `/api/content/${id}/review`),
-  updateFinding: (id: number, body: { action: "accept" | "edit" | "dismiss"; replacement?: string }) =>
-    request<FindingActionResponse>("PATCH", `/api/findings/${id}`, body),
-  submitContent: (id: number) =>
-    request<ContentStatusResponse>("POST", `/api/content/${id}/submit`),
+
   listContent: (options?: RequestOptions) =>
     request<Content[]>("GET", "/api/content", undefined, options),
-  getContent: (id: number, options?: RequestOptions) =>
-    request<Content>("GET", `/api/content/${id}`, undefined, options),
   createContent: (body: ContentDraft) =>
     request<Content>("POST", "/api/content", body),
+  getContent: (id: number, options?: RequestOptions) =>
+    request<Content>("GET", `/api/content/${id}`, undefined, options),
   updateContent: (id: number, body: ContentUpdate) =>
     request<Content>("PUT", `/api/content/${id}`, body),
+
+  reviewContent: (id: number) =>
+    request<ReviewResponse>("POST", `/api/content/${id}/review`),
+  updateFinding: (
+    id: number,
+    body: { action: "accept" | "edit" | "dismiss"; replacement?: string },
+  ) => request<FindingActionResponse>("PATCH", `/api/findings/${id}`, body),
+  submitContent: (id: number) =>
+    request<ContentStatusResponse>("POST", `/api/content/${id}/submit`),
   selfCheckContent: (id: number) =>
     request<ContentStatusResponse>("POST", `/api/content/${id}/self-check`),
   getContentFindings: (id: number, options?: RequestOptions) =>
@@ -235,7 +248,11 @@ export const api = {
     id: number,
     body: { decision: "approve" | "request_changes"; comment?: string },
   ) =>
-    request<ReviewDecisionResponse>("POST", `/api/content/${id}/decision`, body),
+    request<ReviewDecisionResponse>(
+      "POST",
+      `/api/content/${id}/decision`,
+      body,
+    ),
   markReadyToPublish: (id: number) =>
     request<ContentStatusResponse>(
       "POST",

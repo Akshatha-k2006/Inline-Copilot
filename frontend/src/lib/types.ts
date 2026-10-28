@@ -39,6 +39,7 @@ export interface ContentDraft {
   body: string;
 }
 
+<<<<<<< HEAD
 export interface ContentUpdate extends ContentDraft {
   version: number;
 }
@@ -50,6 +51,10 @@ export interface ContentAuditEvent {
   action: string;
   details: Record<string, unknown>;
   created_at: string;
+=======
+export interface ContentResponse extends Content {
+  updated_at: string;
+>>>>>>> 5f147fc0427cbf068a8b772a050824737fe6a82d
 }
 
 export interface SeedResponse {

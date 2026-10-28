@@ -45,6 +45,7 @@ class ContentStatusResponse(BaseModel):
     content_version: int
 
 
+<<<<<<< HEAD
 class ContentCreateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=250)
     content_type: str = Field(min_length=1, max_length=100)
@@ -74,12 +75,21 @@ class ContentResponse(BaseModel):
     version: int
     reviewed_version: int | None
     reviewed_at: datetime | None
+=======
+class ContentResponse(BaseModel):
+    id: int
+    title: str
+    body: str
+    status: str
+    version: int
+>>>>>>> 5f147fc0427cbf068a8b772a050824737fe6a82d
     created_by: str
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
 
+<<<<<<< HEAD
 class AuditEventResponse(BaseModel):
     id: int
     content_id: int | None
@@ -89,6 +99,13 @@ class AuditEventResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+=======
+class ContentUpdate(BaseModel):
+    title: str
+    body: str
+
+    model_config = ConfigDict(extra="forbid")
+>>>>>>> 5f147fc0427cbf068a8b772a050824737fe6a82d
 
 
 class ReviewDecisionRequest(BaseModel):

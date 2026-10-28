@@ -5,7 +5,7 @@ export interface DemoReviewSnapshot {
   document_version: number;
   body: string;
   reviewed_at: string;
-  scope: "known_demo_checks";
+  scope: "known_demo_checks" | "backend_rules";
 }
 
 export interface WorkflowFinding extends Finding {
