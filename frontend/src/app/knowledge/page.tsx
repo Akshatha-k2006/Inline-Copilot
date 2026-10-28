@@ -11,11 +11,9 @@ import {
 import SampleBrandButton from "@/components/SampleBrandButton";
 import { useRole } from "@/lib/role";
 import { canManageKnowledge } from "@/lib/workflow";
-import {
-  removeMockKnowledgeItem,
-  saveMockKnowledgeItem,
-  useDemoWorkspace,
-} from "@/lib/mock-data";
+import { ApiError, api } from "@/lib/api";
+import { EMPTY_BRAND_DATA } from "@/lib/brand-data";
+import { loadBrandData } from "@/lib/knowledge";
 
 type TabKey = keyof BrandData;
 type FormValues = Record<string, string>;
@@ -39,7 +37,7 @@ const EMPTY_DESCRIPTIONS: Record<TabKey, string> = {
   glossary:
     "Glossary entries define preferred terms, approved wording, and words or phrases to avoid.",
   facts:
-    "Facts contain approved claims with an owner and review date. Demo facts and their sources are fictional and not verified.",
+    "Facts contain approved claims with an owner and review date.",
   assets:
     "Assets hold approved brand resources such as logos, imagery, and usage notes.",
 };
@@ -62,37 +60,21 @@ const FIELDS: Record<
       type: "textarea",
       required: true,
     },
-    { name: "kind", label: "Category (optional)" },
   ],
   glossary: [
     { name: "term", label: "Term", required: true },
     { name: "definition", label: "Definition", type: "textarea", required: true },
     { name: "preferredTerm", label: "Preferred wording" },
-    {
-      name: "status",
-      label: "Terminology status",
-      type: "select",
-      required: true,
-      options: [
-        { value: "prohibited", label: "Prohibited" },
-        { value: "approved", label: "Approved" },
-      ],
-    },
-    { name: "guidelineId", label: "Related guideline ID (optional)" },
   ],
   facts: [
     { name: "claim", label: "Approved fact", type: "textarea", required: true },
     { name: "owner", label: "Owner", required: true },
     { name: "reviewDate", label: "Review date", type: "date", required: true },
-    { name: "source", label: "Source reference (optional)" },
-    { name: "lastReviewed", label: "Last reviewed (optional)", type: "date" },
   ],
   assets: [
     { name: "name", label: "Asset name", required: true },
     { name: "description", label: "Description", type: "textarea", required: true },
     { name: "url", label: "Asset URL (optional)" },
-    { name: "kind", label: "Asset type (optional)" },
-    { name: "notes", label: "Usage notes (optional)", type: "textarea" },
   ],
 };
 
@@ -122,22 +104,42 @@ function displayDate(date: string): string {
 }
 
 export default function KnowledgeBasePage() {
-  const workspace = useDemoWorkspace();
   const { role } = useRole();
   const mayManageKnowledge = canManageKnowledge(role);
-  const data = workspace.knowledge;
+  const [data, setData] = useState<BrandData>(EMPTY_BRAND_DATA);
   const [activeTab, setActiveTab] = useState<TabKey>("guidelines");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [values, setValues] = useState<FormValues>({});
   const [formOpen, setFormOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [loadError, setLoadError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [refreshVersion, setRefreshVersion] = useState(0);
 
   useEffect(() => {
     const requestedTab = new URLSearchParams(window.location.search).get("tab");
     const matchingTab = TABS.find((tab) => tab.queryValue === requestedTab);
     if (matchingTab) setActiveTab(matchingTab.key);
   }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true);
+    setLoadError("");
+    void loadBrandData({ signal: controller.signal })
+      .then(setData)
+      .catch((cause: unknown) => {
+        if (cause instanceof DOMException && cause.name === "AbortError") return;
+        setLoadError(
+          cause instanceof Error ? cause.message : "Could not load brand knowledge.",
+        );
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false);
+      });
+    return () => controller.abort();
+  }, [role, refreshVersion]);
 
   function beginAdd() {
     if (!mayManageKnowledge) return;
@@ -159,7 +161,7 @@ export default function KnowledgeBasePage() {
     setFormOpen(true);
   }
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
     setError("");
@@ -168,23 +170,85 @@ export default function KnowledgeBasePage() {
     );
 
     try {
-      saveMockKnowledgeItem(activeTab, editingId, payload, role);
+      const id = editingId === null ? undefined : Number(editingId);
+      switch (activeTab) {
+        case "guidelines": {
+          const item = { title: payload.title, description: payload.description };
+          if (id === undefined) await api.createGuideline(item);
+          else await api.updateGuideline(id, item);
+          break;
+        }
+        case "glossary": {
+          const item = {
+            term: payload.term,
+            definition: payload.definition,
+            preferredTerm: payload.preferredTerm || null,
+          };
+          if (id === undefined) await api.createGlossaryTerm(item);
+          else await api.updateGlossaryTerm(id, item);
+          break;
+        }
+        case "facts": {
+          const item = {
+            claim: payload.claim,
+            owner: payload.owner,
+            reviewDate: payload.reviewDate,
+          };
+          if (id === undefined) await api.createFact(item);
+          else await api.updateFact(id, item);
+          break;
+        }
+        case "assets": {
+          const item = {
+            name: payload.name,
+            description: payload.description,
+            url: payload.url || null,
+          };
+          if (id === undefined) await api.createAsset(item);
+          else await api.updateAsset(id, item);
+          break;
+        }
+      }
       setFormOpen(false);
       setEditingId(null);
+      setRefreshVersion((version) => version + 1);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not save this entry.");
+      setError(
+        err instanceof ApiError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Could not save this entry.",
+      );
     } finally {
       setSaving(false);
     }
   }
 
-  function removeItem(id: string) {
+  async function removeItem(id: string) {
     setSaving(true);
     setError("");
     try {
-      removeMockKnowledgeItem(activeTab, id, role);
+      const itemId = Number(id);
+      switch (activeTab) {
+        case "guidelines":
+          await api.deleteGuideline(itemId);
+          break;
+        case "glossary":
+          await api.deleteGlossaryTerm(itemId);
+          break;
+        case "facts":
+          await api.deleteFact(itemId);
+          break;
+        case "assets":
+          await api.deleteAsset(itemId);
+          break;
+      }
+      setRefreshVersion((version) => version + 1);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not delete this entry.");
+      setError(
+        err instanceof Error ? err.message : "Could not delete this entry.",
+      );
     } finally {
       setSaving(false);
     }
@@ -199,18 +263,27 @@ export default function KnowledgeBasePage() {
         <div>
           <h1>Guidelines &amp; knowledge</h1>
           <p className="lead">
-            Manage demonstration guidelines, glossary terms, facts and brand assets.
+            Manage guidelines, glossary terms, facts and brand assets saved by the backend.
           </p>
         </div>
-        <SampleBrandButton />
+        <SampleBrandButton onLoaded={() => setRefreshVersion((version) => version + 1)} />
       </div>
       <p className="mock-data-notice" role="note">
-        Fictional demonstration records only. Facts, source references, owners and review dates are not verified. Changes are local to this browser and are not sent to a backend.
+        Sample brand records are fictional. Changes made here are sent to the configured backend and stored in its database.
       </p>
-      {workspace.persistenceWarning && (
+      {loadError && (
         <p className="form-error" role="alert">
-          Saved knowledge records could not be loaded or saved in this browser: {workspace.persistenceWarning}
+          Brand knowledge could not be loaded: {loadError}
         </p>
+      )}
+      {loadError && (
+        <button
+          type="button"
+          className="button"
+          onClick={() => setRefreshVersion((version) => version + 1)}
+        >
+          Retry loading
+        </button>
       )}
       {!mayManageKnowledge && (
         <p className="editor-notice" role="note">
@@ -256,7 +329,7 @@ export default function KnowledgeBasePage() {
         <div className="panel-heading">
           <div>
             <h2>{currentTab.label}</h2>
-            <p className="muted">Changes are shared with mock review results and persisted in this browser.</p>
+            <p className="muted">Changes are saved through the backend API.</p>
           </div>
           {mayManageKnowledge && (
             <button
@@ -305,20 +378,6 @@ export default function KnowledgeBasePage() {
                       </option>
                     ))}
                   </select>
-                ) : field.name === "guidelineId" ? (
-                  <select
-                    value={values[field.name] ?? ""}
-                    onChange={(event) =>
-                      setValues({ ...values, [field.name]: event.target.value })
-                    }
-                  >
-                    <option value="">No related guideline</option>
-                    {data.guidelines.map((guideline) => (
-                      <option key={guideline.id} value={guideline.id}>
-                        {guideline.title}
-                      </option>
-                    ))}
-                  </select>
                 ) : (
                   <input
                     type={field.type ?? "text"}
@@ -351,15 +410,15 @@ export default function KnowledgeBasePage() {
           </form>
         )}
 
-        {!workspace.isHydrated ? (
+        {loading ? (
           <p className="editor-notice" role="status">
-            Loading saved {currentTab.label.toLowerCase()}...
+            Loading {currentTab.label.toLowerCase()} from the backend...
           </p>
-        ) : items.length === 0 && workspace.persistenceWarning ? (
+        ) : loadError ? (
           <div className="empty-state" role="alert">
             <h3>{currentTab.label} could not be loaded</h3>
             <p>
-              Saved demonstration records are unavailable, so this section cannot confirm whether it is empty.
+              The backend did not return this collection, so it cannot be treated as empty.
             </p>
           </div>
         ) : items.length === 0 ? (
@@ -367,8 +426,8 @@ export default function KnowledgeBasePage() {
             <h3>No {currentTab.label.toLowerCase()} yet</h3>
             <p>
               {mayManageKnowledge
-                ? `${EMPTY_DESCRIPTIONS[activeTab]} Add your first ${currentTab.itemLabel}, or load the sample brand to see the demonstration records.`
-                : `${EMPTY_DESCRIPTIONS[activeTab]} No demonstration records are available here yet. Switch to Brand Manager or Admin using the demo role selector to add or load records.`}
+                ? `${EMPTY_DESCRIPTIONS[activeTab]} Add your first ${currentTab.itemLabel}, or load the sample brand.`
+                : `${EMPTY_DESCRIPTIONS[activeTab]} No records are available yet. Switch to Brand Manager or Admin to manage knowledge.`}
             </p>
             {mayManageKnowledge && (
               <div className="empty-actions">
@@ -379,7 +438,9 @@ export default function KnowledgeBasePage() {
                 >
                   Add your first {currentTab.itemLabel}
                 </button>
-                <SampleBrandButton />
+                <SampleBrandButton
+                  onLoaded={() => setRefreshVersion((version) => version + 1)}
+                />
               </div>
             )}
           </div>
@@ -392,9 +453,6 @@ export default function KnowledgeBasePage() {
                     <>
                       <h3>{(item as Guideline).title}</h3>
                       <p>{(item as Guideline).description}</p>
-                      {(item as Guideline).kind && (
-                        <p className="entry-meta">Category: {(item as Guideline).kind}</p>
-                      )}
                     </>
                   )}
                   {activeTab === "glossary" && (
@@ -404,19 +462,6 @@ export default function KnowledgeBasePage() {
                       <p className="entry-meta">
                         Preferred wording: <strong>{(item as GlossaryTerm).preferredTerm || "None"}</strong>
                       </p>
-                      <p className="entry-meta">
-                        Status: <strong>{(item as GlossaryTerm).status ?? "unspecified"}</strong>
-                      </p>
-                      {(item as GlossaryTerm).guidelineId && (
-                        <p className="entry-meta">
-                          Related guideline:{" "}
-                          <strong>
-                            {data.guidelines.find(
-                              (guideline) => guideline.id === (item as GlossaryTerm).guidelineId,
-                            )?.title ?? `#${(item as GlossaryTerm).guidelineId}`}
-                          </strong>
-                        </p>
-                      )}
                     </>
                   )}
                   {activeTab === "facts" && (
@@ -432,18 +477,9 @@ export default function KnowledgeBasePage() {
                             {displayDate((item as BrandFact).reviewDate)}
                           </strong>
                         </span>
-                        {isOutdated((item as BrandFact).reviewDate) && (
+                        {((item as BrandFact).outdated ??
+                          isOutdated((item as BrandFact).reviewDate)) && (
                           <span className="outdated-badge">Outdated</span>
-                        )}
-                        {(item as BrandFact).source && (
-                          <span>
-                            Source: <strong>{(item as BrandFact).source}</strong>
-                          </span>
-                        )}
-                        {(item as BrandFact).lastReviewed && (
-                          <span>
-                            Last reviewed: <strong>{displayDate((item as BrandFact).lastReviewed!)}</strong>
-                          </span>
                         )}
                       </div>
                     </>
@@ -454,13 +490,6 @@ export default function KnowledgeBasePage() {
                       <p>{(item as BrandAsset).description}</p>
                       {(item as BrandAsset).url && (
                         <p className="entry-meta">{(item as BrandAsset).url}</p>
-                      )}
-                      {(item as BrandAsset).kind && (
-                        <p className="entry-meta">Type: {(item as BrandAsset).kind}</p>
-                      )}
-                      {(item as BrandAsset).notes &&
-                        (item as BrandAsset).notes !== (item as BrandAsset).description && (
-                        <p className="entry-meta">Notes: {(item as BrandAsset).notes}</p>
                       )}
                     </>
                   )}

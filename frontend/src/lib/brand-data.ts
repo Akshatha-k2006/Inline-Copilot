@@ -26,6 +26,7 @@ export interface BrandFact {
   claim: string;
   owner: string;
   reviewDate: string;
+  outdated?: boolean;
   source?: string;
   lastReviewed?: string;
 }

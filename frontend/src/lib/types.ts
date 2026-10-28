@@ -35,16 +35,100 @@ export interface ContentDraft {
 }
 
 export interface SeedResponse {
-  content_id: number;
+  message: string;
+  brand: string;
+  counts: {
+    guidelines: number;
+    terms: number;
+    facts: number;
+    assets: number;
+    content: number;
+  };
+  expired_fact_id: number;
+  sample_content_id: number;
+}
+
+export interface ApiGuideline {
+  id: number;
+  title: string;
+  description: string;
+}
+
+export interface ApiGlossaryTerm {
+  id: number;
+  term: string;
+  definition: string;
+  preferredTerm: string | null;
+}
+
+export interface ApiFact {
+  id: number;
+  claim: string;
+  owner: string;
+  reviewDate: string;
+  outdated: boolean;
+}
+
+export interface ApiAsset {
+  id: number;
+  name: string;
+  description: string;
+  url: string | null;
+}
+
+export interface BackendFinding {
+  id: number;
+  check: string;
+  severity: string;
+  message: string;
+  evidence: {
+    matched_text: string;
+    source: Record<string, unknown>;
+    requires_manual_review: boolean;
+    suggestion_source?: Record<string, unknown>;
+  };
+  suggested_fix: string | null;
+  start_offset: number | null;
+  end_offset: number | null;
+  status: string;
 }
 
 export interface ReviewResponse {
+  content_id: number;
   content_version: number;
-  findings: Finding[];
-  engine?: {
-    rules?: string;
-    llm?: string;
+  findings: BackendFinding[];
+  engine: {
+    rules: string;
+    llm: string;
   };
+}
+
+export interface FindingActionResponse {
+  content_id: number;
+  content_version: number;
+  finding: BackendFinding;
+}
+
+export interface ContentStatusResponse {
+  content_id: number;
+  status: string;
+  content_version: number;
+}
+
+export interface ReviewComment {
+  id: number;
+  author: string;
+  body: string;
+  created_at: string;
+}
+
+export interface ReviewDecisionResponse extends ContentStatusResponse {
+  comment: ReviewComment | null;
+}
+
+export interface ContentCommentsResponse {
+  content_id: number;
+  comments: ReviewComment[];
 }
 
 export interface FindingSource {

@@ -32,7 +32,7 @@ Backend:
 ```
 cd backend
 pip install -r requirements.txt
-cp ../.env .env      # then fill in values
+cp .env.example .env # then fill in private values
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -44,11 +44,16 @@ npm install
 npm run dev
 ```
 
-The frontend reads `NEXT_PUBLIC_API_URL` (default `http://localhost:8000`).
+The frontend reads `NEXT_PUBLIC_API_BASE_URL` (default `http://localhost:8000`).
+Copy `frontend/.env.example` to `frontend/.env.local` for local frontend
+configuration. Set the public backend URL there for local development and to
+the deployed HTTPS backend URL in the frontend deployment environment.
 
 ## Environment variables
 
-See [.env.example](.env.example). Never commit real keys.
+See [backend/.env.example](backend/.env.example) for private backend
+configuration and [frontend/.env.example](frontend/.env.example) for the
+public API URL. Never commit real keys.
 
 ## How we work
 

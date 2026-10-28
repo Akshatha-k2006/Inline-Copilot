@@ -1,16 +1,18 @@
 # Knowledge base API
 
 The frontend sends `X-Role` and `X-User` on every request. Resource identifiers
-are strings. JSON errors use `{ "error": "short_code", "message": "..." }`.
+are integer database IDs. These headers identify a demo role and actor; they
+are not an authentication mechanism. JSON errors use
+`{ "error": "short_code", "message": "..." }`.
 
 ## Collections
 
-| Resource | Collection route | Fields |
-| --- | --- | --- |
-| Guidelines | `/api/guidelines` | `title`, `description` |
-| Glossary terms | `/api/glossary` | `term`, `definition`, `preferredTerm` |
-| Facts | `/api/facts` | `claim`, `owner`, `reviewDate` (`YYYY-MM-DD`) |
-| Assets | `/api/assets` | `name`, `description`, optional `url` |
+| Resource | Collection route | Request fields | Response fields |
+| --- | --- | --- | --- |
+| Guidelines | `/api/guidelines` | `title`, `description` | `id`, `title`, `description` |
+| Glossary terms | `/api/glossary` | `term`, `definition`, optional `preferredTerm` | `id`, `term`, `definition`, nullable `preferredTerm` |
+| Facts | `/api/facts` | `claim`, `owner`, `reviewDate` (`YYYY-MM-DD`) | `id`, `claim`, `owner`, `reviewDate`, `outdated` |
+| Assets | `/api/assets` | `name`, `description`, optional `url` | `id`, `name`, `description`, nullable `url` |
 
 Each item returned by the API includes an `id`.
 
@@ -18,9 +20,15 @@ Each item returned by the API includes an `id`.
 - `POST /api/{collection}` creates an item and returns it with status `201`.
 - `PUT /api/{collection}/{id}` replaces an item and returns the updated item.
 - `DELETE /api/{collection}/{id}` removes an item and returns status `204`.
-- `POST /api/brand/sample` replaces the current knowledge base with the supplied
-  `{ guidelines, glossary, facts, assets }` sample payload.
+- `POST /api/seed/load` reloads the fictional brand from `seed/brand.json`,
+  replacing all knowledge-base records and sample content with ID `1`. This
+  operation is restricted to Admin and Brand Manager roles.
 - `GET /api/health` returns `{ "status": "ok" }`.
+
+These collection and seed routes query or modify SQLAlchemy records in the
+configured database. The sample seed route is destructive to the knowledge
+collections and the content record with ID `1`; it preserves other content
+records.
 
 ## Content review
 
@@ -321,3 +329,22 @@ succeeds. This browser-local history is not authenticated, tamper-proof, or
 server-persistent. A future backend integration should provide a durable
 content-scoped audit API and server-verified actor identity rather than relying
 on the demo role selector.
+
+## Implemented API boundaries and frontend integration gaps
+
+The backend currently implements health, knowledge collection CRUD, seed load,
+content review, finding actions, workflow submit/decision/ready-to-publish, and
+review-comment routes described above. Content review and workflow records use
+the configured SQLAlchemy database.
+
+There is no backend route to list or read content, create or directly edit a
+draft, or read audit events. The transition service supports `draft` to
+`self_checked`, but no HTTP route exposes that transition; therefore the
+existing submit route cannot be reached through the HTTP API from a newly
+created `draft`. The frontend must not present browser-local content, queue,
+or audit records as persisted backend records until those APIs exist.
+
+The backend accepts demo role headers, not authenticated identities. Knowledge
+write operations and workflow decisions enforce role permissions server-side;
+the seed load route is restricted to Admin and Brand Manager. Review execution
+and finding actions currently do not enforce role authorization.
