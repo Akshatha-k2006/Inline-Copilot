@@ -95,16 +95,22 @@ export interface DemoSubmissionSnapshot {
   kind: "submitted" | "resubmitted";
 }
 
-export type DemoKnowledgeItem = Guideline | GlossaryTerm | BrandFact | BrandAsset;
+export type DemoKnowledgeItem =
+  | Guideline
+  | GlossaryTerm
+  | BrandFact
+  | BrandAsset;
 
 const initialDocument: Content = {
   ...contentFixture["POST /api/content"],
   status: "draft",
 };
-const initialHistory = (auditFixture.response as Omit<
-  DemoAuditEntry,
-  "content_id" | "content_title"
->[]).map((entry) => ({
+const initialHistory = (
+  auditFixture.response as Omit<
+    DemoAuditEntry,
+    "content_id" | "content_title"
+  >[]
+).map((entry) => ({
   ...entry,
   content_id: initialDocument.id,
   content_title: initialDocument.title,
@@ -164,9 +170,10 @@ function persistWorkspace(nextWorkspace: DemoWorkspace): void {
   }
 }
 
-function isStoredWorkspace(
-  value: unknown,
-): value is Omit<DemoWorkspace, "persistenceWarning" | "isHydrated"> & {
+function isStoredWorkspace(value: unknown): value is Omit<
+  DemoWorkspace,
+  "persistenceWarning" | "isHydrated"
+> & {
   comments?: DemoReviewComment[];
   submissions?: DemoSubmissionSnapshot[];
   reviews?: DemoReviewSnapshot[];
@@ -176,13 +183,13 @@ function isStoredWorkspace(
   const stored = value as Partial<DemoWorkspace>;
   return Boolean(
     stored.knowledge &&
-      Array.isArray(stored.knowledge.guidelines) &&
-      Array.isArray(stored.knowledge.glossary) &&
-      Array.isArray(stored.knowledge.facts) &&
-      Array.isArray(stored.knowledge.assets) &&
-      Array.isArray(stored.documents) &&
-      Array.isArray(stored.findings) &&
-      Array.isArray(stored.history),
+    Array.isArray(stored.knowledge.guidelines) &&
+    Array.isArray(stored.knowledge.glossary) &&
+    Array.isArray(stored.knowledge.facts) &&
+    Array.isArray(stored.knowledge.assets) &&
+    Array.isArray(stored.documents) &&
+    Array.isArray(stored.findings) &&
+    Array.isArray(stored.history),
   );
 }
 
@@ -199,7 +206,8 @@ function hydrateWorkspace(): void {
       const isLegacyWorkspace = !Array.isArray(parsed.reviews);
       const documents = isLegacyWorkspace
         ? parsed.documents.map((document) =>
-            document.id === initialDocument.id && document.status === "in_review"
+            document.id === initialDocument.id &&
+            document.status === "in_review"
               ? { ...document, status: "draft" as const }
               : document,
           )
@@ -212,7 +220,8 @@ function hydrateWorkspace(): void {
           content_id: entry.content_id ?? initialDocument.id,
           content_title:
             entry.content_title ??
-            documents.find((document) => document.id === initialDocument.id)?.title ??
+            documents.find((document) => document.id === initialDocument.id)
+              ?.title ??
             initialDocument.title,
         })),
         comments: parsed.comments ?? [],
@@ -220,8 +229,8 @@ function hydrateWorkspace(): void {
         reviews: parsed.reviews ?? [],
         findingsBody:
           parsed.findingsBody ??
-          (documents.find((document) => document.id === initialDocument.id)?.body ===
-          DEMO_DRAFT.body
+          (documents.find((document) => document.id === initialDocument.id)
+            ?.body === DEMO_DRAFT.body
             ? DEMO_DRAFT.body
             : null),
         persistenceWarning: null,
@@ -284,8 +293,10 @@ export function createDemoDocument(
     throw new Error("Enter a document title and some content.");
   }
   const id =
-    workspace.documents.reduce((largest, item) => Math.max(largest, item.id), 0) +
-    1;
+    workspace.documents.reduce(
+      (largest, item) => Math.max(largest, item.id),
+      0,
+    ) + 1;
   const at = new Date().toISOString();
   const document: Content = {
     id,
@@ -327,16 +338,26 @@ export function deleteDemoDocument(
     throw new Error("Only the document owner can delete a draft.");
   }
   if (document.status !== "draft" && document.status !== "changes_requested") {
-    throw new Error("Only drafts or documents returned for changes can be deleted.");
+    throw new Error(
+      "Only drafts or documents returned for changes can be deleted.",
+    );
   }
   const at = new Date().toISOString();
   commitWorkspace({
     ...workspace,
     documents: workspace.documents.filter((item) => item.id !== documentId),
-    findings: workspace.findings.filter((item) => item.content_id !== documentId),
-    comments: workspace.comments.filter((item) => item.document_id !== documentId),
-    submissions: workspace.submissions.filter((item) => item.document_id !== documentId),
-    reviews: workspace.reviews.filter((item) => item.document_id !== documentId),
+    findings: workspace.findings.filter(
+      (item) => item.content_id !== documentId,
+    ),
+    comments: workspace.comments.filter(
+      (item) => item.document_id !== documentId,
+    ),
+    submissions: workspace.submissions.filter(
+      (item) => item.document_id !== documentId,
+    ),
+    reviews: workspace.reviews.filter(
+      (item) => item.document_id !== documentId,
+    ),
     history: appendHistory(
       workspace.history,
       role,
@@ -375,8 +396,7 @@ export function getContentAuditEvents(
   return data.history
     .filter((entry) => entry.content_id === contentId)
     .sort(
-      (left, right) =>
-        left.at.localeCompare(right.at) || left.id - right.id,
+      (left, right) => left.at.localeCompare(right.at) || left.id - right.id,
     );
 }
 
@@ -407,7 +427,8 @@ function appendHistory(
     {
       id: nextId,
       content_id: contentId,
-      content_title: metadata.content_title ?? content?.title ?? `Document #${contentId}`,
+      content_title:
+        metadata.content_title ?? content?.title ?? `Document #${contentId}`,
       at,
       actor: actorName(user),
       role,
@@ -476,17 +497,18 @@ function commitKnowledge(knowledge: BrandData): void {
     workspace.findings.map((finding) => [finding.id, finding]),
   );
   const currentBody =
-    workspace.documents.find((document) => document.id === DEMO_DRAFT.id)?.body ??
-    DEMO_DRAFT.body;
+    workspace.documents.find((document) => document.id === DEMO_DRAFT.id)
+      ?.body ?? DEMO_DRAFT.body;
   const refreshed = getDemoFindings(currentBody, knowledge);
   const findings = refreshed.map((finding) => {
     const previous = currentFindingsById.get(finding.id);
     return previous
       ? {
           ...finding,
-          status: previous.status === "dismissed"
-            ? ("dismissed" as const)
-            : ("open" as const),
+          status:
+            previous.status === "dismissed"
+              ? ("dismissed" as const)
+              : ("open" as const),
           final_text: previous.final_text,
         }
       : finding;
@@ -507,12 +529,16 @@ export function saveMockKnowledgeItem(
   role: Role,
 ): void {
   if (!canManageKnowledge(role)) {
-    throw new Error("Only a brand manager or admin can manage knowledge records.");
+    throw new Error(
+      "Only a brand manager or admin can manage knowledge records.",
+    );
   }
   const id = editingId ?? allocateKnowledgeId(collection);
 
   if (collection === "guidelines") {
-    const existing = workspace.knowledge.guidelines.find((item) => item.id === id);
+    const existing = workspace.knowledge.guidelines.find(
+      (item) => item.id === id,
+    );
     const item: Guideline = {
       id,
       title: values.title ?? "",
@@ -520,14 +546,18 @@ export function saveMockKnowledgeItem(
       kind: values.kind || existing?.kind,
     };
     const guidelines = existing
-      ? workspace.knowledge.guidelines.map((current) => current.id === id ? item : current)
+      ? workspace.knowledge.guidelines.map((current) =>
+          current.id === id ? item : current,
+        )
       : [...workspace.knowledge.guidelines, item];
     commitKnowledge({ ...workspace.knowledge, guidelines });
     return;
   }
 
   if (collection === "glossary") {
-    const existing = workspace.knowledge.glossary.find((item) => item.id === id);
+    const existing = workspace.knowledge.glossary.find(
+      (item) => item.id === id,
+    );
     const item: GlossaryTerm = {
       id,
       term: values.term ?? "",
@@ -537,7 +567,9 @@ export function saveMockKnowledgeItem(
       guidelineId: values.guidelineId || undefined,
     };
     const glossary = existing
-      ? workspace.knowledge.glossary.map((current) => current.id === id ? item : current)
+      ? workspace.knowledge.glossary.map((current) =>
+          current.id === id ? item : current,
+        )
       : [...workspace.knowledge.glossary, item];
     commitKnowledge({ ...workspace.knowledge, glossary });
     return;
@@ -554,7 +586,9 @@ export function saveMockKnowledgeItem(
       lastReviewed: values.lastReviewed || undefined,
     };
     const facts = existing
-      ? workspace.knowledge.facts.map((current) => current.id === id ? item : current)
+      ? workspace.knowledge.facts.map((current) =>
+          current.id === id ? item : current,
+        )
       : [...workspace.knowledge.facts, item];
     commitKnowledge({ ...workspace.knowledge, facts });
     return;
@@ -570,7 +604,9 @@ export function saveMockKnowledgeItem(
     notes: values.notes || undefined,
   };
   const assets = existing
-    ? workspace.knowledge.assets.map((current) => current.id === id ? item : current)
+    ? workspace.knowledge.assets.map((current) =>
+        current.id === id ? item : current,
+      )
     : [...workspace.knowledge.assets, item];
   commitKnowledge({ ...workspace.knowledge, assets });
 }
@@ -581,12 +617,16 @@ export function removeMockKnowledgeItem(
   role: Role,
 ): void {
   if (!canManageKnowledge(role)) {
-    throw new Error("Only a brand manager or admin can manage knowledge records.");
+    throw new Error(
+      "Only a brand manager or admin can manage knowledge records.",
+    );
   }
   if (collection === "guidelines") {
     commitKnowledge({
       ...workspace.knowledge,
-      guidelines: workspace.knowledge.guidelines.filter((item) => item.id !== id),
+      guidelines: workspace.knowledge.guidelines.filter(
+        (item) => item.id !== id,
+      ),
       glossary: workspace.knowledge.glossary.map((term) =>
         term.guidelineId === id ? { ...term, guidelineId: undefined } : term,
       ),
@@ -618,7 +658,9 @@ export function resetMockKnowledge(role: Role): void {
 
 export function resetDemoWorkspace(role: Role): void {
   if (!canManageKnowledge(role)) {
-    throw new Error("Only a brand manager or admin can reset the demonstration workspace.");
+    throw new Error(
+      "Only a brand manager or admin can reset the demonstration workspace.",
+    );
   }
   commitWorkspace({
     knowledge: cloneBrandData(initialKnowledge),
@@ -644,10 +686,13 @@ export function saveDemoDraft(
   const document = workspace.documents.find((item) => item.id === documentId);
   if (!document) throw new Error("The demonstration document is unavailable.");
   if (!canEditContent(role, actorName(user), document)) {
-    throw new Error("Only the creator can edit their own draft or requested changes.");
+    throw new Error(
+      "Only the creator can edit their own draft or requested changes.",
+    );
   }
   const normalizedTitle = title.trim();
-  if (document.title === normalizedTitle && document.body === body) return document;
+  if (document.title === normalizedTitle && document.body === body)
+    return document;
 
   const updated: Content = {
     ...document,
@@ -698,7 +743,9 @@ export function resetDemoDocument(
     (item) => item.id === initialDocument.id,
   );
   if (!existing || !canEditContent(role, actorName(user), existing)) {
-    throw new Error("Only the creator can reset their editable demonstration draft.");
+    throw new Error(
+      "Only the creator can reset their editable demonstration draft.",
+    );
   }
   const at = new Date().toISOString();
   const document: Content = {
@@ -738,7 +785,9 @@ export function resetDemoDocument(
     ),
     findings: [...findings, ...retainedResolved],
     findingsBody: null,
-    reviews: workspace.reviews.filter((review) => review.document_id !== document.id),
+    reviews: workspace.reviews.filter(
+      (review) => review.document_id !== document.id,
+    ),
     history: appendHistory(
       workspace.history,
       role,
@@ -761,7 +810,11 @@ export function transitionDemoDocument(
   user: string,
   comment = "",
 ): Content {
-  if (!["submit", "resubmit", "approve", "request_changes", "reject"].includes(action)) {
+  if (
+    !["submit", "resubmit", "approve", "request_changes", "reject"].includes(
+      action,
+    )
+  ) {
     throw new Error("Unsupported workflow transition.");
   }
   const document = workspace.documents.find((item) => item.id === documentId);
@@ -829,7 +882,9 @@ export function transitionDemoDocument(
       throw new Error("Only a Reviewer can make a review decision.");
     }
     if (document.status !== "in_review") {
-      throw new Error("Only content currently in review can receive a decision.");
+      throw new Error(
+        "Only content currently in review can receive a decision.",
+      );
     }
     if (action === "approve") {
       const blockers = getWorkflowBlockersForDocument(workspace, documentId);
@@ -855,7 +910,9 @@ export function transitionDemoDocument(
       );
     } else if (action === "request_changes") {
       if (comment.trim().length < 10) {
-        throw new Error("Add a meaningful comment of at least 10 characters explaining the requested changes.");
+        throw new Error(
+          "Add a meaningful comment of at least 10 characters explaining the requested changes.",
+        );
       }
       status = "changes_requested";
       comments = appendReviewComment(
@@ -889,7 +946,9 @@ export function transitionDemoDocument(
       );
     } else {
       if (comment.trim().length < 10) {
-        throw new Error("Add a meaningful reason of at least 10 characters before rejecting.");
+        throw new Error(
+          "Add a meaningful reason of at least 10 characters before rejecting.",
+        );
       }
       status = "rejected";
       comments = appendReviewComment(
@@ -911,7 +970,9 @@ export function transitionDemoDocument(
         at,
         {
           content_title: document.title,
-          changes: [{ field: "status", previous: "in_review", next: "rejected" }],
+          changes: [
+            { field: "status", previous: "in_review", next: "rejected" },
+          ],
           comment: comment.trim(),
         },
       );
@@ -941,8 +1002,10 @@ function appendReviewComment(
   at = new Date().toISOString(),
 ): DemoReviewComment[] {
   const id =
-    comments.reduce((largestId, comment) => Math.max(largestId, comment.id), 0) +
-    1;
+    comments.reduce(
+      (largestId, comment) => Math.max(largestId, comment.id),
+      0,
+    ) + 1;
   return [
     ...comments,
     {
@@ -1007,7 +1070,9 @@ export function resolveDemoFinding(
 ): ResolveDemoFindingResult {
   const finding = workspace.findings.find((item) => item.id === findingId);
   if (!finding || finding.status !== "open") {
-    throw new Error("This finding is no longer open. Run a new demo review to refresh it.");
+    throw new Error(
+      "This finding is no longer open. Run a new demo review to refresh it.",
+    );
   }
   if (!["accepted", "edited", "dismissed"].includes(status)) {
     throw new Error("Unsupported finding action.");
@@ -1019,14 +1084,16 @@ export function resolveDemoFinding(
   const document = workspace.documents.find(
     (item) => item.id === finding.content_id,
   );
-  if (!document) throw new Error("The document for this finding is unavailable.");
+  if (!document)
+    throw new Error("The document for this finding is unavailable.");
   if (!canEditContent(role, actorName(user), document)) {
-    throw new Error("Only the creator can resolve findings on their own editable draft.");
+    throw new Error(
+      "Only the creator can resolve findings on their own editable draft.",
+    );
   }
 
   const replacesText =
-    (status === "accepted" || status === "edited") &&
-    finalText !== null;
+    (status === "accepted" || status === "edited") && finalText !== null;
   if (
     (status === "edited" || (status === "accepted" && finalText !== null)) &&
     !finalText?.trim()
@@ -1038,7 +1105,9 @@ export function resolveDemoFinding(
   let delta = 0;
   if (replacesText) {
     if (finding.range_valid === false) {
-      throw new Error("This finding overlaps an earlier correction. Review the text before changing it.");
+      throw new Error(
+        "This finding overlaps an earlier correction. Review the text before changing it.",
+      );
     }
     const original = document.body.slice(finding.start, finding.end);
     if (
@@ -1046,7 +1115,9 @@ export function resolveDemoFinding(
       finding.end > document.body.length ||
       original !== finding.text
     ) {
-      throw new Error("The original text no longer matches this finding. Run a new demo review.");
+      throw new Error(
+        "The original text no longer matches this finding. Run a new demo review.",
+      );
     }
     delta = finalText!.length - (finding.end - finding.start);
     updatedBody =
@@ -1069,7 +1140,9 @@ export function resolveDemoFinding(
     const transformOffset = (offset: number) => {
       if (offset <= finding.start) return offset;
       if (offset >= finding.end) return offset + delta;
-      return finding.start + Math.min(offset - finding.start, finalText!.length);
+      return (
+        finding.start + Math.min(offset - finding.start, finalText!.length)
+      );
     };
     const mappedStart = transformOffset(item.start);
     const mappedEnd = transformOffset(item.end);
@@ -1122,13 +1195,13 @@ export function resolveDemoFinding(
       {
         content_title: document.title,
         finding_id: finding.id,
-        finding_title: `${finding.check.replaceAll("_", " ")}: ${finding.text}`,
+        finding_title: `${String(finding.check ?? "Unknown").replaceAll("_", " ")}: ${finding.text ?? ""}`,
         comment:
-            status === "dismissed"
-              ? `Dismissal reason: ${dismissalReason.trim()}`
-              : status === "accepted" && !replacesText
-                ? "No replacement was available; the finding was accepted without changing document text."
-                : undefined,
+          status === "dismissed"
+            ? `Dismissal reason: ${dismissalReason.trim()}`
+            : status === "accepted" && !replacesText
+              ? "No replacement was available; the finding was accepted without changing document text."
+              : undefined,
         changes: replacesText
           ? [
               {
@@ -1160,10 +1233,14 @@ export function recordDemoReview(
     throw new Error("The demonstration document is not available.");
   }
   if (!canEditContent(role, actorName(user), currentDocument)) {
-    throw new Error("Only the creator can run a review on their own editable draft.");
+    throw new Error(
+      "Only the creator can run a review on their own editable draft.",
+    );
   }
   if (currentDocument.body !== body) {
-    throw new Error("Save your latest draft changes before running the demonstration review.");
+    throw new Error(
+      "Save your latest draft changes before running the demonstration review.",
+    );
   }
 
   const generatedFindings = getDemoFindings(body, workspace.knowledge);
@@ -1176,17 +1253,17 @@ export function recordDemoReview(
     return previous
       ? {
           ...finding,
-          status: previous.status === "dismissed"
-            ? ("dismissed" as const)
-            : ("open" as const),
+          status:
+            previous.status === "dismissed"
+              ? ("dismissed" as const)
+              : ("open" as const),
           final_text: previous.final_text,
         }
       : finding;
   });
   findings.push(
     ...workspace.findings.filter(
-      (finding) =>
-        finding.status !== "open" && !generatedIds.has(finding.id),
+      (finding) => finding.status !== "open" && !generatedIds.has(finding.id),
     ),
   );
 
@@ -1242,10 +1319,14 @@ export function recordBackendReview(
     throw new Error("The content document is not available.");
   }
   if (!canEditContent(role, actorName(user), currentDocument)) {
-    throw new Error("Only the creator can run a review on their editable draft.");
+    throw new Error(
+      "Only the creator can run a review on their editable draft.",
+    );
   }
   if (currentDocument.body !== body) {
-    throw new Error("Save your latest draft changes before running the review.");
+    throw new Error(
+      "Save your latest draft changes before running the review.",
+    );
   }
 
   const nextWorkspace: DemoWorkspace = {

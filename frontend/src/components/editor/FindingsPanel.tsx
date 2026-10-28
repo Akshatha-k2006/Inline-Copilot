@@ -43,12 +43,21 @@ export default function FindingsPanel({
   const highCount = activeFindings.filter(
     (finding) => finding.severity === "high",
   ).length;
-  const warningCount = activeFindings.filter((finding) => finding.severity === "medium").length;
-  const infoCount = activeFindings.filter((finding) => finding.severity === "low").length;
-  const dismissedCount = resolvedFindings.filter((finding) => finding.status === "dismissed").length;
+  const warningCount = activeFindings.filter(
+    (finding) => finding.severity === "medium",
+  ).length;
+  const infoCount = activeFindings.filter(
+    (finding) => finding.severity === "low",
+  ).length;
+  const dismissedCount = resolvedFindings.filter(
+    (finding) => finding.status === "dismissed",
+  ).length;
 
   return (
-    <section className="editor-card findings-panel" aria-labelledby="findings-heading">
+    <section
+      className="editor-card findings-panel"
+      aria-labelledby="findings-heading"
+    >
       <div className="panel-heading">
         <div>
           <p className="eyebrow">Review results</p>
@@ -59,13 +68,17 @@ export default function FindingsPanel({
           </h2>
         </div>
         {activeFindings.length > 0 && (
-          <span className="finding-count">{highCount} errors · {warningCount} warnings · {infoCount} info</span>
+          <span className="finding-count">
+            {highCount} errors · {warningCount} warnings · {infoCount} info
+          </span>
         )}
       </div>
 
       {findings === null ? (
         <div className="editor-empty-state">
-          <span className="empty-state-mark" aria-hidden="true">✓</span>
+          <span className="empty-state-mark" aria-hidden="true">
+            ✓
+          </span>
           <h3>
             {reviewState === "loading"
               ? "Loading review results"
@@ -91,7 +104,11 @@ export default function FindingsPanel({
               type="button"
               className="button button-primary"
               onClick={onRunReview}
-              disabled={reviewing || reviewState === "loading" || reviewState === "error"}
+              disabled={
+                reviewing ||
+                reviewState === "loading" ||
+                reviewState === "error"
+              }
             >
               {reviewing ? "Reviewing content..." : "Review content"}
             </button>
@@ -114,7 +131,7 @@ export default function FindingsPanel({
               ? "The demo engine did not identify configured issues in this draft. Editorial approval may still be required."
               : resolvedFindings.length > 0
                 ? "Resolved findings remain below for reference. This does not indicate a verified review result."
-                  : "The demo engine detected no configured issues in this content. It does not replace editorial approval."}
+                : "The demo engine detected no configured issues in this content. It does not replace editorial approval."}
           </p>
         </div>
       ) : (
@@ -134,19 +151,27 @@ export default function FindingsPanel({
         </div>
       )}
       {resolvedFindings.length > 0 && (
-        <section className="resolved-findings" aria-labelledby="resolved-findings-heading">
-          <h3 id="resolved-findings-heading">Resolved ({resolvedFindings.length}) · Dismissed ({dismissedCount})</h3>
+        <section
+          className="resolved-findings"
+          aria-labelledby="resolved-findings-heading"
+        >
+          <h3 id="resolved-findings-heading">
+            Resolved ({resolvedFindings.length}) · Dismissed ({dismissedCount})
+          </h3>
           <ul>
             {resolvedFindings.map((finding) => (
               <li key={finding.id} id={`finding-card-${finding.id}`}>
                 <span className={`finding-status status-${finding.status}`}>
                   {finding.status}
                 </span>
-                <span>{finding.check.replaceAll("_", " ")}</span>
+                <span>
+                  {String(finding.check ?? "Unknown").replaceAll("_", " ")}
+                </span>
                 <q>{finding.text}</q>
                 {finding.final_text && (
                   <span className="resolved-final-text">
-                    {"-> "}{finding.final_text}
+                    {"-> "}
+                    {finding.final_text}
                   </span>
                 )}
               </li>

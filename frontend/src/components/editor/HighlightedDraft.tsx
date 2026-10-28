@@ -65,27 +65,47 @@ export default function HighlightedDraft({
           id={`draft-highlight-${finding.id}`}
           type="button"
           className={`finding-highlight finding-highlight-${finding.severity}${selectedFindingId === finding.id ? " selected" : ""}`}
-          aria-label={`${SEVERITY_LABELS[finding.severity]}: ${finding.check.replaceAll("_", " ")}. ${finding.text}`}
+          aria-label={`${SEVERITY_LABELS[finding.severity] ?? "Unknown"}: ${String(finding.check ?? "Unknown").replaceAll("_", " ")}. ${finding.text ?? ""}`}
           aria-pressed={selectedFindingId === finding.id}
           onClick={() => onSelect(finding)}
-        >{body.slice(start, end)}</button>
+        >
+          {body.slice(start, end)}
+        </button>
       </span>
     );
   });
 
   return (
-    <section className="highlighted-draft" aria-labelledby="highlighted-draft-heading">
+    <section
+      className="highlighted-draft"
+      aria-labelledby="highlighted-draft-heading"
+    >
       <div className="highlighted-draft-heading">
         <h3 id="highlighted-draft-heading">Highlighted draft</h3>
         <div className="severity-legend" aria-label="Severity key">
-          <span><i className="legend-marker legend-error" aria-hidden="true">!</i>Error</span>
-          <span><i className="legend-marker legend-warning" aria-hidden="true">!</i>Warning</span>
-          <span><i className="legend-marker legend-info" aria-hidden="true">i</i>Info</span>
+          <span>
+            <i className="legend-marker legend-error" aria-hidden="true">
+              !
+            </i>
+            Error
+          </span>
+          <span>
+            <i className="legend-marker legend-warning" aria-hidden="true">
+              !
+            </i>
+            Warning
+          </span>
+          <span>
+            <i className="legend-marker legend-info" aria-hidden="true">
+              i
+            </i>
+            Info
+          </span>
         </div>
       </div>
       <p className="highlighted-draft-copy">
-        Select a highlighted phrase to open its finding. Click a finding to select
-        that phrase in the editor.
+        Select a highlighted phrase to open its finding. Click a finding to
+        select that phrase in the editor.
       </p>
       <div className="highlighted-draft-text">
         {content}
