@@ -62,27 +62,12 @@ content type with the startup schema migration.
 
 ## Content review
 
-<<<<<<< HEAD
 `POST /api/content/{id}/review` is restricted to the owning Creator and only
 accepts drafts. It returns `200` with the content version, persisted findings,
 and engine statuses. The record's `reviewed_version` and `reviewed_at` are
 updated atomically with findings and a `content_reviewed` audit event, even if
 the review produces no findings. A content edit or finding correction clears
 the review marker for the new version. Each finding contains an integer
-=======
-Content drafts can be read and updated through:
-
-- `GET /api/content/{id}` returns the content title, body, status, version,
-  creator, and update timestamp.
-- `PUT /api/content/{id}` accepts `title` and `body`, increments the content
-  version, and is restricted to the creator while the content is an editable
-  draft or has requested changes.
-- `POST /api/content/{id}/self-check` transitions a creator's draft to
-  `self_checked`. The existing submit route then transitions it to `in_review`.
-
-`POST /api/content/{id}/review` returns `200` with the content version,
-persisted findings, and engine statuses. Each finding contains an integer
->>>>>>> 5f147fc0427cbf068a8b772a050824737fe6a82d
 `id`, string `check`, `severity`, `message`, and `status`, an `evidence`
 object, a nullable string `suggested_fix`, and nullable integer `start_offset`
 and `end_offset`. The evidence object contains string `matched_text`, object
