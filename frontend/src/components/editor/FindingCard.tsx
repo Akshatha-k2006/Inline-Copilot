@@ -80,7 +80,7 @@ export default function FindingCard({
   const severity = finding.severity;
   const severityLabel = SEVERITY_LABELS[severity] ?? "Unspecified";
   const resolved = finding.status !== "open";
-  const checkLabel = finding.check.replaceAll("_", " ");
+  const checkLabel = String(finding.check ?? "Unknown").replaceAll("_", " ");
   const knowledgeSource = finding.knowledge_source;
   const knowledgeHref =
     knowledgeSource.type === "guideline"
@@ -102,7 +102,8 @@ export default function FindingCard({
       aria-label={`${severityLabel} severity finding: ${checkLabel}`}
       tabIndex={0}
       onClick={(event) => {
-        if ((event.target as HTMLElement).closest("button, a, textarea")) return;
+        if ((event.target as HTMLElement).closest("button, a, textarea"))
+          return;
         onSelect(finding);
       }}
       onKeyDown={(event) => {
@@ -122,12 +123,17 @@ export default function FindingCard({
           </span>
           <h3>{checkLabel}</h3>
         </div>
-        <span className={`finding-status status-${finding.status}`}>
-          {finding.status.replaceAll("_", " ")}
+        <span
+          className={`finding-status status-${finding.status ?? "unknown"}`}
+        >
+          {String(finding.status ?? "Unknown").replaceAll("_", " ")}
         </span>
       </div>
 
-      <div className="finding-comparison" aria-label="Original and suggested text">
+      <div
+        className="finding-comparison"
+        aria-label="Original and suggested text"
+      >
         <section className="finding-comparison-original">
           <h4>Original text</h4>
           <blockquote className="finding-quote">{finding.text}</blockquote>
@@ -147,7 +153,9 @@ export default function FindingCard({
           )}
         </section>
       </div>
-      {finding.explanation && <p className="finding-explanation">{finding.explanation}</p>}
+      {finding.explanation && (
+        <p className="finding-explanation">{finding.explanation}</p>
+      )}
       {finding.source?.label && (
         <p className="finding-source">
           <strong>Source:</strong> {finding.source.label}
@@ -161,7 +169,8 @@ export default function FindingCard({
           <>
             <p>{knowledgeSource.record.definition}</p>
             <p>
-              Status: <strong>{knowledgeSource.record.status ?? "unspecified"}</strong>
+              Status:{" "}
+              <strong>{knowledgeSource.record.status ?? "unspecified"}</strong>
               {knowledgeSource.record.preferredTerm
                 ? ` · Preferred wording: ${knowledgeSource.record.preferredTerm}`
                 : ""}
@@ -213,14 +222,21 @@ export default function FindingCard({
         </div>
       )}
 
-      {actionError && <p className="form-error" role="alert">{actionError}</p>}
+      {actionError && (
+        <p className="form-error" role="alert">
+          {actionError}
+        </p>
+      )}
       {finding.range_valid === false && finding.status === "open" && (
         <p className="form-error" role="alert">
-          This finding overlaps a previous correction. Its text range could not be safely recalculated; dismiss it or run a fresh demo review.
+          This finding overlaps a previous correction. Its text range could not
+          be safely recalculated; dismiss it or run a fresh demo review.
         </p>
       )}
       {resolved ? (
-        <p className="finding-resolved-note">This finding is {finding.status}.</p>
+        <p className="finding-resolved-note">
+          This finding is {finding.status}.
+        </p>
       ) : onResolve && !readOnly ? (
         <div className="finding-actions">
           {finding.range_valid === false ? (
@@ -271,7 +287,9 @@ export default function FindingCard({
                 type="button"
                 className="button"
                 onClick={() => {
-                  setSuggestion(hasSuggestedReplacement ? finding.suggestion! : "");
+                  setSuggestion(
+                    hasSuggestedReplacement ? finding.suggestion! : "",
+                  );
                   setEditing(true);
                 }}
                 disabled={busy}
@@ -290,11 +308,15 @@ export default function FindingCard({
           )}
         </div>
       ) : (
-        <p className="finding-resolved-note">Finding actions are unavailable in this role.</p>
+        <p className="finding-resolved-note">
+          Finding actions are unavailable in this role.
+        </p>
       )}
       {showDismissal && !resolved && !readOnly && (
         <div className="dismissal-form">
-          <label htmlFor={`dismissal-reason-${finding.id}`}>Why is this not applicable?</label>
+          <label htmlFor={`dismissal-reason-${finding.id}`}>
+            Why is this not applicable?
+          </label>
           <select
             id={`dismissal-reason-${finding.id}`}
             value={dismissalReason}
@@ -302,13 +324,31 @@ export default function FindingCard({
           >
             <option value="">Choose a reason</option>
             <option value="Not applicable">Not applicable</option>
-            <option value="Context explains the claim">Context explains the claim</option>
+            <option value="Context explains the claim">
+              Context explains the claim
+            </option>
             <option value="Approved exception">Approved exception</option>
             <option value="False positive">False positive</option>
           </select>
           <div className="finding-actions">
-            <button type="button" className="button button-danger" onClick={() => void resolve("dismissed", null)} disabled={busy || !dismissalReason}>Confirm dismissal</button>
-            <button type="button" className="button" onClick={() => { setShowDismissal(false); setDismissalReason(""); }}>Cancel</button>
+            <button
+              type="button"
+              className="button button-danger"
+              onClick={() => void resolve("dismissed", null)}
+              disabled={busy || !dismissalReason}
+            >
+              Confirm dismissal
+            </button>
+            <button
+              type="button"
+              className="button"
+              onClick={() => {
+                setShowDismissal(false);
+                setDismissalReason("");
+              }}
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}

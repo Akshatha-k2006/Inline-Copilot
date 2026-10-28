@@ -861,6 +861,7 @@ a {
 .entry-actions {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
@@ -1442,8 +1443,9 @@ a {
 .inline-create {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
+  align-items: flex-start;
+  gap: 12px;
+  border-style: dashed;
 }
 
 .inline-create h2,
