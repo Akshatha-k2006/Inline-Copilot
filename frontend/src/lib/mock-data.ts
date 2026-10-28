@@ -1139,3 +1139,59 @@ export function recordDemoReview(
 
   return findings;
 }
+
+export function recordBackendReview(
+  body: string,
+  generatedFindings: DemoFinding[],
+  role: Role,
+  user: string,
+): DemoFinding[] {
+  const reviewedAt = new Date().toISOString();
+  const currentDocument = workspace.documents.find(
+    (document) => document.id === DEMO_DRAFT.id,
+  );
+  if (!currentDocument) {
+    throw new Error("The content document is not available.");
+  }
+  if (!canEditContent(role, actorName(user), currentDocument)) {
+    throw new Error("Only the creator can run a review on their editable draft.");
+  }
+  if (currentDocument.body !== body) {
+    throw new Error("Save your latest draft changes before running the review.");
+  }
+
+  const nextWorkspace: DemoWorkspace = {
+    ...workspace,
+    documents: workspace.documents.map((document) =>
+      document.id === currentDocument.id
+        ? { ...document, updated_at: reviewedAt }
+        : document,
+    ),
+    findings: generatedFindings,
+    findingsBody: body,
+    reviews: [
+      ...workspace.reviews.filter(
+        (review) => review.document_id !== currentDocument.id,
+      ),
+      {
+        document_id: currentDocument.id,
+        document_version: currentDocument.version,
+        body,
+        reviewed_at: reviewedAt,
+        scope: "backend_rules",
+      },
+    ],
+    history: appendHistory(
+      workspace.history,
+      role,
+      user,
+      currentDocument.id,
+      "reviewed",
+      `Ran the backend brand review for ${currentDocument.title}.`,
+      reviewedAt,
+      { content_title: currentDocument.title },
+    ),
+  };
+  commitWorkspace(nextWorkspace);
+  return generatedFindings;
+}

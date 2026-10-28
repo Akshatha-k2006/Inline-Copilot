@@ -34,6 +34,10 @@ export interface ContentDraft {
   body: string;
 }
 
+export interface ContentResponse extends Content {
+  updated_at: string;
+}
+
 export interface SeedResponse {
   message: string;
   brand: string;

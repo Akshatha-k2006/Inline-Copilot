@@ -4,6 +4,7 @@ import type {
   ApiGlossaryTerm,
   ApiGuideline,
   ContentCommentsResponse,
+  ContentResponse,
   ContentStatusResponse,
   FindingActionResponse,
   Health,
@@ -132,9 +133,13 @@ async function request<T>(
       const data: unknown = await response.json();
       if (data && typeof data === "object") {
         const errorBody = data as Record<string, unknown>;
-        if (typeof errorBody.error === "string") code = errorBody.error;
-        if (typeof errorBody.message === "string") {
-          message = errorBody.message;
+        const detail =
+          data && typeof errorBody.detail === "object" && errorBody.detail
+            ? (errorBody.detail as Record<string, unknown>)
+            : errorBody;
+        if (typeof detail.error === "string") code = detail.error;
+        if (typeof detail.message === "string") {
+          message = detail.message;
         }
       }
     } catch {
@@ -194,10 +199,16 @@ export const api = {
   deleteAsset: (id: number) => request<void>("DELETE", `/api/assets/${id}`),
   reviewContent: (id: number) =>
     request<ReviewResponse>("POST", `/api/content/${id}/review`),
+  getContent: (id: number, options?: RequestOptions) =>
+    request<ContentResponse>("GET", `/api/content/${id}`, undefined, options),
+  updateContent: (id: number, body: { title: string; body: string }) =>
+    request<ContentResponse>("PUT", `/api/content/${id}`, body),
   updateFinding: (id: number, body: { action: "accept" | "edit" | "dismiss"; replacement?: string }) =>
     request<FindingActionResponse>("PATCH", `/api/findings/${id}`, body),
   submitContent: (id: number) =>
     request<ContentStatusResponse>("POST", `/api/content/${id}/submit`),
+  selfCheckContent: (id: number) =>
+    request<ContentStatusResponse>("POST", `/api/content/${id}/self-check`),
   decideContent: (
     id: number,
     body: { decision: "approve" | "request_changes"; comment?: string },
