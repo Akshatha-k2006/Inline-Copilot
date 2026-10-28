@@ -46,11 +46,6 @@ export default function BackendStatus() {
         : status === "available"
           ? "Live service available"
           : "Using local sample data"}
-      {status === "unavailable" && (
-        <button type="button" className="backend-status-retry" onClick={check} title={message}>
-          Retry
-        </button>
-      )}
     </span>
   );
 }
