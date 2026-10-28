@@ -97,7 +97,7 @@ def load_seed_data(
                 body=draft["body"],
                 status="draft",
                 version=1,
-                created_by="seed",
+                created_by="Asha",
             )
         )
 
@@ -105,14 +105,15 @@ def load_seed_data(
 
         # Explicit IDs are required by the sample-data contract.
         # Reset PostgreSQL sequences so future inserts won't collide.
-        for table in ("guidelines", "terms", "facts", "assets", "content"):
-            db.execute(
-                __import__("sqlalchemy").text(
-                    f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), "
-                    f"COALESCE((SELECT MAX(id) FROM {table}), 1), "
-                    f"EXISTS (SELECT 1 FROM {table}))"
+        if db.bind is not None and db.bind.dialect.name == "postgresql":
+            for table in ("guidelines", "terms", "facts", "assets", "content"):
+                db.execute(
+                    __import__("sqlalchemy").text(
+                        f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), "
+                        f"COALESCE((SELECT MAX(id) FROM {table}), 1), "
+                        f"EXISTS (SELECT 1 FROM {table}))"
+                    )
                 )
-            )
 
         db.commit()
 
