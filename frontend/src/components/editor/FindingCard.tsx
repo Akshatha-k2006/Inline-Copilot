@@ -135,20 +135,16 @@ export default function FindingCard({
         aria-label="Original and suggested text"
       >
         <section className="finding-comparison-original">
-          <h4>Original text</h4>
+          <h4>Original</h4>
           <blockquote className="finding-quote">{finding.text}</blockquote>
         </section>
         <section className="finding-comparison-suggestion">
-          <h4>Suggested replacement</h4>
+          <h4>Suggested</h4>
           {hasSuggestedReplacement ? (
             <p>{finding.suggestion}</p>
           ) : (
             <p className="muted">
               No replacement text is available for this finding.
-              {readOnly
-                ? ""
-                : " You can edit your own correction, dismiss it, or accept the finding without changing the document text."}
-              {readOnly ? "" : " You can enter your own correction."}
             </p>
           )}
         </section>
@@ -235,7 +231,7 @@ export default function FindingCard({
       )}
       {resolved ? (
         <p className="finding-resolved-note">
-          This finding is {finding.status}.
+          {finding.status === "dismissed" ? "Dismissed" : finding.status === "accepted" ? "Accepted" : finding.status === "edited" ? "Edited" : `This finding is ${finding.status}.`}
         </p>
       ) : onResolve && !readOnly ? (
         <div className="finding-actions">
@@ -256,7 +252,7 @@ export default function FindingCard({
                 onClick={() => void resolve("edited", suggestion)}
                 disabled={busy || !suggestion.trim()}
               >
-                Save edit
+                Apply Suggestion
               </button>
               <button
                 type="button"
@@ -277,10 +273,10 @@ export default function FindingCard({
                   type="button"
                   className="button button-primary"
                   onClick={() => void resolve("accepted", finding.suggestion!)}
-                  aria-label="Accept suggested correction"
+                  aria-label="Apply suggested correction"
                   disabled={busy}
                 >
-                  Accept
+                  Apply Suggestion
                 </button>
               )}
               <button
