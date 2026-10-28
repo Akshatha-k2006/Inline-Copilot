@@ -3,7 +3,7 @@ import type { Role } from "./types";
 export interface RoleOption {
   role: Role;
   label: string;
-  /** Sent as X-User. Keep it plain ASCII. */
+  /** Demo actor used for content ownership and audit attribution, not identity. */
   user: string;
 }
 
