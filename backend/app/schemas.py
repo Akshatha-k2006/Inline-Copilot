@@ -91,13 +91,6 @@ class AuditEventResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class ContentUpdate(BaseModel):
-    title: str
-    body: str
-
-    model_config = ConfigDict(extra="forbid")
-
-
 class ReviewDecisionRequest(BaseModel):
     decision: Literal["approve", "request_changes"]
     comment: str | None = None
