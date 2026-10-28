@@ -2,13 +2,11 @@
 
 An AI-powered brand governance platform that reviews content against approved brand guidelines, verifies claims against approved facts, and provides evidence-backed suggestions before publication. Features a Governance Hub for content review, approvals, and brand consistency insights.
 
-## Try it (no login)
+## Local demo
 
-1. Open the live link: `<ADD DEPLOYED URL>`
-2. Click **Load sample brand**.
-3. Click **Run review** on the sample draft (or paste your own text).
-4. Accept, edit or dismiss each flag.
-5. Submit for review, switch role to **Reviewer** (top bar), then approve or request changes.
+Run the app locally using the setup instructions below. The role switcher uses
+development-only request headers and is not authentication. Production API
+access stays disabled until an OIDC/JWT identity provider is configured.
 
 ## What it does
 
@@ -32,9 +30,13 @@ Backend:
 ```
 cd backend
 pip install -r requirements.txt
-cp .env.example .env # then fill in private values
+cp .env.example .env # set a local database URL; keep APP_ENV=development only locally
 uvicorn app.main:app --reload --port 8000
 ```
+
+On startup, the backend creates missing tables and applies the additive schema
+compatibility changes in `app/db.py`. This repository does not currently use a
+versioned migration tool.
 
 Frontend:
 
@@ -46,6 +48,12 @@ npm run dev
 
 In development, the frontend defaults to `http://localhost:8000`. Copy
 `frontend/.env.example` to `frontend/.env.local` to configure it explicitly.
+Copy `backend/.env.example` to `backend/.env`; keep `APP_ENV=development` only
+for a locally accessed backend. Development role headers are accepted only
+from a loopback client. Set `APP_ENV=production` in deployment; until a real
+authentication provider is integrated, protected API routes return
+`401 authentication_not_configured` and do not trust browser-supplied role or
+user headers. The public health endpoint remains available.
 Production requires `NEXT_PUBLIC_API_BASE_URL` to be set to the deployed
 backend's public HTTPS URL before building/deploying the frontend; production
 does not fall back to the visitor's localhost. Add both the local development

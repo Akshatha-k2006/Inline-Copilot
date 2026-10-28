@@ -2,24 +2,29 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { canViewReviewQueue } from "@/lib/workflow";
 import { useRole } from "@/lib/role";
 import RoleSwitcher from "./RoleSwitcher";
 
 const NAV = [
   { href: "/", label: "Home", key: "home" },
   { href: "/editor", label: "Write & Review", key: "editor" },
-  { href: "/knowledge?tab=guidelines", label: "Guidelines", key: "guidelines" },
-  { href: "/queue", label: "Review queue", key: "queue" },
-  { href: "/audit", label: "Audit Trail", key: "audit" },
+  {
+    href: "/knowledge?tab=guidelines",
+    label: "Guidelines",
+    key: "guidelines",
+  },
+  { href: "/audit", label: "Audit Trails", key: "audit" },
 ];
 
 export default function TopBar() {
   const pathname = usePathname();
   const { role, user, label } = useRole();
-  const visibleNav = NAV.filter(
-    (item) => item.key !== "queue" || canViewReviewQueue(role),
+  const visibleNav = NAV.map((item) =>
+    item.key === "editor" && role === "reviewer"
+      ? { ...item, href: "/queue" }
+      : item,
   );
+  const isDevelopment = process.env.NODE_ENV === "development";
 
   return (
     <aside className="topbar">
@@ -40,12 +45,13 @@ export default function TopBar() {
               item.key === "home"
                 ? pathname === "/"
                 : item.key === "editor"
-                  ? pathname === "/editor" || pathname.startsWith("/editor/")
+                  ? pathname === "/editor" ||
+                    pathname.startsWith("/editor/") ||
+                    pathname === "/queue" ||
+                    pathname.startsWith("/queue/")
                   : item.key === "guidelines"
                     ? pathname === "/knowledge"
-                    : item.key === "queue"
-                      ? pathname === "/queue" || pathname.startsWith("/queue/")
-                      : pathname === "/audit" || pathname.startsWith("/audit/");
+                    : pathname === "/audit" || pathname.startsWith("/audit/");
             return (
               <li key={item.href}>
                 <Link
@@ -64,10 +70,18 @@ export default function TopBar() {
       <div className="sidebar-profile">
         <span className="profile-avatar" aria-hidden="true">A</span>
         <span className="profile-details">
-          <strong>{user.replace(/\s+\([^)]*\)$/, "")}</strong>
-          <span>{label} · demo role, not authentication</span>
+          <strong>
+            {isDevelopment
+              ? user.replace(/\s+\([^)]*\)$/, "")
+              : "Authentication unavailable"}
+          </strong>
+          <span>
+            {isDevelopment
+              ? `${label} · local development role, not authentication`
+              : "Production API access is disabled until authentication is configured."}
+          </span>
         </span>
-        <RoleSwitcher />
+        {isDevelopment && <RoleSwitcher />}
       </div>
     </aside>
   );

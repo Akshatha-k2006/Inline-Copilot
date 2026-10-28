@@ -38,6 +38,10 @@ class Term(Base):
     status: Mapped[str] = mapped_column(String(50), default="prohibited")
     explanation: Mapped[str] = mapped_column(Text, default="")
     definition: Mapped[str] = mapped_column(Text, default="")
+    guideline_id: Mapped[int | None] = mapped_column(
+        ForeignKey("guidelines.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
@@ -50,6 +54,9 @@ class Fact(Base):
     statement: Mapped[str] = mapped_column(Text, nullable=False)
     source: Mapped[str] = mapped_column(Text, default="")
     owner: Mapped[str] = mapped_column(String(150), default="")
+    last_reviewed: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     review_by: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

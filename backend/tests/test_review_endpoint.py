@@ -94,7 +94,7 @@ class ReviewEndpointTests(unittest.TestCase):
                     "raw_path": raw_path,
                     "query_string": b"",
                     "headers": headers,
-                    "client": ("testclient", 123),
+                    "client": ("127.0.0.1", 123),
                     "server": ("testserver", 80),
                 },
                 receive
@@ -1030,6 +1030,24 @@ class ReviewEndpointTests(unittest.TestCase):
                     )
                 )
                 connection.execute(
+                    text(
+                        "CREATE TABLE guidelines "
+                        "(id INTEGER PRIMARY KEY, title VARCHAR(200) NOT NULL)"
+                    )
+                )
+                connection.execute(
+                    text(
+                        "CREATE TABLE terms "
+                        "(id INTEGER PRIMARY KEY, term VARCHAR(200) NOT NULL)"
+                    )
+                )
+                connection.execute(
+                    text(
+                        "CREATE TABLE facts "
+                        "(id INTEGER PRIMARY KEY, statement TEXT NOT NULL)"
+                    )
+                )
+                connection.execute(
                     text("INSERT INTO findings (id, content_id) VALUES (1, 9)")
                 )
 
@@ -1050,6 +1068,14 @@ class ReviewEndpointTests(unittest.TestCase):
                     content_columns
                 )
             )
+            term_columns = {
+                column["name"] for column in inspect(legacy_engine).get_columns("terms")
+            }
+            fact_columns = {
+                column["name"] for column in inspect(legacy_engine).get_columns("facts")
+            }
+            self.assertIn("guideline_id", term_columns)
+            self.assertIn("last_reviewed", fact_columns)
             with legacy_engine.connect() as connection:
                 self.assertEqual(
                     connection.execute(

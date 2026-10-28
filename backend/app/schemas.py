@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 class GuidelineCreate(BaseModel):
     title: str
     description: str
+    category: str = "general"
 
 class GuidelineResponse(GuidelineCreate):
     id: int
@@ -15,6 +16,8 @@ class TermCreate(BaseModel):
     term: str
     definition: str
     preferredTerm: str | None = None
+    status: Literal["approved", "prohibited"] = "prohibited"
+    guidelineId: int | None = None
 
 class TermResponse(TermCreate):
     id: int
@@ -24,8 +27,11 @@ class FactCreate(BaseModel):
     claim: str
     owner: str
     reviewDate: date
+    source: str = ""
+    lastReviewed: date | None = None
 
 class FactResponse(FactCreate):
+    reviewDate: date | None
     id: int
     outdated: bool
 
@@ -33,6 +39,7 @@ class AssetCreate(BaseModel):
     name: str
     description: str
     url: str | None = None
+    assetType: str = "other"
 
 class AssetResponse(AssetCreate):
     id: int

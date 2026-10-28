@@ -117,6 +117,20 @@ def check_claims(text: str, db: Session) -> list[dict]:
             fact.id,
             fact.statement,
         )
+        findings[-1]["source"].update(
+            {
+                "citation": fact.source,
+                "owner": fact.owner,
+                "last_reviewed": (
+                    fact.last_reviewed.date().isoformat()
+                    if fact.last_reviewed
+                    else None
+                ),
+                "review_by": (
+                    fact.review_by.date().isoformat() if fact.review_by else None
+                ),
+            }
+        )
 
     def add_guideline_finding(
         match: re.Match,
@@ -195,6 +209,11 @@ def check_claims(text: str, db: Session) -> list[dict]:
 
     # Percentage claims.
     percentage_pattern = re.compile(r"\b\d+(?:\.\d+)?\s*%", re.IGNORECASE)
+    percentage_claim_pattern = re.compile(
+        r"\b(?:cut|reduce|lower|save|decrease|increase|improve|boost|drop)\b"
+        r"[^.!?;\n]{0,80}?\b\d+(?:\.\d+)?\s*%",
+        re.IGNORECASE,
+    )
 
     percentage_facts = [
         fact
@@ -207,11 +226,20 @@ def check_claims(text: str, db: Session) -> list[dict]:
         claimed_number = float(
             re.search(r"\d+(?:\.\d+)?", match.group(0)).group()
         )
+        claim_match = next(
+            (
+                candidate
+                for candidate in percentage_claim_pattern.finditer(text)
+                if candidate.end() == match.end()
+            ),
+            match,
+        )
 
         # Prefer facts with meaningful words overlapping the nearby claim.
-        claim_start = max(0, match.start() - 100)
-        claim_end = min(len(text), match.end() + 100)
+        claim_start = max(0, claim_match.start() - 100)
+        claim_end = min(len(text), claim_match.end() + 100)
         claim_context = text[claim_start:claim_end].lower()
+        claim_metric = claim_match.group(0).lower()
 
         relevant_facts = []
 
@@ -234,11 +262,17 @@ def check_claims(text: str, db: Session) -> list[dict]:
             (
                 fact
                 for fact in relevant_facts
-                if any(
-                    claimed_number > float(value)
-                    for value in re.findall(
-                        r"\d+(?:\.\d+)?(?=\s*%)",
-                        fact.statement,
+                if (
+                    (
+                        "bill" in claim_metric
+                        and "bill" not in fact.statement.lower()
+                    )
+                    or any(
+                        claimed_number > float(value)
+                        for value in re.findall(
+                            r"\d+(?:\.\d+)?(?=\s*%)",
+                            fact.statement,
+                        )
                     )
                 )
             ),
@@ -247,14 +281,14 @@ def check_claims(text: str, db: Session) -> list[dict]:
 
         if matching_fact:
             add_fact_finding(
-                match,
+                claim_match,
                 matching_fact,
-                "Percentage claim exceeds the approved fact: "
+                "Percentage claim is unsupported by the approved metric: "
                 + matching_fact.statement,
             )
         elif not relevant_facts:
             add_guideline_finding(
-                match,
+                claim_match,
                 "unsupported_claim",
                 "No relevant approved fact supports this percentage claim.",
             )
@@ -316,7 +350,8 @@ def check_claims(text: str, db: Session) -> list[dict]:
 
     # Superlatives require approved evidence.
     superlative_pattern = re.compile(
-        r"\b(?:best|greatest|number\s+one|most|leading)\b|#\s*1",
+        r"(?:#\s*1\b(?:\s+best)?|\b(?:number\s+one|best|greatest|most|leading)\b)"
+        r"(?:\s+[a-z][\w'-]*){0,6}",
         re.IGNORECASE,
     )
 
@@ -382,5 +417,37 @@ def check_claims(text: str, db: Session) -> list[dict]:
                     else "Claims require approved evidence."
                 ),
             )
+            if source_fact is not None:
+                findings[-1]["source"].update(
+                    {
+                        "citation": source_fact.source,
+                        "owner": source_fact.owner,
+                        "last_reviewed": (
+                            source_fact.last_reviewed.date().isoformat()
+                            if source_fact.last_reviewed
+                            else None
+                        ),
+                        "review_by": (
+                            source_fact.review_by.date().isoformat()
+                            if source_fact.review_by
+                            else None
+                        ),
+                    }
+                )
+            findings[-1]["source"]["related_facts"] = [
+                {
+                    "id": fact.id,
+                    "statement": fact.statement,
+                    "source": fact.source,
+                }
+                for fact in facts
+                if fact.id != (source_fact.id if source_fact else None)
+                and re.search(r"\bhours?\b", fact.statement, re.IGNORECASE)
+            ]
+            if claims_guideline is not None:
+                findings[-1]["source"]["claims_policy"] = {
+                    "id": claims_guideline.id,
+                    "title": claims_guideline.title,
+                }
 
     return sorted(findings, key=lambda item: item["start_offset"])
