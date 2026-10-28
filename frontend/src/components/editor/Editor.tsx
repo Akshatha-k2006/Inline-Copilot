@@ -47,7 +47,14 @@ export default function Editor() {
   const readingTime = Math.max(1, Math.ceil(body.trim().split(/\s+/).filter(Boolean).length / 200));
 
   useEffect(() => {
-    if (selectedDocumentId === null && workspace.documents[0]) {
+    if (selectedDocumentId !== null) return;
+    const requestedId = Number(new URLSearchParams(window.location.search).get("id"));
+    const requestedDocument = Number.isInteger(requestedId)
+      ? workspace.documents.find((item) => item.id === requestedId)
+      : undefined;
+    if (requestedDocument) {
+      setSelectedDocumentId(requestedDocument.id);
+    } else if (workspace.documents[0]) {
       setSelectedDocumentId(workspace.documents[0].id);
     }
   }, [selectedDocumentId, workspace.documents]);
