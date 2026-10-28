@@ -136,36 +136,43 @@ export default function Editor() {
       {error && <p className="form-error" role="alert">{error}</p>}
       <div className="editor-layout">
         <aside className="editor-document-list card">
-          <div className="panel-heading"><p className="eyebrow">My documents</p><button className="button" type="button" onClick={() => { setCreating(true); setNewTitle("Untitled document"); window.setTimeout(() => newTitleInputRef.current?.focus(), 0); }}>New</button></div>
-          {workspace.documents.map((item) => <button className="document-list-item" type="button" key={item.id} onClick={() => setSelectedDocumentId(item.id)}>
+          <div className="panel-heading"><p className="eyebrow">My documents</p><button className="button" type="button" onClick={() => { setCreating(true); setSelectedDocumentId(null); setNewTitle("Untitled document"); window.setTimeout(() => newTitleInputRef.current?.focus(), 0); }}>New</button></div>
+          {workspace.documents.map((item) => <button className="document-list-item" type="button" key={item.id} onClick={() => { setSelectedDocumentId(item.id); setCreating(false); }}>
             <strong>{item.title}</strong>
             <span>{contentStatusLabel(item.status)}</span>
           </button>)}
           <p className="muted">Sample data · saved in this browser</p>
         </aside>
         <section className="editor-main card">
-          <div className="editor-toolbar">
-            <input ref={titleInputRef} aria-label="Document title" className="title-input" value={title} onChange={(event) => setTitle(event.target.value)} disabled placeholder="Untitled document" />
-            <span className="autosave-indicator">Saved locally</span>
-          </div>
-          {creating && (
-            <div className="card inline-create">
-              <h2>Create a document</h2>
-              <p className="muted">A new local draft will be shared across the demo roles.</p>
-              <label className="form-field" style={{ width: "100%" }}>
-                <span>Title</span>
-                <input ref={newTitleInputRef} value={newTitle} onChange={(event) => setNewTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); createDocument(); } }} />
-              </label>
-              <div className="form-actions">
-                <button className="button button-primary" type="button" onClick={createDocument}>Create draft</button>
-                <button className="button" type="button" onClick={() => { setCreating(false); setNewTitle("Untitled document"); }}>Cancel</button>
+          {creating ? (
+            <>
+              <div className="editor-toolbar">
+                <h2 style={{ margin: 0 }}>Create a new document</h2>
               </div>
-            </div>
+              <div className="card inline-create" style={{ margin: 0 }}>
+                <p className="muted">A new local draft will be shared across the demo roles.</p>
+                <label className="form-field" style={{ width: "100%" }}>
+                  <span>Title</span>
+                  <input ref={newTitleInputRef} value={newTitle} onChange={(event) => setNewTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); createDocument(); } }} />
+                </label>
+                <div className="form-actions">
+                  <button className="button button-primary" type="button" onClick={createDocument}>Create draft</button>
+                  <button className="button" type="button" onClick={() => { setCreating(false); setNewTitle("Untitled document"); }}>Cancel</button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="editor-toolbar">
+                <input ref={titleInputRef} aria-label="Document title" className="title-input" value={title} onChange={(event) => setTitle(event.target.value)} disabled placeholder="Untitled document" />
+                <span className="autosave-indicator">Saved locally</span>
+              </div>
+              <textarea aria-label="Document body" className="document-editor" value="" disabled placeholder="Start writing your on-brand content here..." />
+              <div className="editor-actions">
+                <button className="button button-primary" type="button" onClick={() => { setCreating(true); setSelectedDocumentId(null); setNewTitle("Untitled document"); window.setTimeout(() => newTitleInputRef.current?.focus(), 0); }}>Create your first draft</button>
+              </div>
+            </>
           )}
-          <textarea aria-label="Document body" className="document-editor" value="" disabled placeholder="Start writing your on-brand content here..." />
-          <div className="editor-actions">
-            <button className="button button-primary" type="button" onClick={() => { setCreating(true); setNewTitle("Untitled document"); window.setTimeout(() => newTitleInputRef.current?.focus(), 0); }}>Create your first draft</button>
-          </div>
         </section>
         <div className="editor-side"></div>
       </div>
@@ -188,8 +195,8 @@ export default function Editor() {
       {error && <p className="form-error" role="alert">{error}</p>}
       <div className="editor-layout">
         <aside className="editor-document-list card">
-          <div className="panel-heading"><p className="eyebrow">{role === "creator" ? "My documents" : "Submitted documents"}</p>{role === "creator" && <button className="button" type="button" onClick={() => { setCreating((current) => { const next = !current; if (next) { setNewTitle("Untitled document"); window.setTimeout(() => newTitleInputRef.current?.focus(), 0); } return next; }); }}>New</button>}</div>
-          {visibleDocuments.map((item) => <button className={`document-list-item${item.id === document?.id ? " active" : ""}`} type="button" key={item.id} onClick={() => setSelectedDocumentId(item.id)}>
+          <div className="panel-heading"><p className="eyebrow">{role === "creator" ? "My documents" : "Submitted documents"}</p>{role === "creator" && <button className="button" type="button" onClick={() => { setCreating(true); setSelectedDocumentId(null); setNewTitle("Untitled document"); window.setTimeout(() => newTitleInputRef.current?.focus(), 0); }}>New</button>}</div>
+          {visibleDocuments.map((item) => <button className={`document-list-item${item.id === document?.id ? " active" : ""}`} type="button" key={item.id} onClick={() => { setSelectedDocumentId(item.id); setCreating(false); }}>
             <strong>{item.title}</strong>
             <span>{contentStatusLabel(item.status)}</span>
           </button>)}
@@ -198,25 +205,35 @@ export default function Editor() {
           {document && role === "creator" && (document.status === "draft" || document.status === "changes_requested") && <button className="button button-danger" type="button" onClick={() => { if (globalThis.confirm("Delete this draft?")) { run(() => { deleteDemoDocument(document.id, role, user); const fallback = workspace.documents.find((item) => item.id !== document.id && (role === "creator" || item.status === "in_review" || item.status === "changes_requested" || item.status === "approved" || item.status === "rejected" || item.status === "ready_to_publish")); setSelectedDocumentId(fallback?.id ?? null); }, "Document deleted."); } }}>Delete draft</button>}
         </aside>
         <section className="editor-main card">
-          {!document ? <div className="editor-empty-state"><span className="empty-state-mark" aria-hidden="true">i</span><h3>No document to edit</h3><p className="muted">{role === "creator" ? "Create a draft to get started." : "Nothing has been submitted for review yet."}</p>{role === "creator" && <button className="button button-primary" type="button" onClick={() => { setCreating(true); setNewTitle("Untitled document"); window.setTimeout(() => newTitleInputRef.current?.focus(), 0); }}>Create a new draft</button>}</div> : (<>
+          {creating ? (
+            <>
+              <div className="editor-toolbar">
+                <h2 style={{ margin: 0 }}>Create a new document</h2>
+              </div>
+              <div className="card inline-create" style={{ margin: 0 }}>
+                <p className="muted">A new local draft will be shared across the demo roles.</p>
+                <label className="form-field" style={{ width: "100%" }}>
+                  <span>Title</span>
+                  <input ref={newTitleInputRef} value={newTitle} onChange={(event) => setNewTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); createDocument(); } }} />
+                </label>
+                <div className="form-actions">
+                  <button className="button button-primary" type="button" onClick={createDocument}>Create draft</button>
+                  <button className="button" type="button" onClick={() => { setCreating(false); if (document) { setTitle(document.title); setBody(document.body); } else { setSelectedDocumentId(workspace.documents[0]?.id ?? null); } }}>Cancel</button>
+                </div>
+              </div>
+            </>
+          ) : !document ? (
+            <div className="editor-empty-state">
+              <span className="empty-state-mark" aria-hidden="true">i</span>
+              <h3>No document to edit</h3>
+              <p className="muted">{role === "creator" ? "Create a draft to get started." : "Nothing has been submitted for review yet."}</p>
+              {role === "creator" && <button className="button button-primary" type="button" onClick={() => { setCreating(true); setSelectedDocumentId(null); setTitle(""); setBody(""); setNewTitle("Untitled document"); window.setTimeout(() => newTitleInputRef.current?.focus(), 0); }}>Create a new draft</button>}
+            </div>
+          ) : (<>
           <div className="editor-toolbar">
             <input ref={titleInputRef} aria-label="Document title" className="title-input" value={title} onChange={(event) => setTitle(event.target.value)} disabled={!canEdit} placeholder="Untitled document" />
             <span className="autosave-indicator">Saved locally</span>
           </div>
-          {creating && (
-            <div className="card inline-create">
-              <h2>Create a document</h2>
-              <p className="muted">A new local draft will be shared across the demo roles.</p>
-              <label className="form-field" style={{ width: "100%" }}>
-                <span>Title</span>
-                <input ref={newTitleInputRef} value={newTitle} onChange={(event) => setNewTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); createDocument(); } }} />
-              </label>
-              <div className="form-actions">
-                <button className="button button-primary" type="button" onClick={createDocument}>Create draft</button>
-                <button className="button" type="button" onClick={() => { setCreating(false); setNewTitle("Untitled document"); }}>Cancel</button>
-              </div>
-            </div>
-          )}
           <textarea
             aria-label="Document body"
             className="document-editor"

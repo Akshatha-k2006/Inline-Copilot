@@ -1214,9 +1214,9 @@ a {
 
 .editor-layout {
   display: grid;
-  grid-template-columns: 190px minmax(0, 1fr) minmax(320px, 380px);
+  grid-template-columns: minmax(200px, 220px) minmax(0, 2fr) minmax(340px, 420px);
   align-items: start;
-  gap: 18px;
+  gap: 20px;
 }
 
 .editor-header {
@@ -1287,7 +1287,8 @@ a {
 .editor-main {
   display: grid;
   gap: 14px;
-  padding: clamp(18px, 3vw, 30px);
+  padding: clamp(22px, 4vw, 40px);
+  min-height: 520px;
 }
 
 .editor-toolbar {
@@ -1328,8 +1329,8 @@ a {
 
 .document-editor {
   width: 100%;
-  min-height: min(62vh, 680px);
-  padding: 20px 2px;
+  min-height: min(68vh, 760px);
+  padding: 24px 4px;
   border: 0;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
@@ -1337,7 +1338,7 @@ a {
   color: var(--text);
   font: inherit;
   font-size: 1.08rem;
-  line-height: 1.85;
+  line-height: 1.9;
   resize: vertical;
 }
 
@@ -1359,6 +1360,8 @@ a {
 .editor-side .findings-panel {
   position: sticky;
   top: 24px;
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
 }
 
 .knowledge-toolbar {
@@ -1492,7 +1495,7 @@ a {
 
 .editor-card {
   min-width: 0;
-  padding: 24px;
+  padding: clamp(18px, 2vw, 28px);
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
