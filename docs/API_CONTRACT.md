@@ -1,13 +1,11 @@
 # Knowledge base API
 
-Resource identifiers are integer database IDs. In local development only, the
-frontend sends `X-Role` and `X-User` to simulate a role and actor; they are not
-an authentication mechanism and are accepted only from a loopback client.
-Production protected routes reject requests with `401
-authentication_not_configured` until an authentication provider is integrated.
-They do not trust browser-supplied `X-Role` or `X-User` headers. The
-`get_authenticated_principal` dependency in `backend/app/dependencies.py` is
-the boundary to replace with OIDC/JWT validation. JSON errors use
+Resource identifiers are integer database IDs. The frontend sends `X-Role`
+and `X-User` to simulate a demo role and actor. The backend validates these
+values and applies the demo workflow rules, but caller-supplied headers are not
+authentication and do not provide secure authorization. This behavior is for
+local demonstration and testing only; do not expose the API as a secured
+multi-user service. JSON errors use
 `{ "error": "short_code", "message": "..." }`.
 
 ## Collections
@@ -37,11 +35,11 @@ transaction. The seed endpoint records each load as a separate audit event.
 
 ## Content
 
-Content records are persisted in the configured SQLAlchemy database. Local
-development uses `X-Role` and `X-User` demo headers; production remains locked
-until those values are derived from a verified identity. Creator reads and
-writes are restricted to records whose `created_by` matches the local demo
-actor name after removing its displayed role suffix.
+Content records are persisted in the configured SQLAlchemy database.
+`X-Role`/`X-User` provide simulated demo role and actor context; they are
+caller-controlled and are not an identity or security boundary. Creator reads
+and writes are restricted to records whose `created_by` matches the demo actor
+name after removing its displayed role suffix.
 
 - `GET /api/content` lists content. Creators receive only their own items;
   Reviewer, Brand Manager, and Admin can inspect all items. An optional
@@ -227,9 +225,8 @@ Submission does not change the content text or version. It returns `404` with
 `{ "error": "not_found", "message": "Content not found." }` when the content
 does not exist, and `403` with the existing `forbidden` error shape when the
 role is missing, invalid, or not `creator`. The request requires the existing
-`X-User` actor header; a missing actor header returns `422` with the standard
-`validation_error` response. The current backend dependency validates role
-headers but does not provide a separate identity-authentication mechanism.
+`X-User` demo actor header; a missing actor header returns `422` with the
+standard `validation_error` response.
 
 Invalid transitions return `409` with
 `{ "error": "invalid_status_transition", "message": "Status transition is not allowed." }`.
@@ -315,9 +312,8 @@ Standalone review comments use the existing content comments collection.
 
 The body must be non-empty after trimming and unknown request fields are
 rejected. Only a reviewer may add a comment while the content is `in_review`.
-The existing `X-Role` dependency validates the role and `X-User` supplies the
-comment author; the backend does not have a separate identity-authentication
-mechanism. Success returns `201` with the comment schema:
+The existing `X-Role` dependency validates the simulated role and `X-User`
+supplies the demo comment author. Success returns `201` with the comment schema:
 
 ```json
 {
@@ -345,7 +341,7 @@ missing `X-User` returns `422`. Database failures return `500` with
 Comments attached to a `request_changes` decision are included in this
 collection and use the same authorization rules.
 
-## Frontend integration and identity boundary
+## Frontend integration and demo role context
 
 The Write & Review editor, review queue, and audit trail call these backend
 routes through the shared frontend API client. They load content by its real
@@ -353,9 +349,9 @@ database ID and refresh content, findings, comments, and audit events after
 successful mutations. They do not use browser-local mock data as a fallback;
 network and HTTP failures are surfaced with retry controls.
 
-The API enforces the four workflow roles and content ownership using
-`X-Role`/`X-User`, but those headers are not authentication and can be
-impersonated. A deployed multi-user service must connect these checks to a
-trusted identity provider before treating the role headers as a security
-boundary. `seed/brand.json` and the sample brand action remain intentional
-fictional demonstration data; content workflows use database records.
+The API simulates the four workflow roles and content ownership using
+`X-Role`/`X-User`. These headers can be impersonated and provide no production
+authentication or security. Keep this implementation limited to local
+demonstration and testing. `seed/brand.json` and the sample brand action remain
+intentional fictional demonstration data; content workflows use database
+records.

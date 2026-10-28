@@ -43,10 +43,10 @@ and restored; the `next-env.d.ts` change is unrelated and remains untouched.
 
 ## Implementation updates
 
-- Production API routes that depend on a user role now return
-  `401 authentication_not_configured` until a real identity provider is
-  integrated. Development role headers are restricted to loopback clients;
-  they are not production authentication.
+- Backend role checks use caller-supplied `X-Role` and `X-User` demo context.
+  The role switcher remains available for all four roles, but this is not
+  authentication or production security and must remain limited to local
+  demonstration and testing.
 - Primary navigation now has four destinations. The Home dashboard reloads
   backend data and derives its role-specific metrics and recent activity from
   content, knowledge, and audit records.
@@ -67,9 +67,8 @@ and restored; the `next-env.d.ts` change is unrelated and remains untouched.
 
 ## Remaining limitations
 
-- No OIDC/JWT identity provider, login, or account management is implemented.
-  Production API actions are intentionally unavailable until a trusted
-  identity boundary is configured.
+- The demo does not authenticate callers. Its role and actor headers can be
+  impersonated and must not be used as a production security boundary.
 - Visual consistency and accessibility checks are not implemented.
   Messaging and broader semantic tone checks require an optional configured
   LLM; deterministic checks cover only specific stored-data-backed rules.

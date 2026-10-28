@@ -79,7 +79,7 @@ type Method = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
 function defaultErrorMessage(status: number): string {
   switch (status) {
     case 401:
-      return "Your session has expired. Please sign in and try again.";
+      return "The request was not authorized.";
     case 403:
       return "You do not have permission to perform this action.";
     case 404:
