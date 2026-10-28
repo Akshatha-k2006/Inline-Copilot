@@ -21,8 +21,10 @@ import type {
 import { DEFAULT_ROLE, ROLE_STORAGE_KEY, isRole, optionFor } from "./roles";
 
 /** Public backend URL, configured at build time with NEXT_PUBLIC_API_BASE_URL. */
+const configuredApiUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
 export const API_URL = (
-  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000"
+  configuredApiUrl ||
+  (process.env.NODE_ENV === "development" ? "http://localhost:8000" : "")
 ).replace(/\/+$/, "");
 
 let currentRole: Role | null = null;
@@ -85,6 +87,8 @@ function defaultErrorMessage(status: number): string {
       return "The submitted data is invalid. Check the fields and try again.";
     case 500:
       return "The server could not complete the request. Please try again later.";
+    case 503:
+      return "The backend is temporarily unavailable. Please try again shortly.";
     default:
       return `Request failed (${status}).`;
   }
@@ -96,6 +100,14 @@ async function request<T>(
   body?: unknown,
   options: RequestOptions = {},
 ): Promise<T> {
+  if (!API_URL) {
+    throw new ApiError(
+      0,
+      "api_not_configured",
+      "The backend URL is not configured. Set NEXT_PUBLIC_API_BASE_URL to the public backend URL and redeploy.",
+    );
+  }
+
   const option = optionFor(getRole());
   const headers: Record<string, string> = {
     Accept: "application/json",
@@ -128,7 +140,7 @@ async function request<T>(
     throw new ApiError(
       0,
       "network_error",
-      "Cannot reach the server. It may be waking up, so try again in a moment.",
+      `Cannot connect to the backend at ${API_URL}. Check that it is running, that the URL is correct, and that its CORS settings allow this frontend.`,
     );
   }
 

@@ -44,10 +44,12 @@ npm install
 npm run dev
 ```
 
-The frontend reads `NEXT_PUBLIC_API_BASE_URL` (default `http://localhost:8000`).
-Copy `frontend/.env.example` to `frontend/.env.local` for local frontend
-configuration. Set the public backend URL there for local development and to
-the deployed HTTPS backend URL in the frontend deployment environment.
+In development, the frontend defaults to `http://localhost:8000`. Copy
+`frontend/.env.example` to `frontend/.env.local` to configure it explicitly.
+Production requires `NEXT_PUBLIC_API_BASE_URL` to be set to the deployed
+backend's public HTTPS URL before building/deploying the frontend; production
+does not fall back to the visitor's localhost. Add both the local development
+origin and deployed frontend origin to backend `CORS_ORIGINS`.
 
 ## Environment variables
 

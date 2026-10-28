@@ -8,11 +8,12 @@ import { loadBrandData } from "@/lib/knowledge";
 import { useRole } from "@/lib/role";
 import { canManageKnowledge, canViewReviewQueue } from "@/lib/workflow";
 import type { BrandData } from "@/lib/brand-data";
-import type { Health, Role } from "@/lib/types";
+import type { Content, Health, Role } from "@/lib/types";
 
 interface DashboardData {
   health: Health;
   knowledge: BrandData;
+  content: Content[];
 }
 
 const ROLE_COPY: Record<
@@ -22,10 +23,10 @@ const ROLE_COPY: Record<
   creator: {
     heading: "Create content with confidence",
     summary:
-      "Keep your drafts moving and prepare clear, evidence-led content for review.",
-    workTitle: "Your drafts and returned content",
+      "Create content and prepare clear, evidence-led work for review.",
+    workTitle: "Your content",
     workSummary:
-      "Create and reopen your persisted drafts, returned content, and submitted work in the Write & Review workspace.",
+      "Create and reopen your persisted content in the Write & Review workspace.",
   },
   reviewer: {
     heading: "Make every review count",
@@ -88,9 +89,10 @@ export default function Home() {
     void Promise.all([
       api.health({ signal: controller.signal }),
       loadBrandData({ signal: controller.signal }),
+      api.listContent({ signal: controller.signal }),
     ])
-      .then(([health, knowledge]) => {
-        setData({ health, knowledge });
+      .then(([health, knowledge, content]) => {
+        setData({ health, knowledge, content });
       })
       .catch((cause: unknown) => {
         if (cause instanceof DOMException && cause.name === "AbortError") return;
@@ -275,13 +277,54 @@ export default function Home() {
             </h2>
             <p>
               {role === "creator"
-                ? "Create a draft, run the backend review, resolve applicable findings, and submit it for review."
+                ? "Create content, run the backend review, resolve applicable findings, and submit it for review."
                 : "Inspect backend submissions and make reviewer decisions in the persisted review queue."}
             </p>
           </div>
           <Link className="button" href={role === "creator" ? "/editor" : "/queue"}>
             {role === "creator" ? "Open Write & Review" : "Open review queue"}
           </Link>
+        </section>
+      )}
+
+      {data && (
+        <section className="dashboard-data-section" aria-labelledby="recent-content-heading">
+          <div className="dashboard-section-heading">
+            <div>
+              <p className="eyebrow">Persisted in the backend</p>
+              <h2 id="recent-content-heading">Recent content ({data.content.length})</h2>
+            </div>
+            <Link className="button" href="/editor">
+              View all content
+            </Link>
+          </div>
+          {data.content.length === 0 ? (
+            <p className="dashboard-empty-note" role="status">
+              No content has been created yet.{" "}
+              <Link href="/editor?new=1">Create Content</Link>
+            </p>
+          ) : (
+            <nav className="entry-list" aria-label="Recent backend content">
+              {data.content.slice(0, 5).map((item) => (
+                <Link
+                  className="entry-card"
+                  href={`/editor?id=${item.id}`}
+                  key={item.id}
+                >
+                  <div className="entry-content">
+                    <p className="eyebrow">Content #{item.id}</p>
+                    <h3>{item.title}</h3>
+                    <div className="fact-meta">
+                      <span className={`content-status status-${item.status}`}>
+                        {item.status.replaceAll("_", " ")}
+                      </span>
+                      <span>{item.content_type.replaceAll("_", " ")}</span>
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </nav>
+          )}
         </section>
       )}
 
