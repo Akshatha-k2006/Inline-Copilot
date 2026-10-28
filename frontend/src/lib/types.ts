@@ -6,7 +6,6 @@ export type ContentStatus =
   | "draft"
   | "self_checked"
   | "in_review"
-  | "changes_requested"
   | "approved"
   | "ready_to_publish";
 
@@ -70,6 +69,7 @@ export interface ApiGuideline {
   id: number;
   title: string;
   description: string;
+  category: string;
 }
 
 export interface ApiGlossaryTerm {
@@ -77,21 +77,30 @@ export interface ApiGlossaryTerm {
   term: string;
   definition: string;
   preferredTerm: string | null;
+  status: "approved" | "prohibited";
+  guidelineId: number | null;
 }
 
 export interface ApiFact {
   id: number;
   claim: string;
   owner: string;
-  reviewDate: string;
+  reviewDate: string | null;
+  source: string;
+  lastReviewed: string | null;
   outdated: boolean;
 }
+
+export type ApiFactInput = Omit<ApiFact, "id" | "outdated"> & {
+  reviewDate: string;
+};
 
 export interface ApiAsset {
   id: number;
   name: string;
   description: string;
   url: string | null;
+  assetType: string;
 }
 
 export interface BackendFinding {

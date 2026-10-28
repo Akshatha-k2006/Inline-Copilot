@@ -1,18 +1,23 @@
 # Knowledge base API
 
-The frontend sends `X-Role` and `X-User` on every request. Resource identifiers
-are integer database IDs. These headers identify a demo role and actor; they
-are not an authentication mechanism. JSON errors use
+Resource identifiers are integer database IDs. In local development only, the
+frontend sends `X-Role` and `X-User` to simulate a role and actor; they are not
+an authentication mechanism and are accepted only from a loopback client.
+Production protected routes reject requests with `401
+authentication_not_configured` until an authentication provider is integrated.
+They do not trust browser-supplied `X-Role` or `X-User` headers. The
+`get_authenticated_principal` dependency in `backend/app/dependencies.py` is
+the boundary to replace with OIDC/JWT validation. JSON errors use
 `{ "error": "short_code", "message": "..." }`.
 
 ## Collections
 
 | Resource | Collection route | Request fields | Response fields |
 | --- | --- | --- | --- |
-| Guidelines | `/api/guidelines` | `title`, `description` | `id`, `title`, `description` |
-| Glossary terms | `/api/glossary` | `term`, `definition`, optional `preferredTerm` | `id`, `term`, `definition`, nullable `preferredTerm` |
-| Facts | `/api/facts` | `claim`, `owner`, `reviewDate` (`YYYY-MM-DD`) | `id`, `claim`, `owner`, `reviewDate`, `outdated` |
-| Assets | `/api/assets` | `name`, `description`, optional `url` | `id`, `name`, `description`, nullable `url` |
+| Guidelines | `/api/guidelines` | `title`, `description`, optional `category` | `id`, `title`, `description`, `category` |
+| Glossary terms | `/api/glossary` | `term`, `definition`, optional `preferredTerm`, `status`, `guidelineId` | `id`, `term`, `definition`, nullable `preferredTerm`, `status`, nullable `guidelineId` |
+| Facts | `/api/facts` | `claim`, `owner`, `reviewDate` (`YYYY-MM-DD`), optional `source`, `lastReviewed` | `id`, `claim`, `owner`, nullable `reviewDate`, `source`, nullable `lastReviewed`, `outdated` |
+| Assets | `/api/assets` | `name`, `description`, optional `url`, `assetType` | `id`, `name`, `description`, nullable `url`, `assetType` |
 
 Each item returned by the API includes an `id`.
 
@@ -20,23 +25,23 @@ Each item returned by the API includes an `id`.
 - `POST /api/{collection}` creates an item and returns it with status `201`.
 - `PUT /api/{collection}/{id}` replaces an item and returns the updated item.
 - `DELETE /api/{collection}/{id}` removes an item and returns status `204`.
-- `POST /api/seed/load` reloads the fictional brand from `seed/brand.json`,
-  replacing all knowledge-base records and sample content with ID `1`. This
-  operation is restricted to Admin and Brand Manager roles.
+- `POST /api/seed/load` loads the fictional brand from `seed/brand.json`.
+  It adds missing sample records by stable natural keys, does not overwrite or
+  delete existing records, and is restricted to Admin and Brand Manager roles.
 - `GET /api/health` returns `{ "status": "ok" }`.
 
 These collection and seed routes query or modify SQLAlchemy records in the
-configured database. The sample seed route is destructive to the knowledge
-collections and the content record with ID `1`; it preserves other content
-records.
+configured database. Successful guideline, term, fact, and asset creates,
+updates, and deletes also create workspace-level audit events in the same
+transaction. The seed endpoint records each load as a separate audit event.
 
 ## Content
 
-Content records are persisted in the configured SQLAlchemy database. The
-frontend sends `X-Role` and `X-User`; these identify prototype roles and actors,
-not authenticated identities. Creator reads and writes are restricted to
-records whose `created_by` matches the actor name after removing its displayed
-role suffix.
+Content records are persisted in the configured SQLAlchemy database. Local
+development uses `X-Role` and `X-User` demo headers; production remains locked
+until those values are derived from a verified identity. Creator reads and
+writes are restricted to records whose `created_by` matches the local demo
+actor name after removing its displayed role suffix.
 
 - `GET /api/content` lists content. Creators receive only their own items;
   Reviewer, Brand Manager, and Admin can inspect all items. An optional

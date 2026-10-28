@@ -9,7 +9,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db import Base, get_db
 from app.exception_handlers import register_exception_handlers
-from app.models import Guideline
+from app.models import Asset, AuditEvent, Content, Fact, Guideline, Term
 from app.routers import assets, facts, glossary, guidelines, seed
 
 
@@ -77,7 +77,7 @@ class KnowledgeEndpointTests(unittest.TestCase):
                     "raw_path": path.encode("ascii"),
                     "query_string": b"",
                     "headers": headers,
-                    "client": ("testclient", 123),
+                    "client": ("127.0.0.1", 123),
                     "server": ("testserver", 80),
                 },
                 receive,
@@ -101,9 +101,17 @@ class KnowledgeEndpointTests(unittest.TestCase):
         cases = (
             (
                 "/api/guidelines",
-                {"title": "Voice", "description": "Be clear."},
-                {"title": "Voice v2", "description": "Be direct."},
-                {"id", "title", "description"},
+                {
+                    "title": "Voice",
+                    "description": "Be clear.",
+                    "category": "tone",
+                },
+                {
+                    "title": "Voice v2",
+                    "description": "Be direct.",
+                    "category": "tone",
+                },
+                {"id", "title", "description", "category"},
             ),
             (
                 "/api/glossary",
@@ -111,13 +119,24 @@ class KnowledgeEndpointTests(unittest.TestCase):
                     "term": "cheap",
                     "definition": "Suggests low quality.",
                     "preferredTerm": "affordable",
+                    "status": "prohibited",
+                    "guidelineId": None,
                 },
                 {
                     "term": "cheap",
                     "definition": "Avoid it.",
                     "preferredTerm": None,
+                    "status": "approved",
+                    "guidelineId": None,
                 },
-                {"id", "term", "definition", "preferredTerm"},
+                {
+                    "id",
+                    "term",
+                    "definition",
+                    "preferredTerm",
+                    "status",
+                    "guidelineId",
+                },
             ),
             (
                 "/api/facts",
@@ -125,19 +144,41 @@ class KnowledgeEndpointTests(unittest.TestCase):
                     "claim": "A verified claim.",
                     "owner": "Research",
                     "reviewDate": "2099-01-01",
+                    "source": "Report A",
+                    "lastReviewed": "2026-01-01",
                 },
                 {
                     "claim": "An updated claim.",
                     "owner": "Research",
                     "reviewDate": "2099-02-01",
+                    "source": "Report B",
+                    "lastReviewed": "2026-02-01",
                 },
-                {"id", "claim", "owner", "reviewDate", "outdated"},
+                {
+                    "id",
+                    "claim",
+                    "owner",
+                    "reviewDate",
+                    "source",
+                    "lastReviewed",
+                    "outdated",
+                },
             ),
             (
                 "/api/assets",
-                {"name": "Logo", "description": "Primary mark.", "url": None},
-                {"name": "Logo 2", "description": "Updated mark.", "url": None},
-                {"id", "name", "description", "url"},
+                {
+                    "name": "Logo",
+                    "description": "Primary mark.",
+                    "url": None,
+                    "assetType": "logo",
+                },
+                {
+                    "name": "Logo 2",
+                    "description": "Updated mark.",
+                    "url": None,
+                    "assetType": "palette",
+                },
+                {"id", "name", "description", "url", "assetType"},
             ),
         )
 
@@ -165,6 +206,20 @@ class KnowledgeEndpointTests(unittest.TestCase):
                 self.assertEqual(status, 204)
                 self.assertIsNone(deleted)
 
+        knowledge_events = (
+            self.db.query(AuditEvent)
+            .filter(AuditEvent.action.like("knowledge_%"))
+            .all()
+        )
+        self.assertEqual(len(knowledge_events), 12)
+        self.assertTrue(
+            all(
+                event.content_id is None
+                and event.details["actor_role"] == "brand_manager"
+                for event in knowledge_events
+            )
+        )
+
     def test_knowledge_writes_and_seed_are_restricted_by_backend_role(self):
         status, payload = self.request(
             "POST",
@@ -183,6 +238,80 @@ class KnowledgeEndpointTests(unittest.TestCase):
         )
         self.assertEqual(status, 403)
         self.assertEqual(payload["error"], "forbidden")
+
+    def test_sample_seed_is_repeatable_and_preserves_unrelated_records(self):
+        self.db.add(
+            Guideline(title="User-owned guideline", description="Keep this rule.")
+        )
+        self.db.add(
+            Content(
+                id=1,
+                title="User content",
+                body="Do not replace.",
+                status="draft",
+                version=1,
+                created_by="another-user",
+            )
+        )
+        self.db.commit()
+
+        status, first = self.request("POST", "/api/seed/load")
+        self.assertEqual(status, 200)
+        def record_counts():
+            return tuple(
+                self.db.query(model).count()
+                for model in (Guideline, Term, Fact, Asset, Content)
+            )
+
+        first_counts = record_counts()
+
+        status, second = self.request("POST", "/api/seed/load")
+        self.assertEqual(status, 200)
+        self.assertEqual(second["sample_content_id"], first["sample_content_id"])
+        self.assertEqual(record_counts(), first_counts)
+        self.assertIsNotNone(self.db.get(Content, 1))
+        self.assertEqual(self.db.get(Content, 1).body, "Do not replace.")
+        self.assertEqual(
+            self.db.query(AuditEvent)
+            .filter(AuditEvent.action == "sample_brand_loaded")
+            .count(),
+            2,
+        )
+
+    def test_term_guideline_link_is_validated_and_cleared_on_guideline_delete(self):
+        status, guideline = self.request(
+            "POST",
+            "/api/guidelines",
+            body={
+                "title": "Claims",
+                "description": "Support claims with evidence.",
+                "category": "claims",
+            },
+        )
+        self.assertEqual(status, 201)
+
+        status, term = self.request(
+            "POST",
+            "/api/glossary",
+            body={
+                "term": "guaranteed",
+                "definition": "Avoid unsupported promises.",
+                "preferredTerm": None,
+                "status": "prohibited",
+                "guidelineId": guideline["id"],
+            },
+        )
+        self.assertEqual(status, 201)
+        self.assertEqual(term["guidelineId"], guideline["id"])
+
+        status, _ = self.request(
+            "DELETE",
+            f"/api/guidelines/{guideline['id']}",
+        )
+        self.assertEqual(status, 204)
+        status, terms = self.request("GET", "/api/glossary")
+        self.assertEqual(status, 200)
+        self.assertIsNone(next(item for item in terms if item["id"] == term["id"])["guidelineId"])
 
 
 if __name__ == "__main__":

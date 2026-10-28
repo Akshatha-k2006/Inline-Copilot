@@ -805,7 +805,7 @@ export function transitionDemoDocument(
       if (comment.trim().length < 10) {
         throw new Error("Add a meaningful comment of at least 10 characters explaining the requested changes.");
       }
-      status = "changes_requested";
+      status = "draft";
       comments = appendReviewComment(
         comments,
         documentId,

@@ -15,6 +15,7 @@ from app.models import AuditEvent, Content, Finding
 from app.schemas import FindingActionRequest, FindingActionResponse
 from app.services.terminology_checker import check_terminology
 from app.services.fact_checker import check_claims
+from app.services.tone_checker import check_tone
 from app.config import settings
 from app.services.llm_reviewer import (
     LLMProviderError,
@@ -168,6 +169,7 @@ def review_content(
 
         terminology_findings = check_terminology(content.body, db)
         claim_findings = check_claims(content.body, db)
+        tone_findings = check_tone(content.body, db)
 
         llm_status = "ok"
         try:
@@ -200,7 +202,7 @@ def review_content(
             logger.warning("Hosted LLM review failed: category=unexpected")
 
         saved_findings = []
-        rule_findings = terminology_findings + claim_findings
+        rule_findings = terminology_findings + claim_findings + tone_findings
         all_findings = rule_findings.copy()
         for llm_finding in llm_findings:
             duplicate = any(

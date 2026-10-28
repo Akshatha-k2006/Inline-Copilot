@@ -1,6 +1,7 @@
 import type {
   ApiAsset,
   ApiFact,
+  ApiFactInput,
   ApiGlossaryTerm,
   ApiGuideline,
   ContentCommentsResponse,
@@ -30,6 +31,7 @@ export const API_URL = (
 let currentRole: Role | null = null;
 
 export function getRole(): Role {
+  if (process.env.NODE_ENV !== "development") return DEFAULT_ROLE;
   if (currentRole) return currentRole;
   try {
     const saved = window.localStorage.getItem(ROLE_STORAGE_KEY);
@@ -44,6 +46,7 @@ export function getRole(): Role {
 }
 
 export function setRole(role: Role): void {
+  if (process.env.NODE_ENV !== "development") return;
   currentRole = role;
   try {
     window.localStorage.setItem(ROLE_STORAGE_KEY, role);
@@ -111,9 +114,11 @@ async function request<T>(
   const option = optionFor(getRole());
   const headers: Record<string, string> = {
     Accept: "application/json",
-    "X-Role": option.role,
-    "X-User": asciiHeader(option.user),
   };
+  if (process.env.NODE_ENV === "development") {
+    headers["X-Role"] = option.role;
+    headers["X-User"] = asciiHeader(option.user);
+  }
 
   let payload: BodyInit | undefined;
   if (typeof FormData !== "undefined" && body instanceof FormData) {
@@ -207,9 +212,9 @@ export const api = {
 
   listFacts: (options?: RequestOptions) =>
     request<ApiFact[]>("GET", "/api/facts", undefined, options),
-  createFact: (body: Omit<ApiFact, "id" | "outdated">) =>
+  createFact: (body: ApiFactInput) =>
     request<ApiFact>("POST", "/api/facts", body),
-  updateFact: (id: number, body: Omit<ApiFact, "id" | "outdated">) =>
+  updateFact: (id: number, body: ApiFactInput) =>
     request<ApiFact>("PUT", `/api/facts/${id}`, body),
   deleteFact: (id: number) => request<void>("DELETE", `/api/facts/${id}`),
 

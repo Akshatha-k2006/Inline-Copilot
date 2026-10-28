@@ -111,7 +111,7 @@ class ContentWorkflowTests(unittest.TestCase):
                     "raw_path": path.encode("ascii"),
                     "query_string": b"",
                     "headers": headers,
-                    "client": ("testclient", 123),
+                    "client": ("127.0.0.1", 123),
                     "server": ("testserver", 80),
                 },
                 receive,

@@ -46,6 +46,7 @@ def check_terminology(text: str, db: Session) -> list[dict]:
                         "status": term.status,
                         "preferred_term": term.replacement,
                         "explanation": term.explanation,
+                        "guideline_id": term.guideline_id,
                     },
                 }
             )

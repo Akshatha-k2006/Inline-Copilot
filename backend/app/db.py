@@ -55,6 +55,25 @@ def migrate_review_schema(bind: Engine = engine) -> None:
                 connection.execute(
                     text("ALTER TABLE content ADD COLUMN reviewed_at TIMESTAMP")
                 )
+        if "terms" in tables:
+            term_columns = {
+                column["name"] for column in inspector.get_columns("terms")
+            }
+            if "guideline_id" not in term_columns:
+                connection.execute(
+                    text(
+                        "ALTER TABLE terms ADD COLUMN guideline_id INTEGER "
+                        "REFERENCES guidelines(id) ON DELETE SET NULL"
+                    )
+                )
+        if "facts" in tables:
+            fact_columns = {
+                column["name"] for column in inspector.get_columns("facts")
+            }
+            if "last_reviewed" not in fact_columns:
+                connection.execute(
+                    text("ALTER TABLE facts ADD COLUMN last_reviewed TIMESTAMP")
+                )
 
 
 def get_db():
