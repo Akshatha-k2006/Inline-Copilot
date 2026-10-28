@@ -101,15 +101,19 @@ export default function Home() {
 
       {role === "creator" && (
         <section className="card">
-          <p className="eyebrow">Getting started</p>
-          <h2>Make your first polished draft</h2>
+          <p className="eyebrow">Create content</p>
+          <h2>Start a new draft</h2>
           <p className="muted">
-            Open the inline editor, run a review, and resolve each finding using
-            its supporting brand source.
+            Create a new document in the inline editor, run a review against brand guidelines, and fix findings before submitting for review.
           </p>
-          <Link className="button button-primary" href="/editor">
-            Open Inline Editor
-          </Link>
+          <div className="home-actions">
+            <Link className="button button-primary" href="/editor">
+              Open Inline Editor
+            </Link>
+            <Link className="button" href="/editor">
+              Create a new draft
+            </Link>
+          </div>
         </section>
       )}
 
