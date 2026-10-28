@@ -56,6 +56,7 @@ export default function Editor() {
   const [creating, setCreating] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
 
   const [title, setTitle] = useState("");
   const [contentType, setContentType] = useState<string>(CONTENT_TYPES[0][0]);
@@ -167,6 +168,7 @@ export default function Editor() {
     setCreating(false);
     setSelectedId(id);
     setError("");
+    setMessage("");
   }
 
   function openCreateForm() {
@@ -181,6 +183,7 @@ export default function Editor() {
     setComments([]);
     setAudit([]);
     setError("");
+    setMessage("");
   }
 
   function returnToList() {
@@ -189,6 +192,7 @@ export default function Editor() {
     setCreating(false);
     setSelected(null);
     setError("");
+    setMessage("");
   }
 
   async function refreshSelected(id: number) {
@@ -201,6 +205,7 @@ export default function Editor() {
     actionInFlight.current = true;
     setBusy(true);
     setError("");
+    setMessage("");
 
     try {
       await action();
@@ -231,6 +236,7 @@ export default function Editor() {
       setSelectedId(created.id);
       window.history.replaceState({}, "", `/editor?id=${created.id}`);
       await loadList();
+      setMessage("Content created successfully and saved to the backend.");
     });
   }
 
@@ -329,7 +335,7 @@ export default function Editor() {
               onClick={openCreateForm}
               disabled={busy}
             >
-              Create New Content
+              Create Content
             </button>
           )}
         </div>
@@ -349,6 +355,11 @@ export default function Editor() {
             Retry
           </button>
         </div>
+      )}
+      {message && (
+        <p className="editor-notice" role="status">
+          {message}
+        </p>
       )}
 
       {loadingList ? (
@@ -398,8 +409,8 @@ export default function Editor() {
         >
           <div className="panel-heading">
             <div>
-              <p className="eyebrow">New draft</p>
-              <h2>Create New Content</h2>
+              <p className="eyebrow">New content</p>
+              <h2>Create Content</h2>
             </div>
           </div>
 
@@ -462,7 +473,7 @@ export default function Editor() {
                 className="button button-primary"
                 disabled={busy || !title.trim() || !body.trim()}
               >
-                {busy ? "Creating..." : "Create draft"}
+                {busy ? "Creating..." : "Create Content"}
               </button>
             </div>
           </div>
@@ -806,8 +817,8 @@ export default function Editor() {
 
       {selected && selected.status === "in_review" && role === "creator" && (
         <p className="editor-notice" role="note">
-          The content is with a reviewer. Create another draft while this item
-          is under review.
+          The content is with a reviewer. Create another content item while
+          this one is under review.
         </p>
       )}
 
@@ -837,16 +848,6 @@ export default function Editor() {
             disabled={busy}
           >
             Return to content list
-          </button>
-        )}
-        {canCreate && (
-          <button
-            type="button"
-            className="button button-primary"
-            onClick={openCreateForm}
-            disabled={busy}
-          >
-            Create New Content
           </button>
         )}
       </div>

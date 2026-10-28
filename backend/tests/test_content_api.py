@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 from fastapi import FastAPI
 from sqlalchemy import create_engine
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -14,6 +15,7 @@ from app.exception_handlers import register_exception_handlers
 from app.models import AuditEvent, Comment, Content, Finding
 from app.routers.content import router as content_router
 from app.routers.content_workflow import router as workflow_router
+from app.routers.health import router as health_router
 from app.routers.review import router as review_router
 
 
@@ -28,6 +30,7 @@ class ContentApiTests(unittest.TestCase):
         self.db = Session(self.engine)
         self.app = FastAPI()
         register_exception_handlers(self.app)
+        self.app.include_router(health_router, prefix="/api")
         self.app.include_router(content_router, prefix="/api")
         self.app.include_router(workflow_router, prefix="/api")
         self.app.include_router(review_router, prefix="/api")
@@ -107,6 +110,42 @@ class ContentApiTests(unittest.TestCase):
                 "body": body,
             },
         )
+
+    def test_health_checks_database_and_content_routes_are_registered_once(self):
+        status, response = self.request("/api/health")
+        self.assertEqual(status, 200)
+        self.assertEqual(response, {"status": "ok"})
+
+        with patch.object(
+            self.db,
+            "execute",
+            side_effect=SQLAlchemyError("database unavailable"),
+        ):
+            status, response = self.request("/api/health")
+        self.assertEqual(status, 503)
+        self.assertEqual(response["error"], "database_unavailable")
+
+        for method in ("GET", "PUT"):
+            matches = [
+                route
+                for router in (content_router, workflow_router)
+                for route in router.routes
+                if getattr(route, "path", None) == "/content/{content_id}"
+                and method in getattr(route, "methods", set())
+            ]
+            self.assertEqual(
+                len(matches),
+                1,
+                f"Expected exactly one {method} handler for a content item.",
+            )
+
+        self_check_routes = [
+            route
+            for route in workflow_router.routes
+            if getattr(route, "path", None) == "/content/{content_id}/self-check"
+            and "POST" in getattr(route, "methods", set())
+        ]
+        self.assertEqual(len(self_check_routes), 1)
 
     def run_review(self, content_id):
         with (
