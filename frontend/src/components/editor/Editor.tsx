@@ -36,6 +36,7 @@ export default function Editor() {
   const [error, setError] = useState("");
   const titleInputRef = useRef<HTMLInputElement>(null);
   const newTitleInputRef = useRef<HTMLInputElement>(null);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
 
   const findings = document ? getDocumentFindings(workspace, document.id) : [];
   const review = workspace.reviews.find((item) => item.document_id === document?.id);
@@ -115,6 +116,9 @@ export default function Editor() {
       setBody(created.body);
       setCreating(false);
       setNewTitle("Untitled document");
+      setTimeout(() => {
+        bodyRef.current?.focus();
+      }, 0);
     }, "Document created.");
   }
 
@@ -196,7 +200,7 @@ export default function Editor() {
       <div className="editor-layout">
         <aside className="editor-document-list card">
           <div className="panel-heading"><p className="eyebrow">{role === "creator" ? "My documents" : "Submitted documents"}</p>{role === "creator" && <button className="button" type="button" onClick={() => { setCreating(true); setSelectedDocumentId(null); setNewTitle("Untitled document"); window.setTimeout(() => newTitleInputRef.current?.focus(), 0); }}>New</button>}</div>
-          {visibleDocuments.map((item) => <button className={`document-list-item${item.id === document?.id ? " active" : ""}`} type="button" key={item.id} onClick={() => { setSelectedDocumentId(item.id); setCreating(false); }}>
+          {visibleDocuments.map((item) => <button className={`document-list-item${item.id === document?.id ? " active" : ""}`} type="button" key={item.id} onClick={() => { setSelectedDocumentId(item.id); setCreating(false); if (canEdit) { setTimeout(() => bodyRef.current?.focus(), 0); } }}>
             <strong>{item.title}</strong>
             <span>{contentStatusLabel(item.status)}</span>
           </button>)}
@@ -235,6 +239,7 @@ export default function Editor() {
             <span className="autosave-indicator">Saved locally</span>
           </div>
           <textarea
+            ref={bodyRef}
             aria-label="Document body"
             className="document-editor"
             value={body}
