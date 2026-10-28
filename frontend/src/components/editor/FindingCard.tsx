@@ -17,6 +17,7 @@ interface FindingCardProps {
     finding: DemoFinding,
     status: Exclude<FindingStatus, "open">,
     finalText: string | null,
+    dismissalReason?: string,
   ) => Promise<void>;
 }
 
@@ -37,6 +38,8 @@ export default function FindingCard({
 }: FindingCardProps) {
   const [editing, setEditing] = useState(false);
   const [suggestion, setSuggestion] = useState(finding.suggestion ?? "");
+  const [dismissalReason, setDismissalReason] = useState("");
+  const [showDismissal, setShowDismissal] = useState(false);
   const [actionError, setActionError] = useState("");
   const hasSuggestedReplacement = isReplacementSuggestion(finding.suggestion);
 
@@ -55,11 +58,16 @@ export default function FindingCard({
       setActionError("Enter a non-empty correction before saving.");
       return;
     }
+    if (status === "dismissed" && !dismissalReason.trim()) {
+      setActionError("Choose a dismissal reason before continuing.");
+      return;
+    }
     if (!onResolve) return;
     setActionError("");
     try {
-      await onResolve(finding, status, finalText);
+      await onResolve(finding, status, finalText, dismissalReason);
       setEditing(false);
+      setShowDismissal(false);
     } catch (error) {
       setActionError(
         error instanceof Error
@@ -219,7 +227,7 @@ export default function FindingCard({
             <button
               type="button"
               className="button"
-              onClick={() => void resolve("dismissed", null)}
+              onClick={() => setShowDismissal(true)}
               disabled={busy}
             >
               Dismiss
@@ -273,7 +281,7 @@ export default function FindingCard({
               <button
                 type="button"
                 className="button"
-                onClick={() => void resolve("dismissed", null)}
+                onClick={() => setShowDismissal(true)}
                 disabled={busy}
               >
                 Dismiss
@@ -283,6 +291,26 @@ export default function FindingCard({
         </div>
       ) : (
         <p className="finding-resolved-note">Finding actions are unavailable in this role.</p>
+      )}
+      {showDismissal && !resolved && !readOnly && (
+        <div className="dismissal-form">
+          <label htmlFor={`dismissal-reason-${finding.id}`}>Why is this not applicable?</label>
+          <select
+            id={`dismissal-reason-${finding.id}`}
+            value={dismissalReason}
+            onChange={(event) => setDismissalReason(event.target.value)}
+          >
+            <option value="">Choose a reason</option>
+            <option value="Not applicable">Not applicable</option>
+            <option value="Context explains the claim">Context explains the claim</option>
+            <option value="Approved exception">Approved exception</option>
+            <option value="False positive">False positive</option>
+          </select>
+          <div className="finding-actions">
+            <button type="button" className="button button-danger" onClick={() => void resolve("dismissed", null)} disabled={busy || !dismissalReason}>Confirm dismissal</button>
+            <button type="button" className="button" onClick={() => { setShowDismissal(false); setDismissalReason(""); }}>Cancel</button>
+          </div>
+        </div>
       )}
     </article>
   );

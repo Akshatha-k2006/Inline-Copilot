@@ -19,6 +19,7 @@ interface FindingsPanelProps {
     finding: DemoFinding,
     status: Exclude<FindingStatus, "open">,
     finalText: string | null,
+    dismissalReason?: string,
   ) => Promise<void>;
 }
 
@@ -42,6 +43,9 @@ export default function FindingsPanel({
   const highCount = activeFindings.filter(
     (finding) => finding.severity === "high",
   ).length;
+  const warningCount = activeFindings.filter((finding) => finding.severity === "medium").length;
+  const infoCount = activeFindings.filter((finding) => finding.severity === "low").length;
+  const dismissedCount = resolvedFindings.filter((finding) => finding.status === "dismissed").length;
 
   return (
     <section className="editor-card findings-panel" aria-labelledby="findings-heading">
@@ -55,7 +59,7 @@ export default function FindingsPanel({
           </h2>
         </div>
         {activeFindings.length > 0 && (
-          <span className="finding-count">{highCount} error severity</span>
+          <span className="finding-count">{highCount} errors · {warningCount} warnings · {infoCount} info</span>
         )}
       </div>
 
@@ -73,13 +77,13 @@ export default function FindingsPanel({
           </h3>
           <p>
             {reviewState === "loading"
-              ? "The latest backend review is still loading."
+              ? "The local demo review is still loading."
               : reviewState === "error"
-                ? "The backend review could not be loaded or saved. This is not a successful empty review."
+                ? "The local demo review could not be completed. This is not a successful empty review."
                 : reviewState === "stale"
                   ? "The draft changed after its last review, so those results are out of date. Review this version again."
                   : readOnly
-                    ? "No backend review is recorded for this content yet."
+                    ? "No demo review is recorded for this content yet."
                     : "Review the draft to check its configured guidelines, terminology, and facts."}
           </p>
           {canRunReview && onRunReview && (
@@ -107,10 +111,10 @@ export default function FindingsPanel({
           </h3>
           <p>
             {reviewedCustomText
-              ? "The backend did not identify configured issues in this draft. Editorial approval may still be required."
+              ? "The demo engine did not identify configured issues in this draft. Editorial approval may still be required."
               : resolvedFindings.length > 0
                 ? "Resolved findings remain below for reference. This does not indicate a verified review result."
-                  : "The backend review detected no configured issues in this content. It does not replace editorial approval."}
+                  : "The demo engine detected no configured issues in this content. It does not replace editorial approval."}
           </p>
         </div>
       ) : (
@@ -131,7 +135,7 @@ export default function FindingsPanel({
       )}
       {resolvedFindings.length > 0 && (
         <section className="resolved-findings" aria-labelledby="resolved-findings-heading">
-          <h3 id="resolved-findings-heading">Resolved findings ({resolvedFindings.length})</h3>
+          <h3 id="resolved-findings-heading">Resolved ({resolvedFindings.length}) · Dismissed ({dismissedCount})</h3>
           <ul>
             {resolvedFindings.map((finding) => (
               <li key={finding.id} id={`finding-card-${finding.id}`}>

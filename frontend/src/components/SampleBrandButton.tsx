@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { ApiError, api } from "@/lib/api";
 import { useRole } from "@/lib/role";
 import { canManageKnowledge } from "@/lib/workflow";
+import { resetDemoWorkspace } from "@/lib/mock-data";
 
 interface SampleBrandButtonProps {
   onLoaded?: () => void;
@@ -21,7 +21,7 @@ export default function SampleBrandButton({
   async function loadSampleBrand() {
     if (
       !window.confirm(
-        "This replaces the backend sample knowledge records and sample content #1. Continue?",
+        "This resets the fictional demo workspace in this browser. Continue?",
       )
     ) {
       return;
@@ -31,16 +31,12 @@ export default function SampleBrandButton({
     setMessage("");
     setError("");
     try {
-      const result = await api.seedSample();
+      resetDemoWorkspace(role);
       onLoaded?.();
-      setMessage(
-        `${result.brand} sample data loaded (${result.counts.guidelines} guidelines, ${result.counts.terms} terms, ${result.counts.facts} facts, ${result.counts.assets} assets).`,
-      );
+      setMessage("Sample workspace restored.");
     } catch (cause) {
       setError(
-        cause instanceof ApiError
-          ? cause.message
-          : cause instanceof Error
+        cause instanceof Error
             ? cause.message
             : "Could not load sample brand data.",
       );

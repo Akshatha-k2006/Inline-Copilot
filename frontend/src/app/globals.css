@@ -262,6 +262,24 @@ a {
   color: #514725;
 }
 
+.demo-mode-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding: 10px 14px;
+  border: 1px solid #c9bdf7;
+  border-radius: 10px;
+  background: #f5f2ff;
+  color: #4c35a8;
+  font-size: 0.9rem;
+}
+
+.demo-mode-banner span + span {
+  padding-left: 10px;
+  border-left: 1px solid #c9bdf7;
+}
+
 .demo-stat-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));

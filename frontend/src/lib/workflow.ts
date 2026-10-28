@@ -33,7 +33,7 @@ export function canEditContent(
   return (
     role === "creator" &&
     name === document.created_by &&
-    document.status === "draft"
+    (document.status === "draft" || document.status === "changes_requested")
   );
 }
 
@@ -85,7 +85,9 @@ export function contentStatusLabel(status: Content["status"]): string {
     draft: "Draft",
     self_checked: "Self-checked",
     in_review: "In Review",
+    changes_requested: "Changes Requested",
     approved: "Approved",
+    rejected: "Rejected",
     ready_to_publish: "Ready to publish",
   };
   return labels[status];

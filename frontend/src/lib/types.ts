@@ -6,7 +6,9 @@ export type ContentStatus =
   | "draft"
   | "self_checked"
   | "in_review"
+  | "changes_requested"
   | "approved"
+  | "rejected"
   | "ready_to_publish";
 
 export type CheckType =

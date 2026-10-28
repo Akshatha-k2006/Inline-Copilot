@@ -27,6 +27,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <RoleProvider>
           <TopBar />
           <main id="main" className="container">
+            <div className="demo-mode-banner" role="status">
+              <strong>Demo Mode</strong>
+              <span>Using sample data</span>
+              <span>Authentication disabled</span>
+            </div>
             {children}
           </main>
         </RoleProvider>

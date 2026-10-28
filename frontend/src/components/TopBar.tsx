@@ -7,24 +7,24 @@ import RoleSwitcher from "./RoleSwitcher";
 
 const NAV = [
   { href: "/", label: "Home", key: "home" },
-  { href: "/editor", label: "Write & Review", key: "editor" },
+  { href: "/editor", label: "Inline Editor", key: "editor" },
   {
     href: "/knowledge?tab=guidelines",
     label: "Guidelines",
     key: "guidelines",
   },
-  { href: "/audit", label: "Audit Trails", key: "audit" },
+  { href: "/queue", label: "Review Queue", key: "queue" },
+  { href: "/audit", label: "Audit Trail", key: "audit" },
 ];
 
 export default function TopBar() {
   const pathname = usePathname();
   const { role, user, label } = useRole();
-  const visibleNav = NAV.map((item) =>
-    item.key === "editor" && role === "reviewer"
-      ? { ...item, href: "/queue" }
-      : item,
-  );
-  const isDevelopment = process.env.NODE_ENV === "development";
+  const visibleNav = NAV.filter((item) => {
+    if (item.key === "queue") return role !== "creator";
+    if (item.key === "audit") return role === "admin" || role === "brand_manager";
+    return true;
+  });
 
   return (
     <aside className="topbar">
@@ -51,7 +51,9 @@ export default function TopBar() {
                     pathname.startsWith("/queue/")
                   : item.key === "guidelines"
                     ? pathname === "/knowledge"
-                    : pathname === "/audit" || pathname.startsWith("/audit/");
+                    : item.key === "queue"
+                      ? pathname === "/queue" || pathname.startsWith("/queue/")
+                      : pathname === "/audit" || pathname.startsWith("/audit/");
             return (
               <li key={item.href}>
                 <Link
@@ -71,17 +73,13 @@ export default function TopBar() {
         <span className="profile-avatar" aria-hidden="true">A</span>
         <span className="profile-details">
           <strong>
-            {isDevelopment
-              ? user.replace(/\s+\([^)]*\)$/, "")
-              : "Authentication unavailable"}
+            {user.replace(/\s+\([^)]*\)$/, "")}
           </strong>
           <span>
-            {isDevelopment
-              ? `${label} · local development role, not authentication`
-              : "Production API access is disabled until authentication is configured."}
+            {label} · demo role
           </span>
         </span>
-        {isDevelopment && <RoleSwitcher />}
+        <RoleSwitcher />
       </div>
     </aside>
   );
