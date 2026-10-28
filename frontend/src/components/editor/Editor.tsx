@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import EmptyState from "@/components/EmptyState";
+import { api, ApiError } from "@/lib/api";
 import type { DemoFinding } from "@/lib/mock-findings";
 import {
   CUSTOM_CONTENT_NOTICE,
@@ -13,7 +14,7 @@ import {
 import {
   getDocumentFindings,
   getWorkflowBlockersForDocument,
-  recordDemoReview,
+  recordBackendReview,
   resetDemoDocument,
   resolveDemoFinding,
   saveDemoDraft,
@@ -22,6 +23,7 @@ import {
 } from "@/lib/mock-data";
 import { useRole } from "@/lib/role";
 import type { FindingStatus } from "@/lib/types";
+import type { BackendFinding } from "@/lib/types";
 import {
   canEditContent,
   contentStatusLabel,
@@ -31,6 +33,83 @@ import FindingsPanel from "./FindingsPanel";
 import HighlightedDraft from "./HighlightedDraft";
 
 const DEFAULT_TITLE = "Untitled draft";
+
+function toDemoFinding(
+  finding: BackendFinding,
+  contentId: number,
+  knowledge: ReturnType<typeof useDemoWorkspace>["knowledge"],
+): DemoFinding {
+  const rawSource = finding.evidence.source;
+  const sourceType =
+    rawSource.type === "term" ||
+    rawSource.type === "fact" ||
+    rawSource.type === "guideline"
+      ? rawSource.type
+      : "guideline";
+  const sourceId = typeof rawSource.id === "number" ? rawSource.id : 0;
+  const fallbackText =
+    typeof rawSource.text === "string"
+      ? rawSource.text
+      : "This finding was generated from the configured brand rules.";
+  const knowledgeSource =
+    sourceType === "term"
+      ? {
+          type: "term" as const,
+          record:
+            knowledge.glossary.find((item) => Number(item.id) === sourceId) ?? {
+              id: String(sourceId),
+              term: finding.evidence.matched_text,
+              definition: fallbackText,
+              preferredTerm: finding.suggested_fix ?? "",
+            },
+        }
+      : sourceType === "fact"
+        ? {
+            type: "fact" as const,
+            record:
+              knowledge.facts.find((item) => Number(item.id) === sourceId) ?? {
+                id: String(sourceId),
+                claim: fallbackText,
+                owner: "Brand knowledge base",
+                reviewDate: "",
+              },
+          }
+        : {
+            type: "guideline" as const,
+            record:
+              knowledge.guidelines.find((item) => Number(item.id) === sourceId) ?? {
+                id: String(sourceId),
+                title: "Brand rule",
+                description: fallbackText,
+              },
+          };
+
+  return {
+    id: finding.id,
+    content_id: contentId,
+    check: finding.check as DemoFinding["check"],
+    severity:
+      finding.severity === "high" || finding.severity === "low"
+        ? finding.severity
+        : "medium",
+    start: finding.start_offset ?? 0,
+    end: finding.end_offset ?? finding.start_offset ?? 0,
+    text: finding.evidence.matched_text,
+    explanation: finding.message,
+    source: {
+      type: sourceType,
+      id: sourceId,
+      label:
+        typeof rawSource.text === "string"
+          ? rawSource.text
+          : `${sourceType} ${sourceId}`,
+    },
+    suggestion: finding.suggested_fix,
+    status: finding.status as DemoFinding["status"],
+    final_text: null,
+    knowledge_source: knowledgeSource,
+  };
+}
 
 export default function Editor() {
   const workspace = useDemoWorkspace();
@@ -154,6 +233,7 @@ export default function Editor() {
     if (!mayEdit || !currentDocument || !body.trim() || reviewInFlight.current) return;
     const currentRevision = reviewRevision.current;
     const submittedBody = body;
+    const submittedTitle = title;
 
     reviewInFlight.current = true;
     setReviewing(true);
@@ -162,10 +242,28 @@ export default function Editor() {
     await new Promise<void>((resolve) => window.setTimeout(resolve, 350));
     if (reviewRevision.current === currentRevision) {
       try {
-        saveDemoDraft(currentDocument.id, title, submittedBody, role, user);
-        const demoFindings = recordDemoReview(submittedBody, role, user);
-        setReviewedCustomText(demoFindings.length === 0);
-        setOperationError("");
+        try {
+          saveDemoDraft(currentDocument.id, submittedTitle, submittedBody, role, user);
+          const savedContent = await api.updateContent(currentDocument.id, {
+            title: submittedTitle.trim(),
+            body: submittedBody,
+          });
+          const reviewResponse = await api.reviewContent(savedContent.id);
+          const backendFindings = reviewResponse.findings.map((finding) =>
+            toDemoFinding(finding, savedContent.id, workspace.knowledge),
+          );
+          recordBackendReview(submittedBody, backendFindings, role, user);
+          setReviewedCustomText(false);
+          setOperationError("");
+        } catch (error) {
+          setOperationError(
+            error instanceof ApiError
+              ? error.message
+              : error instanceof Error
+                ? error.message
+                : "Could not complete the backend review.",
+          );
+        }
       } catch (error) {
         setOperationError(
           error instanceof Error ? error.message : "Could not save this demo review.",
@@ -184,6 +282,15 @@ export default function Editor() {
     if (!workspace.isHydrated) return;
     setBusyFindingIds((ids) => [...ids, finding.id]);
     try {
+      if (status === "accepted" && finalText === null) {
+        throw new Error(
+          "This backend finding has no suggested correction to accept. Dismiss it or edit the text manually.",
+        );
+      }
+      await api.updateFinding(finding.id, {
+        action: status === "dismissed" ? "dismiss" : status === "edited" ? "edit" : "accept",
+        ...(status === "edited" ? { replacement: finalText ?? "" } : {}),
+      });
       const result = resolveDemoFinding(
         finding.id,
         status,
@@ -198,11 +305,13 @@ export default function Editor() {
     }
   }
 
-  function submitForReview() {
+  async function submitForReview() {
     if (!canSubmit || !currentDocument) return;
     setOperationError("");
     try {
       saveDemoDraft(currentDocument.id, title, body, role, user);
+      await api.selfCheckContent(currentDocument.id);
+      await api.submitContent(currentDocument.id);
       const action =
         currentDocument.status === "changes_requested" ? "resubmit" : "submit";
       transitionDemoDocument(currentDocument.id, action, role, user);
@@ -267,7 +376,7 @@ export default function Editor() {
           <p className="eyebrow">CoRESpace / Workspace</p>
           <h1>Write &amp; Review</h1>
           <p className="lead">
-            Review the sample draft with the active demo role. Mock checks are limited to fixed known phrases.
+            Write or paste content and review it against the configured Lumina Home brand knowledge.
           </p>
         </div>
         {mayEdit && (
@@ -283,7 +392,7 @@ export default function Editor() {
       </header>
 
       <p className="editor-demo-banner" role="note">
-        {DEMO_FINDINGS_NOTICE} This role switcher is a prototype, not authentication. No backend review or publishing is connected.
+        {DEMO_FINDINGS_NOTICE} The role switcher is a prototype, not authentication. Reviews use the configured backend brand rules.
       </p>
       {operationError && <p className="form-error" role="alert">{operationError}</p>}
       {!workspace.isHydrated && (
@@ -295,7 +404,7 @@ export default function Editor() {
         </p>
       )}
       <p className="editor-notice" role="note">
-        Finding actions are saved only in this browser&apos;s local demonstration data, not to a server.
+        Drafts, reviews, and finding actions are sent to the backend. The surrounding demo workflow and audit display remain browser-local.
       </p>
       {reviewedCustomText && (
         <p className="editor-notice" role="status">{CUSTOM_CONTENT_NOTICE}</p>
@@ -404,7 +513,7 @@ export default function Editor() {
                   disabled={emptyContent || reviewing || !workspace.isHydrated}
                 >
                   {reviewing && <span className="loading-spinner" aria-hidden="true" />}
-                  {reviewing ? "Reviewing demo content..." : "Run Demo Review"}
+                  {reviewing ? "Reviewing content..." : "Review content"}
                 </button>
               </div>
             )}
@@ -428,7 +537,7 @@ export default function Editor() {
               <button
                 type="button"
                 className="button button-primary"
-                onClick={submitForReview}
+                onClick={() => void submitForReview()}
                 disabled={!workspace.isHydrated || workflowBlockers.length > 0}
               >
                 {currentDocument?.status === "changes_requested"

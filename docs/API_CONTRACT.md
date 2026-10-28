@@ -32,6 +32,16 @@ records.
 
 ## Content review
 
+Content drafts can be read and updated through:
+
+- `GET /api/content/{id}` returns the content title, body, status, version,
+  creator, and update timestamp.
+- `PUT /api/content/{id}` accepts `title` and `body`, increments the content
+  version, and is restricted to the creator while the content is an editable
+  draft or has requested changes.
+- `POST /api/content/{id}/self-check` transitions a creator's draft to
+  `self_checked`. The existing submit route then transitions it to `in_review`.
+
 `POST /api/content/{id}/review` returns `200` with the content version,
 persisted findings, and engine statuses. Each finding contains an integer
 `id`, string `check`, `severity`, `message`, and `status`, an `evidence`

@@ -45,6 +45,25 @@ class ContentStatusResponse(BaseModel):
     content_version: int
 
 
+class ContentResponse(BaseModel):
+    id: int
+    title: str
+    body: str
+    status: str
+    version: int
+    created_by: str
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ContentUpdate(BaseModel):
+    title: str
+    body: str
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class ReviewDecisionRequest(BaseModel):
     decision: Literal["approve", "request_changes"]
     comment: str | None = None
