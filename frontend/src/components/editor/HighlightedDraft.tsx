@@ -68,6 +68,12 @@ export default function HighlightedDraft({
           aria-label={`${SEVERITY_LABELS[finding.severity] ?? "Unknown"}: ${String(finding.check ?? "Unknown").replaceAll("_", " ")}. ${finding.text ?? ""}`}
           aria-pressed={selectedFindingId === finding.id}
           onClick={() => onSelect(finding)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              onSelect(finding);
+            }
+          }}
         >
           {body.slice(start, end)}
         </button>
@@ -76,38 +82,13 @@ export default function HighlightedDraft({
   });
 
   return (
-    <section
-      className="highlighted-draft"
-      aria-labelledby="highlighted-draft-heading"
-    >
-      <div className="highlighted-draft-heading">
-        <h3 id="highlighted-draft-heading">Highlighted draft</h3>
-        <div className="severity-legend" aria-label="Severity key">
-          <span>
-            <i className="legend-marker legend-error" aria-hidden="true">
-              !
-            </i>
-            Error
-          </span>
-          <span>
-            <i className="legend-marker legend-warning" aria-hidden="true">
-              !
-            </i>
-            Warning
-          </span>
-          <span>
-            <i className="legend-marker legend-info" aria-hidden="true">
-              i
-            </i>
-            Info
-          </span>
-        </div>
-      </div>
-      <p className="highlighted-draft-copy">
-        Select a highlighted phrase to open its finding. Click a finding to
-        select that phrase in the editor.
-      </p>
-      <div className="highlighted-draft-text">
+    <section className="highlighted-draft-inline" aria-label="Inline highlights">
+      <div
+        className="document-editor highlighted-draft-text"
+        role="region"
+        aria-label="Document with highlights"
+        tabIndex={0}
+      >
         {content}
         {body.slice(cursor)}
       </div>

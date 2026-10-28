@@ -1574,11 +1574,17 @@ a {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: 20px;
-  padding: 15px;
+  margin-top: 12px;
+  padding: 14px;
   border: 1px solid var(--border);
   border-radius: 11px;
   background: #fbfcff;
+}
+
+.highlighted-draft-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .highlighted-draft-heading {
@@ -1643,35 +1649,36 @@ a {
 }
 
 .highlighted-draft-text {
-  max-height: 300px;
-  overflow: auto;
-  padding: 12px;
-  border: 1px solid #e7eaf2;
-  border-radius: 8px;
-  background: #fff;
-  color: #343d59;
-  font-size: 0.92rem;
-  line-height: 1.8;
+  padding: 18px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
+  color: var(--text);
+  font-size: 1.08rem;
+  line-height: 1.9;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  min-height: 320px;
 }
 
 .finding-highlight {
   position: relative;
   display: inline;
-  padding: 1px 3px 1px 20px;
+  padding: 0 2px 1px 18px;
   border: 0;
   border-bottom: 2px solid currentColor;
-  border-radius: 3px;
+  border-radius: 2px;
   font: inherit;
   text-align: left;
   white-space: inherit;
   cursor: pointer;
+  background: transparent;
 }
 
 .finding-highlight::before {
   position: absolute;
-  left: 3px;
+  left: 2px;
   top: 50%;
   display: inline-grid;
   place-items: center;

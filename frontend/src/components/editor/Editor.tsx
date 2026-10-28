@@ -238,20 +238,21 @@ export default function Editor() {
             <input ref={titleInputRef} aria-label="Document title" className="title-input" value={title} onChange={(event) => setTitle(event.target.value)} disabled={!canEdit} placeholder="Untitled document" />
             <span className="autosave-indicator">Saved locally</span>
           </div>
-          <textarea
-            ref={bodyRef}
-            aria-label="Document body"
-            className="document-editor"
-            value={body}
-            onChange={(event) => setBody(event.target.value)}
-            disabled={!canEdit}
-            spellCheck
-            placeholder="Start writing your on-brand content here..."
-          />
-          <div className="editor-meta"><span>{body.trim().split(/\s+/).filter(Boolean).length} words · {readingTime} min read</span><span>{reviewState === "current" ? "Review is current" : "Review needed"}</span></div>
-          {findings.length > 0 && (
+          {findings.length > 0 ? (
             <HighlightedDraft body={body} findings={findings} selectedFindingId={selectedId} onSelect={onSelect} />
+          ) : (
+            <textarea
+              ref={bodyRef}
+              aria-label="Document body"
+              className="document-editor"
+              value={body}
+              onChange={(event) => setBody(event.target.value)}
+              disabled={!canEdit}
+              spellCheck
+              placeholder="Start writing your on-brand content here..."
+            />
           )}
+          <div className="editor-meta"><span>{body.trim().split(/\s+/).filter(Boolean).length} words · {readingTime} min read</span><span>{reviewState === "current" ? "Review is current" : "Review needed"}</span></div>
           <div className="editor-actions">
             {canEdit && <button className="button" type="button" onClick={save}>Save draft</button>}
             {canEdit && <button className="button button-primary" type="button" onClick={reviewDraft}>Run full review</button>}
