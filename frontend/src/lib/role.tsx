@@ -17,6 +17,7 @@ interface RoleContextValue {
   role: Role;
   label: string;
   user: string;
+  isRoleLoaded: boolean;
   setRole: (role: Role) => void;
 }
 
@@ -26,9 +27,11 @@ export function RoleProvider({ children }: { children: ReactNode }) {
   // Start from the default so server and browser render the same thing,
   // then switch to the saved role once the page has loaded.
   const [role, setRoleState] = useState<Role>(DEFAULT_ROLE);
+  const [isRoleLoaded, setRoleLoaded] = useState(false);
 
   useEffect(() => {
     setRoleState(getRole());
+    setRoleLoaded(true);
   }, []);
 
   const setRole = useCallback((next: Role) => {
@@ -38,8 +41,14 @@ export function RoleProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<RoleContextValue>(() => {
     const option = optionFor(role);
-    return { role, label: option.label, user: option.user, setRole };
-  }, [role, setRole]);
+    return {
+      role,
+      label: option.label,
+      user: option.user,
+      isRoleLoaded,
+      setRole,
+    };
+  }, [role, isRoleLoaded, setRole]);
 
   return <RoleContext.Provider value={value}>{children}</RoleContext.Provider>;
 }
