@@ -84,6 +84,7 @@ export function getSubmissionBlockers(
 export function contentStatusLabel(status: Content["status"]): string {
   const labels: Record<Content["status"], string> = {
     draft: "Draft",
+    self_checked: "Self-checked",
     in_review: "In Review",
     changes_requested: "Changes Requested",
     approved: "Approved",

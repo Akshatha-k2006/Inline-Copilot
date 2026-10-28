@@ -1,199 +1,101 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import EmptyState from "@/components/EmptyState";
-import {
-  formatMockTimestamp,
-  getContentAuditEvents,
-  MOCK_DATA_NOTICE,
-  useDemoWorkspace,
-} from "@/lib/mock-data";
-import { contentStatusLabel } from "@/lib/workflow";
+import { ApiError, api } from "@/lib/api";
+import { useRole } from "@/lib/role";
+import type { Content, ContentAuditEvent } from "@/lib/types";
 
-const ACTION_LABELS: Record<string, string> = {
-  created: "Draft created",
-  draft_edited: "Draft edited",
-  draft_reset: "Draft reset",
-  reviewed: "Demonstration review run",
-  finding_accepted: "Finding accepted",
-  finding_edited: "Finding edited",
-  finding_dismissed: "Finding dismissed",
-  submitted: "Submitted for review",
-  resubmitted: "Resubmitted for review",
-  review_comment_added: "Review comment added",
-  changes_requested: "Changes requested",
-  approved: "Approved",
-  ready_to_publish: "Ready to publish",
-};
-
-const ACTION_DESCRIPTIONS: Record<string, string> = {
-  created: "created a draft",
-  draft_edited: "edited the draft",
-  draft_reset: "reset the draft",
-  reviewed: "ran the demonstration review",
-  finding_accepted: "accepted a suggested correction",
-  finding_edited: "replaced the flagged text with a custom correction",
-  finding_dismissed: "dismissed a finding",
-  submitted: "submitted the document for review",
-  resubmitted: "resubmitted the document for review",
-  review_comment_added: "added a review comment",
-  changes_requested: "requested changes",
-  approved: "approved the content",
-  ready_to_publish: "marked the content Ready to publish",
-};
+function messageFor(error: unknown): string {
+  if (error instanceof ApiError) return error.message;
+  return error instanceof Error ? error.message : "The request could not be completed.";
+}
 
 export default function AuditPage() {
-  const workspace = useDemoWorkspace();
-  const [selectedContentId, setSelectedContentId] = useState("all");
-  const selectedDocument =
-    selectedContentId === "all"
-      ? undefined
-      : workspace.documents.find((document) => document.id === Number(selectedContentId));
-  const events =
-    selectedContentId === "all"
-      ? [...workspace.history].sort(
-          (left, right) =>
-            left.at.localeCompare(right.at) || left.id - right.id,
-        )
-      : selectedDocument
-        ? getContentAuditEvents(workspace, selectedDocument.id)
-        : [];
-  const reviewCount = events.filter((entry) => entry.action === "reviewed").length;
+  const { isRoleLoaded } = useRole();
+  const [events, setEvents] = useState<ContentAuditEvent[]>([]);
+  const [documents, setDocuments] = useState<Content[]>([]);
+  const [selectedId, setSelectedId] = useState("all");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [audit, content] = await Promise.all([api.getAudit(), api.listContent()]);
+      setEvents(audit);
+      setDocuments(content);
+      setError("");
+    } catch (cause) {
+      setEvents([]);
+      setDocuments([]);
+      setError(messageFor(cause));
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (isRoleLoaded) void load();
+  }, [isRoleLoaded, load]);
+
+  const visibleEvents = events.filter(
+    (event) => selectedId === "all" || event.content_id === Number(selectedId),
+  );
+  const contentById = new Map(documents.map((item) => [item.id, item]));
 
   return (
     <section className="page">
       <div>
         <p className="eyebrow">CoRESpace / Reviews</p>
         <h1>Audit Trail</h1>
-        <p className="lead">
-          Chronological demonstration activity. Events are shown oldest first; equal timestamps are ordered by their stable event ID.
-        </p>
+        <p className="lead">Chronological activity recorded by the backend.</p>
       </div>
-      <p className="mock-data-notice" role="note">
-        {MOCK_DATA_NOTICE} Actors are the demo role identities selected when an action was made, not authenticated users.
-      </p>
-
-      {workspace.persistenceWarning && (
-        <p className="form-error" role="alert">
-          Audit history could not be loaded or saved in this browser: {workspace.persistenceWarning}
-        </p>
-      )}
-
+      {error && <div className="form-error" role="alert"><p>{error}</p><button className="button" type="button" onClick={() => void load()}>Retry</button></div>}
       <label className="form-field audit-filter" htmlFor="audit-content-filter">
         Filter timeline by content
-        <select
-          id="audit-content-filter"
-          value={selectedContentId}
-          onChange={(event) => setSelectedContentId(event.target.value)}
-          disabled={!workspace.isHydrated}
-        >
+        <select id="audit-content-filter" value={selectedId} onChange={(event) => setSelectedId(event.target.value)} disabled={loading}>
           <option value="all">All content</option>
-          {workspace.documents.map((document) => (
-            <option key={document.id} value={document.id}>
-              #{document.id} · {document.title}
-            </option>
-          ))}
+          {documents.map((document) => <option key={document.id} value={document.id}>#{document.id} · {document.title}</option>)}
         </select>
       </label>
-
-      {selectedDocument && (
-        <section className="card mock-history-summary" aria-labelledby="history-document-heading">
-          <div>
-            <p className="eyebrow">Document #{selectedDocument.id}</p>
-            <h2 id="history-document-heading">{selectedDocument.title}</h2>
-            <p className="muted">Current status: {contentStatusLabel(selectedDocument.status)}</p>
-          </div>
-          <div className="mock-history-count">
-            <strong>{reviewCount}</strong>
-            <span>demonstration review runs</span>
-          </div>
-          <Link href="/editor" className="button button-primary">
-            Open in Write &amp; Review
-          </Link>
-        </section>
-      )}
-
-      {!workspace.isHydrated ? (
-        <p className="editor-notice" role="status">
-          Loading the browser-local demonstration audit history...
-        </p>
-      ) : workspace.persistenceWarning && events.length === 0 ? (
-        <div className="empty-state" role="alert">
-          <h2>Audit history could not be loaded</h2>
-          <p>
-            The saved demonstration history is unavailable, so this page cannot confirm whether this content has prior events.
-          </p>
-        </div>
-      ) : events.length === 0 ? (
+      {loading ? (
+        <p className="editor-notice" role="status">Loading audit events from the backend...</p>
+      ) : visibleEvents.length === 0 ? (
         <EmptyState
-          title={
-            selectedContentId === "all"
-              ? "No audit events are available"
-              : "No events for this content yet"
-          }
-          description="Workflow actions will appear here as content is created, reviewed, edited, and approved. This timeline uses only recorded demonstration events; it does not invent history."
-          action={
-            <Link href={selectedDocument ? "/editor" : "/"} className="button button-primary">
-              {selectedDocument ? "Open Write & Review" : "Go to the dashboard"}
-            </Link>
-          }
-          secondaryAction={selectedDocument ? (
-            <Link href="/" className="button">
-              Go to the dashboard
-            </Link>
-          ) : undefined}
+          title={error ? "Audit history unavailable" : "No audit events are available"}
+          description={error ? "The backend did not return audit history. Retry when the API is available." : "Events will appear here after content is created or workflow actions are performed."}
+          action={<Link href="/editor" className="button button-primary">Open Write &amp; Review</Link>}
         />
       ) : (
-        <ol className="mock-history-list" aria-label="Chronological audit timeline">
-          {events.map((entry) => {
-            const document = workspace.documents.find(
-              (item) => item.id === entry.content_id,
-            );
-            const eventLabel = ACTION_LABELS[entry.action] ?? entry.action.replaceAll("_", " ");
-            const description = ACTION_DESCRIPTIONS[entry.action] ?? entry.detail;
+        <ol className="mock-history-list" aria-label="Backend audit timeline">
+          {visibleEvents.map((event) => {
+            const content = event.content_id === null ? undefined : contentById.get(event.content_id);
+            const details = event.details;
+            const transition = typeof details.previous_status === "string" && typeof details.new_status === "string"
+              ? ` (${details.previous_status.replaceAll("_", " ")} → ${details.new_status.replaceAll("_", " ")})`
+              : "";
             return (
-            <li className="mock-history-item" key={entry.id}>
-              <time dateTime={entry.at}>{formatMockTimestamp(entry.at)}</time>
-              <div>
-                <span className="audit-event-type">{eventLabel}</span>
-                <h2>
-                  {entry.actor} {description}.
-                </h2>
-                <p>{entry.detail}</p>
-                <p className="muted">
-                  {entry.content_title || document?.title || `Document #${entry.content_id}`}
-                  {" · Document #"}{entry.content_id} · {entry.actor} ·{" "}
-                  {entry.role.replaceAll("_", " ")}
-                </p>
-                {entry.finding_id !== undefined && (
-                  <p>
-                    Finding #{entry.finding_id}:{" "}
-                    <Link href={`/editor#finding-card-${entry.finding_id}`}>
-                      {entry.finding_title || "Open finding in Write & Review"}
-                    </Link>
+              <li className="mock-history-item" key={event.id}>
+                <time dateTime={event.created_at}>{new Date(event.created_at).toLocaleString()}</time>
+                <div>
+                  <span className="audit-event-type">{event.action.replaceAll("_", " ")}</span>
+                  <h2>{event.actor} recorded {event.action.replaceAll("_", " ")}{transition}.</h2>
+                  <p className="muted">
+                    {content?.title ?? `Content #${event.content_id ?? "workspace"}`}
+                    {event.content_id !== null ? ` · Content #${event.content_id}` : ""}
+                    {" · "}Actor: {event.actor}
                   </p>
-                )}
-                {entry.changes && entry.changes.length > 0 && (
-                  <dl className="audit-changes">
-                    {entry.changes.map((change, index) => (
-                      <div key={`${change.field}-${index}`}>
-                        <dt>{change.field === "text" ? "Finding text" : change.field}</dt>
-                        <dd>
-                          <span>Previous: </span>
-                          <q>{change.previous ?? "—"}</q>
-                          <span> · New: </span>
-                          <q>{change.next ?? "—"}</q>
-                        </dd>
-                      </div>
-                    ))}
-                  </dl>
-                )}
-                {entry.comment && (
-                  <blockquote className="audit-comment">{entry.comment}</blockquote>
-                )}
-              </div>
-            </li>
+                  {event.content_id !== null && (
+                    <Link href={`/editor?id=${event.content_id}`}>Inspect content</Link>
+                  )}
+                  {typeof details.comment_id === "number" && <p>Comment #{details.comment_id} saved.</p>}
+                  {typeof details.previous_version === "number" && typeof details.new_version === "number" && (
+                    <p>Content version {details.previous_version} → {details.new_version}</p>
+                  )}
+                </div>
+              </li>
             );
           })}
         </ol>

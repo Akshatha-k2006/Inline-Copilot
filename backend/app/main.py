@@ -15,6 +15,7 @@ from app.routers import (
     assets,
     review,
     content_workflow,
+    content,
 )
 app = FastAPI(title="CoRESpace — Inline Copilot API")
 register_exception_handlers(app)
@@ -44,3 +45,4 @@ app.include_router(facts.router, prefix="/api")
 app.include_router(assets.router, prefix="/api")
 app.include_router(review.router, prefix="/api")
 app.include_router(content_workflow.router, prefix="/api")
+app.include_router(content.router, prefix="/api")
