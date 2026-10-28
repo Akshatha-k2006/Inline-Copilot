@@ -826,7 +826,10 @@ a {
   color: var(--text);
   cursor: pointer;
   text-decoration: none;
-  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
 }
 
 .button:hover:not(:disabled) {
@@ -1219,9 +1222,9 @@ a {
 
 .editor-workspace {
   display: grid;
-  grid-template-columns: minmax(240px, 20%) minmax(0, 44%) minmax(320px, 36%);
-  align-items: stretch;
-  gap: 16px;
+  grid-template-columns: minmax(280px, 24%) minmax(0, 46%) minmax(340px, 30%);
+  align-items: start;
+  gap: 18px;
 }
 
 .editor-header {
@@ -1259,8 +1262,8 @@ a {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 18px;
-  min-height: calc(100vh - 220px);
+  padding: 20px;
+  min-height: calc(100vh - 200px);
 }
 
 .document-panel-header {
@@ -1272,7 +1275,7 @@ a {
 
 .panel-title {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: 1.15rem;
 }
 
 .document-list-card {
@@ -1280,44 +1283,51 @@ a {
   flex-direction: column;
   gap: 6px;
   width: 100%;
-  padding: 12px 12px 12px 14px;
+  padding: 14px 14px 14px 16px;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   background: #fff;
   text-align: left;
   cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.document-list-card:hover {
+  border-color: #d9d0ff;
 }
 
 .document-list-card.active {
   border-color: #c7b6ff;
   background: #f6f3ff;
-  box-shadow: inset 3px 0 0 #7c3aed;
+  box-shadow: inset 4px 0 0 #7c3aed;
 }
 
 .document-list-card-main {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
 }
 
 .document-list-card-title {
-  font-size: 0.98rem;
+  font-size: 1rem;
+  line-height: 1.4;
 }
 
 .document-list-card-meta {
   color: var(--muted);
-  font-size: 0.78rem;
+  font-size: 0.8rem;
 }
 
 .document-status-badge {
-  padding: 3px 8px;
+  padding: 3px 9px;
   border-radius: 999px;
   background: #f0f2f8;
   color: #39445f;
-  font-size: 0.75rem;
+  font-size: 0.76rem;
   font-weight: 700;
   text-transform: capitalize;
+  flex: none;
 }
 
 .document-list-item {
@@ -1348,10 +1358,10 @@ a {
 .editor-main-panel {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: clamp(18px, 3vw, 28px);
-  min-height: calc(100vh - 220px);
-  box-shadow: 0 10px 30px rgba(32, 41, 74, 0.05);
+  gap: 16px;
+  padding: clamp(20px, 3.5vw, 30px);
+  min-height: calc(100vh - 200px);
+  box-shadow: 0 12px 36px rgba(32, 41, 74, 0.05);
 }
 
 .editor-main-header {
@@ -1364,7 +1374,7 @@ a {
 .editor-main-title-group {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   width: 100%;
 }
 
@@ -1372,9 +1382,9 @@ a {
   width: 100%;
   border: none;
   background: transparent;
-  font-size: 1.6rem;
+  font-size: 1.8rem;
   font-weight: 750;
-  padding: 4px 0;
+  padding: 2px 0;
 }
 
 .editor-main-title-input:focus {
@@ -1386,7 +1396,7 @@ a {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 10px;
+  gap: 12px;
 }
 
 .editor-toolbar-new {
@@ -1463,20 +1473,20 @@ a {
 .document-editor {
   width: 100%;
   min-height: 320px;
-  padding: 18px 16px;
+  padding: 22px 20px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
   color: var(--text);
   font: inherit;
   font-size: 1.08rem;
-  line-height: 1.9;
+  line-height: 1.95;
   resize: vertical;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
 .document-editor-large {
-  min-height: 460px;
+  min-height: 520px;
 }
 
 .document-editor:focus {
@@ -1496,13 +1506,13 @@ a {
 }
 
 .editor-findings-panel {
-  min-height: calc(100vh - 220px);
+  min-height: calc(100vh - 200px);
 }
 
 .editor-findings-panel .findings-panel {
   position: sticky;
   top: 24px;
-  max-height: calc(100vh - 200px);
+  max-height: calc(100vh - 190px);
   overflow-y: auto;
 }
 
@@ -1786,17 +1796,17 @@ a {
 }
 
 .highlighted-draft-text {
-  padding: 18px 16px;
+  padding: 22px 20px;
   border: 1px solid var(--border);
   border-radius: 12px;
   background: linear-gradient(180deg, #ffffff 0%, #fbfcff 100%);
   color: var(--text);
   font-size: 1.08rem;
-  line-height: 1.9;
+  line-height: 1.95;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
-  min-height: 320px;
+  min-height: 520px;
 }
 
 .editor-bottom-bar {
@@ -2063,7 +2073,9 @@ a {
 }
 
 .finding-card.selected {
-  box-shadow: 0 0 0 2px #6941e8, 0 4px 16px rgb(32 41 74 / 8%);
+  box-shadow:
+    0 0 0 2px #6941e8,
+    0 4px 16px rgb(32 41 74 / 8%);
 }
 
 .finding-card.severity-high {

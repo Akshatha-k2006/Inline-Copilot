@@ -140,7 +140,7 @@ export default function Editor() {
       {error && <p className="form-error" role="alert">{error}</p>}
       <div className="editor-layout">
         <aside className="editor-document-list card">
-          <div className="panel-heading"><p className="eyebrow">My documents</p><button className="button" type="button" onClick={() => { setCreating(true); setSelectedDocumentId(null); setNewTitle("Untitled document"); window.setTimeout(() => newTitleInputRef.current?.focus(), 0); }}>New</button></div>
+          <div className="panel-heading"><p className="eyebrow">My documents</p><button className="button" type="button" onClick={() => { setCreating(true); setSelectedDocumentId(null); setNewTitle("Untitled document"); window.setTimeout(() => newTitleInputRef.current?.focus(), 0); }}>+ New</button></div>
           {workspace.documents.map((item) => <button className="document-list-item" type="button" key={item.id} onClick={() => { setSelectedDocumentId(item.id); setCreating(false); }}>
             <strong>{item.title}</strong>
             <span>{contentStatusLabel(item.status)}</span>
@@ -196,7 +196,7 @@ export default function Editor() {
               <p className="eyebrow">Documents</p>
               <h2 className="panel-title">My Documents</h2>
             </div>
-            {role === "creator" && <button className="button button-primary" type="button" onClick={() => { setCreating(true); setSelectedDocumentId(null); setTitle(""); setBody(""); setNewTitle("Untitled document"); window.setTimeout(() => newTitleInputRef.current?.focus(), 0); }}>New</button>}
+            {role === "creator" && <button className="button button-primary" type="button" onClick={() => { setCreating(true); setSelectedDocumentId(null); setTitle(""); setBody(""); setNewTitle("Untitled document"); window.setTimeout(() => newTitleInputRef.current?.focus(), 0); }}>+ New</button>}
           </div>
           {visibleDocuments.map((item) => (
             <button className={`document-list-card${item.id === document?.id ? " active" : ""}`} type="button" key={item.id} onClick={() => { setSelectedDocumentId(item.id); setCreating(false); if (role === "creator" && item.status === "draft") { setTimeout(() => bodyRef.current?.focus(), 0); } }}>
