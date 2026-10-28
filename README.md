@@ -4,9 +4,11 @@ An AI-powered brand governance platform that reviews content against approved br
 
 ## Local demo
 
-Run the app locally using the setup instructions below. The role switcher uses
-development-only request headers and is not authentication. Production API
-access stays disabled until an OIDC/JWT identity provider is configured.
+Run the app locally using the setup instructions below. The role switcher sends
+`X-Role` and `X-User` demo context to the backend for role-specific UI and
+workflow testing. These caller-supplied values are not authentication and do
+not provide production security; do not expose this demo API as a secured
+multi-user service.
 
 ## What it does
 
@@ -30,7 +32,7 @@ Backend:
 ```
 cd backend
 pip install -r requirements.txt
-cp .env.example .env # set a local database URL; keep APP_ENV=development only locally
+cp .env.example .env # set a local database URL
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -48,12 +50,9 @@ npm run dev
 
 In development, the frontend defaults to `http://localhost:8000`. Copy
 `frontend/.env.example` to `frontend/.env.local` to configure it explicitly.
-Copy `backend/.env.example` to `backend/.env`; keep `APP_ENV=development` only
-for a locally accessed backend. Development role headers are accepted only
-from a loopback client. Set `APP_ENV=production` in deployment; until a real
-authentication provider is integrated, protected API routes return
-`401 authentication_not_configured` and do not trust browser-supplied role or
-user headers. The public health endpoint remains available.
+Copy `backend/.env.example` to `backend/.env`. Role and actor headers are
+simulated demo context, not verified identities or secure authorization; keep
+the backend limited to local demonstration and testing.
 Production requires `NEXT_PUBLIC_API_BASE_URL` to be set to the deployed
 backend's public HTTPS URL before building/deploying the frontend; production
 does not fall back to the visitor's localhost. Add both the local development
