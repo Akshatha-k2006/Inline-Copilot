@@ -73,14 +73,14 @@ export default function FindingsPanel({
           </h3>
           <p>
             {reviewState === "loading"
-              ? "Saved demonstration review results are still loading."
+              ? "The latest review is still running."
               : reviewState === "error"
-                ? "Saved demonstration review data could not be loaded or saved. This is not a successful empty review."
+                ? "The backend could not complete the review. Try again."
                 : reviewState === "stale"
                   ? "The draft changed after its last review, so those results are out of date. Run the demonstration checks again for this version."
                   : readOnly
-                    ? "No demonstration review is recorded for this content yet. The creator can run the known-phrase checks in Write & Review."
-                    : "Run the demonstration checks to see any supported guideline, terminology, or fact findings for this draft."}
+                    ? "No review is recorded for this content yet."
+                    : "Run a review to check this draft against the active brand knowledge base."}
           </p>
           {canRunReview && onRunReview && (
             <button
@@ -89,7 +89,7 @@ export default function FindingsPanel({
               onClick={onRunReview}
               disabled={reviewing || reviewState === "loading" || reviewState === "error"}
             >
-              {reviewing ? "Reviewing demo content..." : "Run Demo Review"}
+              {reviewing ? "Reviewing..." : "Review content"}
             </button>
           )}
         </div>
@@ -100,17 +100,17 @@ export default function FindingsPanel({
           </span>
           <h3>
             {reviewedCustomText
-              ? "No demo findings for this text"
+              ? "No findings for this text"
               : resolvedFindings.length > 0
                 ? "No open findings"
                 : "No findings"}
           </h3>
           <p>
             {reviewedCustomText
-              ? "The local demo has findings for its sample draft only. This does not mean your custom content has passed a review."
+              ? "The backend found no issues for this draft."
               : resolvedFindings.length > 0
                 ? "Resolved findings remain below for reference. This does not indicate a verified review result."
-                  : "The current demonstration review detected no supported issues in this content. It does not verify every guideline, fact, or possible issue."}
+                  : "The backend review detected no issues in this content."}
           </p>
         </div>
       ) : (

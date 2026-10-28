@@ -75,15 +75,15 @@ export default function FindingCard({
   const checkLabel = finding.check.replaceAll("_", " ");
   const knowledgeSource = finding.knowledge_source;
   const knowledgeHref =
-    knowledgeSource.type === "guideline"
+    knowledgeSource?.type === "guideline"
       ? "/knowledge?tab=guidelines"
-      : knowledgeSource.type === "term"
+      : knowledgeSource?.type === "term"
         ? "/knowledge?tab=glossary"
         : "/knowledge?tab=facts";
   const knowledgeLabel =
-    knowledgeSource.type === "guideline"
+    knowledgeSource?.type === "guideline"
       ? "View guideline"
-      : knowledgeSource.type === "term"
+      : knowledgeSource?.type === "term"
         ? "View glossary term"
         : "View fact";
 
@@ -146,10 +146,10 @@ export default function FindingCard({
         </p>
       )}
       <div className="finding-knowledge-source">
-        {knowledgeSource.type === "guideline" && (
+        {knowledgeSource?.type === "guideline" && (
           <p>{knowledgeSource.record.description}</p>
         )}
-        {knowledgeSource.type === "term" && (
+        {knowledgeSource?.type === "term" && (
           <>
             <p>{knowledgeSource.record.definition}</p>
             <p>
@@ -160,12 +160,14 @@ export default function FindingCard({
             </p>
           </>
         )}
-        {knowledgeSource.type === "fact" && (
-          <p>Current mock fact: {knowledgeSource.record.claim}</p>
+        {knowledgeSource?.type === "fact" && (
+          <p>Approved fact: {knowledgeSource.record.claim}</p>
         )}
-        <Link href={knowledgeHref} className="finding-source-link">
-          {knowledgeLabel}
-        </Link>
+        {knowledgeSource && (
+          <Link href={knowledgeHref} className="finding-source-link">
+            {knowledgeLabel}
+          </Link>
+        )}
       </div>
       {finding.fact_details && (
         <dl className="finding-fact-details">

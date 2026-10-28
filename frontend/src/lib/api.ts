@@ -1,4 +1,4 @@
-import type { Content, ContentDraft, Health, ReviewResponse, Role, SeedResponse } from "./types";
+import type { BrandResponse, Content, ContentDraft, Finding, Health, ReviewResponse, Role, SeedResponse } from "./types";
 import { DEFAULT_ROLE, ROLE_STORAGE_KEY, isRole, optionFor } from "./roles";
 
 /** Backend base URL, from NEXT_PUBLIC_API_URL (no trailing slash). */
@@ -138,4 +138,10 @@ export const api = {
     request<Content>("PUT", `/api/content/${id}`, draft),
   reviewContent: (id: number) =>
     request<ReviewResponse>("POST", `/api/content/${id}/review`),
+  getBrand: () => request<BrandResponse>("GET", "/api/brand"),
+  updateFinding: (id: number, status: string, finalText: string | null) =>
+    request<Finding>("PATCH", `/api/findings/${id}`, {
+      status,
+      final_text: finalText,
+    }),
 };

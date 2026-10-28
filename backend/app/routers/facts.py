@@ -28,6 +28,8 @@ def to_response(item: Fact) -> dict:
         "claim": item.statement,
         "owner": item.owner,
         "reviewDate": item.review_by.date().isoformat() if item.review_by else None,
+        "source": item.source,
+        "lastReviewed": None,
         "outdated": is_outdated(item.review_by),
     }
 

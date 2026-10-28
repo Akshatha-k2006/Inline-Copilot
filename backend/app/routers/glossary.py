@@ -18,6 +18,8 @@ def to_response(item: Term) -> dict:
         "term": item.term,
         "definition": item.definition,
         "preferredTerm": item.replacement,
+        "status": item.status,
+        "guidelineId": None,
     }
 
 @router.get("", response_model=list[TermResponse])

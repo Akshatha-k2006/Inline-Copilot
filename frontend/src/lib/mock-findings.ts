@@ -21,7 +21,7 @@ export type DemoKnowledgeSource =
   | { type: "fact"; record: BrandFact };
 
 export type DemoFinding = Finding & {
-  knowledge_source: DemoKnowledgeSource;
+  knowledge_source?: DemoKnowledgeSource;
   fact_details?: DemoFactDetails;
   range_valid?: boolean;
 };

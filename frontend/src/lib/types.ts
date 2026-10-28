@@ -39,6 +39,7 @@ export interface SeedResponse {
 }
 
 export interface ReviewResponse {
+  content_id: number;
   content_version: number;
   findings: Finding[];
   engine?: {
@@ -60,12 +61,29 @@ export interface Finding {
   severity: Severity;
   start: number;
   end: number;
+  start_offset?: number;
+  end_offset?: number;
   text: string;
   explanation?: string;
+  message?: string;
+  evidence?: {
+    matched_text?: string;
+    source?: Record<string, unknown>;
+    [key: string]: unknown;
+  };
   source?: FindingSource;
   suggestion?: string | null;
+  suggested_fix?: string | null;
   status: FindingStatus;
   final_text?: string | null;
+}
+
+export interface BrandResponse {
+  brand: string;
+  guidelines: import("./brand-data").Guideline[];
+  glossary: import("./brand-data").GlossaryTerm[];
+  facts: import("./brand-data").BrandFact[];
+  assets: import("./brand-data").BrandAsset[];
 }
 
 export interface Health {

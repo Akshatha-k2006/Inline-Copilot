@@ -1,6 +1,6 @@
 "use client";
 
-import { resetMockKnowledge } from "@/lib/mock-data";
+import { api } from "@/lib/api";
 import { useRole } from "@/lib/role";
 import { canManageKnowledge } from "@/lib/workflow";
 
@@ -8,8 +8,9 @@ export default function SampleBrandButton() {
   const { role } = useRole();
   if (!canManageKnowledge(role)) return null;
 
-  function loadSampleBrand() {
-    resetMockKnowledge(role);
+  async function loadSampleBrand() {
+    await api.seedSample();
+    window.location.reload();
   }
 
   return (

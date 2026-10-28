@@ -12,10 +12,10 @@ import SampleBrandButton from "@/components/SampleBrandButton";
 import { useRole } from "@/lib/role";
 import { canManageKnowledge } from "@/lib/workflow";
 import {
-  removeMockKnowledgeItem,
-  saveMockKnowledgeItem,
   useDemoWorkspace,
 } from "@/lib/mock-data";
+import { api } from "@/lib/api";
+import { loadBrandData } from "@/lib/knowledge";
 
 type TabKey = keyof BrandData;
 type FormValues = Record<string, string>;
@@ -125,13 +125,20 @@ export default function KnowledgeBasePage() {
   const workspace = useDemoWorkspace();
   const { role } = useRole();
   const mayManageKnowledge = canManageKnowledge(role);
-  const data = workspace.knowledge;
+  const [serverData, setServerData] = useState<BrandData | null>(null);
+  const data = serverData ?? workspace.knowledge;
   const [activeTab, setActiveTab] = useState<TabKey>("guidelines");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [values, setValues] = useState<FormValues>({});
   const [formOpen, setFormOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    void loadBrandData()
+      .then(setServerData)
+      .catch((reason) => setError(reason instanceof Error ? reason.message : "Could not load brand knowledge."));
+  }, []);
 
   useEffect(() => {
     const requestedTab = new URLSearchParams(window.location.search).get("tab");
@@ -159,7 +166,7 @@ export default function KnowledgeBasePage() {
     setFormOpen(true);
   }
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaving(true);
     setError("");
@@ -168,7 +175,13 @@ export default function KnowledgeBasePage() {
     );
 
     try {
-      saveMockKnowledgeItem(activeTab, editingId, payload, role);
+      const endpoint = activeTab === "glossary" ? "glossary" : activeTab;
+      if (editingId) {
+        await api.put(`/api/${endpoint}/${editingId}`, payload);
+      } else {
+        await api.post(`/api/${endpoint}`, payload);
+      }
+      setServerData(await loadBrandData());
       setFormOpen(false);
       setEditingId(null);
     } catch (err) {
@@ -178,11 +191,13 @@ export default function KnowledgeBasePage() {
     }
   }
 
-  function removeItem(id: string) {
+  async function removeItem(id: string) {
     setSaving(true);
     setError("");
     try {
-      removeMockKnowledgeItem(activeTab, id, role);
+      const endpoint = activeTab === "glossary" ? "glossary" : activeTab;
+      await api.delete(`/api/${endpoint}/${id}`);
+      setServerData(await loadBrandData());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not delete this entry.");
     } finally {

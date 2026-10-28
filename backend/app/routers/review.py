@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import Content, Finding
+from app.schemas import FindingAction
 from app.services.terminology_checker import check_terminology
 from app.services.fact_checker import check_claims
 from app.config import settings
@@ -20,6 +21,45 @@ from app.services.suggestion_generator import generate_suggestions
 
 router = APIRouter(tags=["Review"])
 logger = logging.getLogger(__name__)
+
+
+def _finding_response(finding: Finding) -> dict:
+    evidence = finding.evidence or {}
+    source = evidence.get("source") or {}
+    source_type = source.get("type")
+    if source_type == "glossary":
+        source_type = "term"
+    source_id = source.get("id")
+    source_label = source.get("label") or source.get("text")
+    if not source_label and source_type == "term":
+        source_label = f"{source.get('term', '')} -> {source.get('preferred_term', '')}".strip(" ->")
+    return {
+        "id": finding.id,
+        "content_id": finding.content_id,
+        "check": finding.check_type,
+        "severity": finding.severity if finding.severity in {"high", "medium", "low"} else "medium",
+        "message": finding.message,
+        "explanation": source.get("explanation") or finding.message,
+        "evidence": evidence,
+        "start": finding.start_offset,
+        "end": finding.end_offset,
+        "start_offset": finding.start_offset,
+        "end_offset": finding.end_offset,
+        "text": evidence.get("matched_text", ""),
+        "source": (
+            {
+                "type": source_type,
+                "id": source_id,
+                "label": source_label or "",
+            }
+            if source_type in {"term", "guideline", "fact"} and source_id is not None
+            else None
+        ),
+        "suggestion": finding.suggested_fix,
+        "suggested_fix": finding.suggested_fix,
+        "status": finding.status,
+        "final_text": evidence.get("final_text"),
+    }
 
 
 def _is_duplicate(existing: dict, candidate: dict) -> bool:
@@ -118,11 +158,15 @@ def review_content(content_id: int, db: Session = Depends(get_db)):
         evidence = {
             "matched_text": item["matched_text"],
             "source": item["source"],
-            "requires_manual_review": item["evidence"].get(
+            "requires_manual_review": (item.get("evidence") or {}).get(
                 "requires_manual_review",
                 item["suggested_fix"] is None,
             ),
         }
+        source = item.get("source") or {}
+        if source.get("type") == "glossary":
+            source["type"] = "term"
+        evidence["source"] = source
         if item.get("suggestion_source"):
             evidence["suggestion_source"] = item["suggestion_source"]
 
@@ -157,20 +201,7 @@ def review_content(content_id: int, db: Session = Depends(get_db)):
     return {
         "content_id": content.id,
         "content_version": content.version,
-        "findings": [
-            {
-                "id": finding.id,
-                "check": finding.check_type,
-                "severity": finding.severity,
-                "message": finding.message,
-                "evidence": finding.evidence,
-                "suggested_fix": finding.suggested_fix,
-                "start_offset": finding.start_offset,
-                "end_offset": finding.end_offset,
-                "status": finding.status,
-            }
-            for finding in saved_findings
-        ],
+        "findings": [_finding_response(finding) for finding in saved_findings],
         "engine": {
             "rules": "ok",
             "llm": (
@@ -180,3 +211,30 @@ def review_content(content_id: int, db: Session = Depends(get_db)):
             ),
         },
     }
+
+
+@router.patch("/findings/{finding_id}")
+def update_finding(
+    finding_id: int,
+    payload: FindingAction,
+    db: Session = Depends(get_db),
+):
+    if payload.status not in {"accepted", "edited", "dismissed"}:
+        raise HTTPException(
+            status_code=422,
+            detail={"error": "invalid_status", "message": "Finding status is invalid."},
+        )
+    finding = db.get(Finding, finding_id)
+    if finding is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "not_found", "message": "Finding not found."},
+        )
+    finding.status = payload.status
+    evidence = dict(finding.evidence or {})
+    if payload.final_text is not None:
+        evidence["final_text"] = payload.final_text
+    finding.evidence = evidence
+    db.commit()
+    db.refresh(finding)
+    return _finding_response(finding)

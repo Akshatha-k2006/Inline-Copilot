@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from pydantic import BaseModel, ConfigDict
 
 class GuidelineCreate(BaseModel):
@@ -35,3 +35,18 @@ class AssetCreate(BaseModel):
 class AssetResponse(AssetCreate):
     id: int
     model_config = ConfigDict(from_attributes=True)
+
+class ContentDraft(BaseModel):
+    title: str
+    body: str
+
+class ContentResponse(ContentDraft):
+    id: int
+    status: str
+    version: int
+    created_by: str
+    updated_at: datetime | None = None
+
+class FindingAction(BaseModel):
+    status: str
+    final_text: str | None = None
