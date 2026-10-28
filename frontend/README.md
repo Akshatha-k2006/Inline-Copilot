@@ -20,7 +20,8 @@ npm run dev          # http://localhost:3000
 - `src/lib/mock-findings.ts`: deterministic demo checks for the fictional sample draft, resolved against current mock knowledge records
 - `src/lib/mock-data.ts`: shared localStorage-backed demonstration knowledge, document, finding, review, comment, and audit state
 - `src/lib/workflow.ts`: centralized mock workflow permissions, review validity, status labels, and submission blockers
-- `src/app/page.tsx`, `src/app/queue/page.tsx`, and `src/app/audit/page.tsx`: demonstration dashboard statistics, review queue, and history based on that shared state
+- `src/app/page.tsx`: role-aware dashboard with live API health and backend knowledge totals; workflow lists are omitted where backend endpoints are missing
+- `src/app/queue/page.tsx` and `src/app/audit/page.tsx`: demonstration review queue and history based on local state
 - `src/app/knowledge/page.tsx`: backend-backed Guidelines, Glossary, Facts and Assets tabs under the single Guidelines navigation item
 - `src/lib/brand-data.ts`: knowledge display types and fictional local demonstration records
 - `mock_kb.mjs`: persistent local stand-in for the knowledge API
@@ -29,9 +30,9 @@ npm run dev          # http://localhost:3000
 - `src/lib/roles.ts`: the four roles and the display name sent as `X-User`
 - `src/lib/types.ts`: types copied from `docs/API_CONTRACT.md`
 
-Write & Review, dashboard, queue, and history use one shared local demonstration
-workspace. Workflow actions, knowledge changes, comments, findings and audit
-entries persist in this browser's `localStorage`; this is not server persistence.
+Write & Review, queue, and history use one shared local demonstration
+workspace. Workflow actions, comments, findings and audit entries persist in
+this browser's `localStorage`; this is not server persistence.
 These mock knowledge records are separate from the backend-backed Knowledge
 page. The knowledge page and sample-brand action use the configured backend
 API. The backend role header is a demo role selector, not authentication.
@@ -52,11 +53,6 @@ A dismissed high-severity finding still blocks submission if its text remains.
 Resubmissions retain prior submitted snapshots for reviewer comparison. The
 prototype does not publish content.
 
-The dashboard's getting-started guide follows the five numbered steps in the
-repository README. Dismissing it stores a browser-local preference under
-`corespace-getting-started-dismissed-v1`; use **Show getting-started guide** on
-the dashboard to reopen it. The preference is not account- or server-synced.
-
 Demo checks only match known fixture phrases and current mock knowledge; they do
 not comprehensively verify arbitrary text. Source references, facts, owners,
 dates, reviewers and workflow outcomes are demonstration data, not verified
@@ -65,14 +61,14 @@ The backend implements review and workflow endpoints, but the current editor,
 review queue and audit page do not call them. Content list/read/create/update
 and audit-history endpoints are missing, so those pages remain explicitly
 browser-local demonstrations rather than displaying persisted backend records.
-Write & Review, the dashboard, queue, and history use shared local demonstration
-data from the fixtures in `mocks/`. A sample review updates the document
-timestamp, findings, dashboard counts, and history together for the current
-app session. Shared mock changes, including accepted/edited/dismissed findings
-and document text, are stored in this browser's `localStorage` and restored on
-reload. This is browser-local demonstration persistence, not server persistence;
-clearing this site's browser storage removes it. Findings are only shown for the exact
-fictional sample draft.
+Write & Review, the queue, and history use shared local demonstration data from
+the fixtures in `mocks/`. A sample review updates the local editor findings and
+history together for the current app session. Shared mock changes, including
+accepted/edited/dismissed findings and document text, are stored in this
+browser's `localStorage` and restored on reload. This is browser-local
+demonstration persistence, not server persistence; clearing this site's browser
+storage removes it. Findings are only shown for the exact fictional sample
+draft.
 Pasted content does not receive generated or verified results. Finding actions
 remain mock data. Finding sources, fact claims, people and dates in the editor
 are fictional demonstration data, not verified citations or facts. The content
