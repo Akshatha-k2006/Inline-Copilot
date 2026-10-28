@@ -1,97 +1,145 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import EmptyState from "@/components/EmptyState";
-import FindingsPanel from "@/components/editor/FindingsPanel";
-import {
-  addDemoReviewComment,
-  formatMockTimestamp,
-  getDocumentFindings,
-  getQueuedDocuments,
-  MOCK_DATA_NOTICE,
-  transitionDemoDocument,
-  useDemoWorkspace,
-} from "@/lib/mock-data";
+import { ApiError, api } from "@/lib/api";
 import { useRole } from "@/lib/role";
-import {
-  canDecideReview,
-  canViewReviewQueue,
-  contentStatusLabel,
-  getSubmissionBlockers,
-  reviewIsCurrent,
-} from "@/lib/workflow";
+import type {
+  BackendFinding,
+  Content,
+  ContentAuditEvent,
+  ReviewComment,
+} from "@/lib/types";
+import { canDecideReview, canViewReviewQueue, contentStatusLabel } from "@/lib/workflow";
+
+function messageFor(error: unknown): string {
+  if (error instanceof ApiError) return error.message;
+  return error instanceof Error ? error.message : "The request could not be completed.";
+}
 
 export default function ReviewQueuePage() {
-  const workspace = useDemoWorkspace();
-  const { role, user } = useRole();
-  const documents = getQueuedDocuments(workspace);
-  const [selectedDocumentId, setSelectedDocumentId] = useState<number | null>(null);
+  const { role, user, isRoleLoaded } = useRole();
+  const [documents, setDocuments] = useState<Content[]>([]);
+  const [allDocuments, setAllDocuments] = useState<Content[]>([]);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selected, setSelected] = useState<Content | null>(null);
+  const [findings, setFindings] = useState<BackendFinding[]>([]);
+  const [comments, setComments] = useState<ReviewComment[]>([]);
+  const [auditEvents, setAuditEvents] = useState<ContentAuditEvent[]>([]);
   const [comment, setComment] = useState("");
-  const [message, setMessage] = useState("");
-  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const actionInFlight = useRef(false);
+  const contentLoadId = useRef(0);
+  const mayView = canViewReviewQueue(role);
   const mayDecide = canDecideReview(role);
-  const selectedDocument = documents.find(
-    (document) => document.id === selectedDocumentId,
-  );
 
-  function addComment(documentId: number) {
+  const refreshContent = useCallback(async (id: number) => {
+    const requestId = ++contentLoadId.current;
+    const [current, findingsResponse, commentsResponse, auditResponse] =
+      await Promise.all([
+        api.getContent(id),
+        api.getContentFindings(id),
+        api.getReviewComments(id),
+        api.getContentAudit(id),
+      ]);
+    if (requestId !== contentLoadId.current) return;
+    setSelected(current);
+    setFindings(findingsResponse.findings);
+    setComments(commentsResponse.comments);
+    setAuditEvents(auditResponse);
+  }, []);
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    try {
+      const all = await api.listContent();
+      setAllDocuments(all);
+      const queue = all.filter((content) => content.status === "in_review");
+      setDocuments(queue);
+      if (selectedId !== null) {
+        await refreshContent(selectedId);
+      }
+      setError("");
+    } catch (cause) {
+      setError(messageFor(cause));
+    } finally {
+      setLoading(false);
+    }
+  }, [refreshContent, selectedId]);
+
+  useEffect(() => {
+    if (isRoleLoaded) void reload();
+  }, [isRoleLoaded, role, reload]);
+
+  async function perform(action: () => Promise<void>) {
+    if (actionInFlight.current) return;
+    actionInFlight.current = true;
+    setBusy(true);
     setError("");
     setMessage("");
-    setBusy(true);
     try {
-      addDemoReviewComment(documentId, role, user, comment);
-      setComment("");
-      setMessage("Review comment added to the shared demonstration history.");
+      await action();
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not add this comment.");
+      setError(messageFor(cause));
     } finally {
+      actionInFlight.current = false;
       setBusy(false);
     }
   }
 
-  function decide(action: "approve" | "request_changes") {
-    if (!selectedDocument) return;
-    setError("");
-    setMessage("");
-    setBusy(true);
-    try {
-      transitionDemoDocument(
-        selectedDocument.id,
-        action,
-        role,
-        user,
-        comment,
-      );
-      setComment("");
-      setSelectedDocumentId(null);
-      setMessage(
-        action === "approve"
-          ? "Content approved and marked Ready to publish."
-          : "Changes requested. The creator can revise and resubmit the draft.",
-      );
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Could not complete this review action.");
-    } finally {
-      setBusy(false);
-    }
+  function openReview(id: number) {
+    setSelectedId(id);
+    const target = documents.find((item) => item.id === id);
+    setSelected(target ?? null);
+    if (target) void refreshContent(id).catch((cause: unknown) => setError(messageFor(cause)));
   }
 
-  if (!canViewReviewQueue(role)) {
+  async function addComment() {
+    if (!selected) return;
+    await perform(async () => {
+      await api.addReviewComment(selected.id, { body: comment });
+      setComment("");
+      await reload();
+      setMessage("Comment saved to the backend.");
+    });
+  }
+
+  async function decide(decision: "approve" | "request_changes") {
+    if (!selected) return;
+    await perform(async () => {
+      await api.decideContent(selected.id, {
+        decision,
+        ...(decision === "request_changes" ? { comment } : {}),
+      });
+      setComment("");
+      await reload();
+      setMessage(decision === "approve" ? "Content approved." : "Changes requested; content returned to draft.");
+    });
+  }
+
+  async function markReady(id: number) {
+    await perform(async () => {
+      await api.markReadyToPublish(id);
+      setSelectedId(id);
+      await refreshContent(id);
+      await reload();
+      setMessage("Content marked ready to publish.");
+    });
+  }
+
+  if (!mayView) {
     return (
       <section className="page">
         <p className="eyebrow">CoRESpace / Reviews</p>
         <h1>Review queue</h1>
-        <p className="mock-data-notice" role="note">{MOCK_DATA_NOTICE}</p>
         <EmptyState
           title="The review queue is not available to this role"
-          description="The queue is visible to Reviewer, Brand Manager, and Admin demo roles. As Creator, use Write & Review to prepare and submit content, then switch to Reviewer to make a review decision."
-          action={
-            <Link href="/editor" className="button button-primary">
-              Open Write &amp; Review
-            </Link>
-          }
+          description="Creators can prepare and submit their own content in Write & Review."
+          action={<Link href="/editor" className="button button-primary">Open Write &amp; Review</Link>}
         />
       </section>
     );
@@ -102,252 +150,100 @@ export default function ReviewQueuePage() {
       <div>
         <p className="eyebrow">CoRESpace / Reviews</p>
         <h1>Review queue</h1>
-        <p className="lead">Submitted demonstration content awaiting a human decision.</p>
+        <p className="lead">Content in this queue is loaded from the backend database.</p>
       </div>
-      <p className="mock-data-notice" role="note">{MOCK_DATA_NOTICE} Role switching is a prototype, not authentication.</p>
-      {workspace.persistenceWarning && (
-        <p className="form-error" role="alert">
-          Saved review data could not be loaded or saved in this browser: {workspace.persistenceWarning}
-        </p>
-      )}
+      {error && <div className="form-error" role="alert"><p>{error}</p><button className="button" type="button" onClick={() => void reload()}>Retry</button></div>}
       {message && <p className="editor-notice" role="status">{message}</p>}
-      {error && <p className="form-error" role="alert">{error}</p>}
-
-      {!workspace.isHydrated ? (
-        <p className="editor-notice" role="status">
-          Loading the browser-local demonstration review queue...
-        </p>
-      ) : documents.length === 0 && workspace.persistenceWarning ? (
-        <div className="empty-state" role="alert">
-          <h2>Review queue data could not be loaded</h2>
-          <p>
-            The saved demonstration state is unavailable, so this page cannot confirm whether content is waiting for review.
-          </p>
-        </div>
+      {loading ? (
+        <p className="editor-notice" role="status">Loading submitted content from the backend...</p>
       ) : documents.length === 0 ? (
         <EmptyState
           title="No content is waiting for review"
-          description={
-            role === "reviewer"
-              ? "Content appears here after a Creator submits it. Switch the demo role to Creator in the top navigation to prepare and submit the sample draft, then switch back to Reviewer to review it. Queue records and decisions are local demonstration data."
-              : `Content appears here after a Creator submits it. The ${role.replaceAll("_", " ")} role can inspect the queue but cannot submit content. Switch the demo role to Creator in the top navigation to prepare the sample draft. Queue records and decisions are local demonstration data.`
-          }
-          action={
-            <Link href="/editor" className="button button-primary">
-              Open Write &amp; Review
-            </Link>
-          }
-          secondaryAction={
-            <Link href="/" className="button">
-              Go to the dashboard
-            </Link>
-          }
+          description="New submissions appear here after a creator runs the backend review and submits a draft."
+          action={<Link href="/editor" className="button button-primary">Open content</Link>}
         />
       ) : (
         <ul className="entry-list">
           {documents.map((document) => {
-            const findings = getDocumentFindings(workspace, document.id);
-            const openCount = findings.filter(
-              (finding) => finding.status === "open",
-            ).length;
-            const review = workspace.reviews.find(
-              (item) => item.document_id === document.id,
-            );
-            const currentReview = reviewIsCurrent(document, review);
-            const blockers = getSubmissionBlockers(document, review, findings);
-            const selected = selectedDocumentId === document.id;
-            const comments = workspace.comments.filter(
-              (item) => item.document_id === document.id,
-            );
-            const submissions = workspace.submissions.filter(
-              (item) => item.document_id === document.id,
-            );
-            const previousSubmission =
-              submissions.length > 1
-                ? submissions[submissions.length - 2]
-                : undefined;
-            const severityCounts = (["high", "medium", "low"] as const).map(
-              (severity) => ({
-                severity,
-                count: findings.filter(
-                  (finding) =>
-                    finding.severity === severity && finding.status === "open",
-                ).length,
-              }),
-            );
-
+            const isSelected = selectedId === document.id;
+            const documentFindings = isSelected ? findings : [];
+            const openHigh = documentFindings.filter((item) => item.status === "open" && item.severity === "high");
             return (
-              <li className="entry-card mock-document-card" key={document.id}>
+              <li className="entry-card" key={document.id}>
                 <div className="entry-content">
-                  <p className="eyebrow">Document #{document.id}</p>
+                  <p className="eyebrow">Content #{document.id}</p>
                   <h2>{document.title}</h2>
-                  <p className="mock-document-preview">{document.body}</p>
                   <div className="fact-meta">
-                    <span>
-                      Status: <strong>{contentStatusLabel(document.status)}</strong>
-                    </span>
+                    <span>Status: <strong>{contentStatusLabel(document.status)}</strong></span>
                     <span>Version: <strong>{document.version}</strong></span>
-                    <span>Open findings: <strong>{openCount}</strong></span>
-                    {severityCounts.map(({ severity, count }) => (
-                      <span key={severity}>
-                        {severity}: <strong>{count}</strong>
-                      </span>
-                    ))}
+                    <span>Created by: <strong>{document.created_by}</strong></span>
                   </div>
-                  <p className="muted">
-                    Updated {formatMockTimestamp(document.updated_at)} · Created by {document.created_by}
-                  </p>
                 </div>
                 <div className="entry-actions">
-                  <button
-                    type="button"
-                    className="button button-primary"
-                    aria-expanded={selected}
-                    aria-controls={`review-details-${document.id}`}
-                    onClick={() => {
-                      setSelectedDocumentId(selected ? null : document.id);
-                      setError("");
-                    }}
-                  >
-                    {selected ? "Close review" : "Open review"}
+                  <button type="button" className="button button-primary" onClick={() => openReview(document.id)}>
+                    {isSelected ? "Refresh review" : "Inspect content"}
                   </button>
                 </div>
-                {selected && (
-                  <section
-                    id={`review-details-${document.id}`}
-                    className="review-detail"
-                    aria-labelledby={`review-detail-heading-${document.id}`}
-                  >
-                    <div>
-                      <h3 id={`review-detail-heading-${document.id}`}>Content for review</h3>
-                      {previousSubmission && (
-                        <section className="review-version-comparison" aria-labelledby={`version-comparison-heading-${document.id}`}>
-                          <h4 id={`version-comparison-heading-${document.id}`}>
-                            Changes since the previous submission
-                          </h4>
-                          <div>
-                            <section>
-                              <h5>Previous submission · version {previousSubmission.version}</h5>
-                              <pre className="review-document-body">{previousSubmission.body}</pre>
-                            </section>
-                            <section>
-                              <h5>Current submission · version {document.version}</h5>
-                              {!previousSubmission && (
-                                <pre className="review-document-body">{document.body}</pre>
-                              )}
-                            </section>
-                          </div>
-                        </section>
+                {isSelected && selected && (
+                  <section className="review-detail" aria-label="Submitted content details">
+                    <h3>Content for review · version {selected.version}</h3>
+                    <pre className="review-document-body">{selected.body}</pre>
+                    <h3>Persisted findings</h3>
+                    {findings.length === 0 ? <p className="muted">No findings are recorded.</p> : (
+                      <ul className="finding-list">
+                        {findings.map((item) => (
+                          <li className="finding-card" key={item.id}>
+                            <strong>{item.severity} · {item.check.replaceAll("_", " ")}</strong>
+                            <span className={`finding-status status-${item.status}`}>{item.status}</span>
+                            <p>{item.message}</p>
+                            {item.evidence?.matched_text && <q>{item.evidence.matched_text}</q>}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    <section className="workflow-comments">
+                      <h3>Persisted review comments</h3>
+                      {comments.length === 0 ? <p className="muted">No comments yet.</p> : (
+                        <ul>{comments.map((item) => <li key={item.id}><p>{item.body}</p><small>{item.author} · {new Date(item.created_at).toLocaleString()}</small></li>)}</ul>
                       )}
-                      {!previousSubmission && (
-                        <p className="muted">This is the first submission; there is no earlier submitted version to compare.</p>
-                      )}
-                      <pre className="review-document-body">{document.body}</pre>
-                      <p className="editor-notice">
-                        {currentReview
-                          ? "The mock review matches this document version. It checks only known demonstration phrases, not every guideline or fact."
-                          : "This review is stale or missing. The creator must rerun the demonstration checks before submission."}
-                      </p>
-                    </div>
-                    <FindingsPanel
-                      findings={
-                        workspace.findingsBody === document.body ? findings : null
-                      }
-                      busyFindingIds={findings.map((finding) => finding.id)}
-                      readOnly
-                      reviewState={
-                        workspace.persistenceWarning
-                          ? "error"
-                          : !currentReview
-                            ? review
-                              ? "stale"
-                              : "not-run"
-                            : workspace.findingsBody === document.body
-                              ? "current"
-                              : "stale"
-                      }
-                      selectedFindingId={null}
-                      reviewedCustomText={document.body !== workspace.findingsBody}
-                      onSelect={() => undefined}
-                    />
-
-                    <section className="workflow-comments" aria-labelledby={`comments-heading-${document.id}`}>
-                      <h3 id={`comments-heading-${document.id}`}>Review comments</h3>
-                      {comments.length === 0 ? (
-                        <p className="muted">
-                          {workspace.persistenceWarning
-                            ? "Saved comments could not be loaded, so this section may be incomplete."
-                            : mayDecide
-                              ? "No review comments yet. Add feedback here, or request changes with an explanation."
-                              : "No review comments have been recorded for this document yet."}
-                        </p>
-                      ) : (
-                        <ul>
-                          {comments.map((item) => (
-                            <li key={item.id}>
-                              <p>{item.text}</p>
-                              <small>{item.author} · {item.role.replaceAll("_", " ")} · {formatMockTimestamp(item.at)}</small>
-                            </li>
-                          ))}
-                        </ul>
-                      )}
-                      {mayDecide && (
-                        <label className="form-field" htmlFor={`review-comment-${document.id}`}>
-                          Review comment (required for Request changes)
-                          <textarea
-                            id={`review-comment-${document.id}`}
-                            value={comment}
-                            onChange={(event) => setComment(event.target.value)}
-                            rows={3}
-                            disabled={busy}
-                          />
+                      {mayDecide && selected.status === "in_review" && (
+                        <label className="form-field" htmlFor={`review-comment-${selected.id}`}>
+                          Reviewer comment
+                          <textarea id={`review-comment-${selected.id}`} rows={3} value={comment} onChange={(event) => setComment(event.target.value)} disabled={busy} />
                         </label>
                       )}
                     </section>
-
-                    {mayDecide ? (
-                      <>
-                        {blockers.length > 0 && (
-                          <ul className="workflow-blockers" aria-label="Approval blockers">
-                            {blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}
-                          </ul>
-                        )}
-                        <div className="workflow-actions">
-                          <button
-                            type="button"
-                            className="button button-primary"
-                            onClick={() => decide("approve")}
-                            disabled={busy || blockers.length > 0}
-                            title={blockers.length > 0 ? blockers.join(" ") : undefined}
-                          >
-                            Approve
-                          </button>
-                          <button
-                            type="button"
-                            className="button"
-                            onClick={() => decide("request_changes")}
-                            disabled={busy || comment.trim().length < 10}
-                            title={comment.trim().length < 10 ? "Add a meaningful comment of at least 10 characters." : undefined}
-                          >
-                            Request changes
-                          </button>
-                          <button
-                            type="button"
-                            className="button"
-                            onClick={() => addComment(document.id)}
-                            disabled={busy || comment.trim().length < 3}
-                          >
-                            Add comment
-                          </button>
-                        </div>
-                      </>
-                    ) : (
+                    {mayDecide && selected.status === "in_review" ? (
+                      <div className="workflow-actions">
+                        {openHigh.length > 0 && <p className="workflow-blockers">{openHigh.length} unresolved high-severity finding(s) block approval.</p>}
+                        <button type="button" className="button button-primary" onClick={() => void decide("approve")} disabled={busy || openHigh.length > 0}>Approve</button>
+                        <button type="button" className="button" onClick={() => void decide("request_changes")} disabled={busy || !comment.trim()}>Request changes</button>
+                        <button type="button" className="button" onClick={() => void addComment()} disabled={busy || !comment.trim()}>Add comment</button>
+                      </div>
+                    ) : role === "brand_manager" || role === "admin" ? (
                       <p className="editor-notice" role="note">
-                        {role === "brand_manager"
-                          ? "Brand Manager can inspect compliance and sources but cannot make reviewer decisions."
-                          : "Admin can inspect workflow records but cannot bypass the required reviewer decision."}
+                        {selected.status === "in_review"
+                          ? "Only a Reviewer can approve or request changes."
+                          : `Current persisted status: ${contentStatusLabel(selected.status)}.`}
                       </p>
-                    )}
+                    ) : null}
+                    <section className="workflow-comments">
+                      <h3>Backend audit history</h3>
+                      {auditEvents.length === 0 ? <p className="muted">No audit events have been recorded.</p> : (
+                        <ul>{auditEvents.map((event) => <li key={event.id}><p>{event.action.replaceAll("_", " ")}</p><small>{event.actor} · {new Date(event.created_at).toLocaleString()}</small></li>)}</ul>
+                      )}
+                    </section>
+                    <Link href={`/editor?id=${selected.id}`} className="button">Open in Write &amp; Review</Link>
+                  </section>
+                )}
+                {selected && selected.status !== "in_review" && (
+                  <section className="card workflow-action-card" aria-live="polite">
+                    <h2>Review action complete</h2>
+                    <p>
+                      Content #{selected.id} is now <strong>{contentStatusLabel(selected.status)}</strong> at version {selected.version}.
+                    </p>
+                    <p>{comments.length} persisted comment(s) · {auditEvents.length} persisted audit event(s).</p>
+                    <Link href={`/editor?id=${selected.id}`} className="button button-primary">Inspect updated content</Link>
                   </section>
                 )}
               </li>
@@ -355,6 +251,18 @@ export default function ReviewQueuePage() {
           })}
         </ul>
       )}
+      {!mayDecide && (role === "brand_manager" || role === "admin") && allDocuments.some((item) => item.status === "approved") && (
+        <section className="card">
+          <h2>Approved content</h2>
+          {allDocuments.filter((item) => item.status === "approved").map((item) => (
+            <div className="entry-card" key={item.id}>
+              <span>{item.title} · version {item.version}</span>
+              <button type="button" className="button" disabled={busy} onClick={() => void markReady(item.id)}>Mark ready to publish</button>
+            </div>
+          ))}
+        </section>
+      )}
+      <p className="muted">Signed in as {user} · {documents.length} item(s) in review</p>
     </section>
   );
 }

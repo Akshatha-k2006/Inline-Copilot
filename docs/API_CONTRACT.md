@@ -30,10 +30,44 @@ configured database. The sample seed route is destructive to the knowledge
 collections and the content record with ID `1`; it preserves other content
 records.
 
+## Content
+
+Content records are persisted in the configured SQLAlchemy database. The
+frontend sends `X-Role` and `X-User`; these identify prototype roles and actors,
+not authenticated identities. Creator reads and writes are restricted to
+records whose `created_by` matches the actor name after removing its displayed
+role suffix.
+
+- `GET /api/content` lists content. Creators receive only their own items;
+  Reviewer, Brand Manager, and Admin can inspect all items. An optional
+  `status` query parameter filters by exact status.
+- `POST /api/content` accepts `title`, `content_type`, and `body`, creates a
+  separate draft with version `1`, and returns `201` with its database `id`,
+  initial status, version, owner, and timestamps. Only Creators may create.
+- `GET /api/content/{id}` returns the persisted content record.
+- `PUT /api/content/{id}` accepts `title`, `content_type`, `body`, and the
+  expected `version`. Only the owning Creator may update a draft. A successful
+  change increments the version, clears the reviewed-version marker, and
+  writes an audit event. A stale expected version returns `409`.
+- `GET /api/content/{id}/findings` returns persisted findings and content and
+  reviewed versions.
+- `GET /api/content/{id}/audit` returns audit events for one item.
+- `GET /api/audit` returns the actor's permitted audit events; Creators see
+  only events for their own content.
+
+Content includes `content_type` (for example `marketing_copy`, `blog_post`,
+`social_media`, `email`, or `other`), status, version, `reviewed_version`, and
+`reviewed_at`. Existing installations add the new nullable review markers and
+content type with the startup schema migration.
+
 ## Content review
 
-`POST /api/content/{id}/review` returns `200` with the content version,
-persisted findings, and engine statuses. Each finding contains an integer
+`POST /api/content/{id}/review` is restricted to the owning Creator and only
+accepts drafts. It returns `200` with the content version, persisted findings,
+and engine statuses. The record's `reviewed_version` and `reviewed_at` are
+updated atomically with findings and a `content_reviewed` audit event, even if
+the review produces no findings. A content edit or finding correction clears
+the review marker for the new version. Each finding contains an integer
 `id`, string `check`, `severity`, `message`, and `status`, an `evidence`
 object, a nullable string `suggested_fix`, and nullable integer `start_offset`
 and `end_offset`. The evidence object contains string `matched_text`, object
@@ -77,7 +111,8 @@ Database failures return `500` with
 ### Finding actions
 
 `PATCH /api/findings/{id}` accepts an action for an open finding. The frontend
-must send `X-User`; that value is recorded as the audit actor.
+must send `X-User`; only the owning Creator may resolve findings on a draft.
+That value is recorded as the audit actor.
 
 Accept an existing suggestion or dismiss a finding:
 
@@ -165,6 +200,12 @@ The shared backend transition service authorizes `creator` for
 `approved → ready_to_publish`. Callers must obtain the role through the
 existing `X-Role` role dependency and provide the actor from `X-User`.
 
+`POST /api/content/{id}/self-check` exposes the first transition. It is
+restricted to the owning Creator and only succeeds when the current content
+version has a persisted backend review and no open high-severity findings.
+Missing or stale review data and unresolved blockers return `409`; they do not
+change the status.
+
 `POST /api/content/{id}/submit` accepts an empty request body and submits
 content for review. Only a creator can submit content in `self_checked` status.
 On success it returns `200`:
@@ -188,8 +229,9 @@ headers but does not provide a separate identity-authentication mechanism.
 Invalid transitions return `409` with
 `{ "error": "invalid_status_transition", "message": "Status transition is not allowed." }`.
 Submission is blocked with `409` if an open, high-severity finding exists for
-the current content version:
-`{ "error": "open_high_severity_findings", "message": "Content cannot be submitted while high-severity findings remain open." }`.
+the current content version or a resolved finding's flagged text still remains
+in the content:
+`{ "error": "open_high_severity_findings", "message": "Content cannot be submitted while high-severity findings remain unresolved." }`.
 Database failures return `500` with
 `{ "error": "workflow_failed", "message": "Unable to submit content for review." }`.
 
@@ -298,53 +340,17 @@ missing `X-User` returns `422`. Database failures return `500` with
 Comments attached to a `request_changes` decision are included in this
 collection and use the same authorization rules.
 
-## Frontend workflow prototype
+## Frontend integration and identity boundary
 
-The current frontend includes a browser-local workflow demonstration. Its
-content states are `draft`, `in_review`, `changes_requested`, and
-`ready_to_publish`; `approved` is retained as a valid API-shaped status but the
-mock reviewer approval transitions directly to `ready_to_publish` after
-required checks pass. Creator submission requires a current demonstration
-review and no unresolved high-severity findings. A dismissed high-severity
-finding remains blocking while its flagged text is still present. Only the
-Reviewer demo role can approve or request changes; the role switcher is not
-authentication.
+The Write & Review editor, review queue, and audit trail call these backend
+routes through the shared frontend API client. They load content by its real
+database ID and refresh content, findings, comments, and audit events after
+successful mutations. They do not use browser-local mock data as a fallback;
+network and HTTP failures are surfaced with retry controls.
 
-Review records, comments, decisions, prior submitted versions, and workflow
-audit events are stored in browser `localStorage`. They are not sent to the
-backend, do not represent verified checks, and do not publish content. The
-backend review, submit, decision, ready-to-publish, and comment routes are
-defined above. Other status transitions do not have dedicated backend
-endpoints.
-
-The frontend audit timeline uses the shared workflow history collection. Each
-event is associated with a content ID and stores the demo actor name and role
-at action time, ISO 8601 timestamp, action type, and available finding,
-comment, or previous/new-value details. Events are displayed oldest first;
-events sharing a timestamp are ordered by their stable numeric event ID.
-Finding decisions, draft edits/resets, mock review runs, submissions and
-resubmissions, comments, requested changes, approval, and Ready to publish
-transitions are recorded only after the corresponding local mock operation
-succeeds. This browser-local history is not authenticated, tamper-proof, or
-server-persistent. A future backend integration should provide a durable
-content-scoped audit API and server-verified actor identity rather than relying
-on the demo role selector.
-
-## Implemented API boundaries and frontend integration gaps
-
-The backend currently implements health, knowledge collection CRUD, seed load,
-content review, finding actions, workflow submit/decision/ready-to-publish, and
-review-comment routes described above. Content review and workflow records use
-the configured SQLAlchemy database.
-
-There is no backend route to list or read content, create or directly edit a
-draft, or read audit events. The transition service supports `draft` to
-`self_checked`, but no HTTP route exposes that transition; therefore the
-existing submit route cannot be reached through the HTTP API from a newly
-created `draft`. The frontend must not present browser-local content, queue,
-or audit records as persisted backend records until those APIs exist.
-
-The backend accepts demo role headers, not authenticated identities. Knowledge
-write operations and workflow decisions enforce role permissions server-side;
-the seed load route is restricted to Admin and Brand Manager. Review execution
-and finding actions currently do not enforce role authorization.
+The API enforces the four workflow roles and content ownership using
+`X-Role`/`X-User`, but those headers are not authentication and can be
+impersonated. A deployed multi-user service must connect these checks to a
+trusted identity provider before treating the role headers as a security
+boundary. `seed/brand.json` and the sample brand action remain intentional
+fictional demonstration data; content workflows use database records.

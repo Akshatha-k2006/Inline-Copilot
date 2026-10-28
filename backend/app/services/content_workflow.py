@@ -21,6 +21,41 @@ def _workflow_error(status_code: int, error: str, message: str) -> HTTPException
     )
 
 
+def _has_unresolved_high_findings(db: Session, content: Content) -> bool:
+    findings = (
+        db.query(Finding)
+        .filter(
+            Finding.content_id == content.id,
+            Finding.content_version == content.version,
+            Finding.severity == "high",
+        )
+        .all()
+    )
+    for finding in findings:
+        if finding.status == "open":
+            return True
+        if finding.status not in {"accepted", "edited", "dismissed"}:
+            return True
+        evidence = finding.evidence if isinstance(finding.evidence, dict) else {}
+        matched_text = evidence.get("matched_text")
+        if not isinstance(matched_text, str) or not matched_text:
+            return True
+        start = finding.start_offset
+        end = finding.end_offset
+        if (
+            isinstance(start, int)
+            and not isinstance(start, bool)
+            and isinstance(end, int)
+            and not isinstance(end, bool)
+            and 0 <= start < end <= len(content.body)
+            and content.body[start:end] == matched_text
+        ):
+            return True
+        if matched_text in content.body:
+            return True
+    return False
+
+
 def transition_content_status(
     db: Session,
     content_id: int,
@@ -84,22 +119,34 @@ def transition_content_status(
             review_comment.content_id = content.id
             review_comment.author = actor
 
-        if previous_status == "self_checked" and new_status == "in_review":
-            blocking_finding = (
-                db.query(Finding.id)
-                .filter(
-                    Finding.content_id == content.id,
-                    Finding.content_version == content.version,
-                    Finding.status == "open",
-                    Finding.severity == "high",
+        if previous_status == "draft" and new_status == "self_checked":
+            if content.reviewed_version != content.version:
+                raise _workflow_error(
+                    409,
+                    "review_required",
+                    "Run a backend review for the current content version before self-checking.",
                 )
-                .first()
-            )
-            if blocking_finding is not None:
+            if _has_unresolved_high_findings(db, content):
                 raise _workflow_error(
                     409,
                     "open_high_severity_findings",
-                    "Content cannot be submitted while high-severity findings remain open.",
+                    "Content cannot be self-checked while high-severity findings remain unresolved.",
+                )
+
+        if previous_status == "self_checked" and new_status == "in_review":
+            if _has_unresolved_high_findings(db, content):
+                raise _workflow_error(
+                    409,
+                    "open_high_severity_findings",
+                    "Content cannot be submitted while high-severity findings remain unresolved.",
+                )
+
+        if previous_status == "in_review" and new_status == "approved":
+            if _has_unresolved_high_findings(db, content):
+                raise _workflow_error(
+                    409,
+                    "open_high_severity_findings",
+                    "Content cannot be approved while high-severity findings remain unresolved.",
                 )
 
         result = db.execute(

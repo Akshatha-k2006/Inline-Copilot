@@ -32,7 +32,8 @@ class ContentWorkflowTests(unittest.TestCase):
             body="Draft text",
             status="draft",
             version=2,
-            created_by="creator-user",
+            created_by="test-user",
+            reviewed_version=2,
         )
         self.db.add(self.content)
         self.db.commit()
@@ -259,7 +260,7 @@ class ContentWorkflowTests(unittest.TestCase):
                 "error": "open_high_severity_findings",
                 "message": (
                     "Content cannot be submitted while high-severity findings "
-                    "remain open."
+                    "remain unresolved."
                 ),
             },
         )
@@ -275,7 +276,7 @@ class ContentWorkflowTests(unittest.TestCase):
         status, payload = self.request(
             "/api/content/1/submit",
             role="creator",
-            user="submitter",
+            user="test-user",
         )
 
         self.assertEqual(status, 200)
@@ -291,7 +292,7 @@ class ContentWorkflowTests(unittest.TestCase):
         self.assertEqual(self.content.version, original_version)
         event = self.db.query(AuditEvent).one()
         self.assertEqual(event.content_id, self.content.id)
-        self.assertEqual(event.actor, "submitter")
+        self.assertEqual(event.actor, "test-user")
         self.assertEqual(event.action, "content_status_changed")
         self.assertEqual(
             event.details,
@@ -355,7 +356,7 @@ class ContentWorkflowTests(unittest.TestCase):
                 "error": "open_high_severity_findings",
                 "message": (
                     "Content cannot be submitted while high-severity findings "
-                    "remain open."
+                    "remain unresolved."
                 ),
             },
         )
@@ -498,7 +499,7 @@ class ContentWorkflowTests(unittest.TestCase):
         read_status, read_payload = self.request(
             "/api/content/1/comments",
             role="creator",
-            user="creator-user",
+            user="test-user",
             method="GET",
         )
         self.assertEqual(read_status, 200)
@@ -830,7 +831,7 @@ class ContentWorkflowTests(unittest.TestCase):
         read_status, read_payload = self.request(
             "/api/content/1/comments",
             role="creator",
-            user="creator-user",
+            user="test-user",
             method="GET",
         )
         self.assertEqual(read_status, 200)

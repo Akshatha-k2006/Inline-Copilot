@@ -25,7 +25,7 @@ const ROLE_COPY: Record<
       "Keep your drafts moving and prepare clear, evidence-led content for review.",
     workTitle: "Your drafts and returned content",
     workSummary:
-      "Personal content and status counts are unavailable because the backend does not yet expose content-list or content-detail APIs. The Write & Review screen remains a browser-local demo and is not shown here as saved work.",
+      "Create and reopen your persisted drafts, returned content, and submitted work in the Write & Review workspace.",
   },
   reviewer: {
     heading: "Make every review count",
@@ -33,7 +33,7 @@ const ROLE_COPY: Record<
       "Review submitted work, leave clear feedback, and make decisions when content is ready.",
     workTitle: "Content awaiting your review",
     workSummary:
-      "The backend supports decisions and comments for a known content ID, but it does not expose a review queue or content list. No pending-review totals or findings can be verified here.",
+      "Open submitted content, inspect persisted findings, add comments, and record a review decision.",
   },
   brand_manager: {
     heading: "Keep the brand system clear",
@@ -41,7 +41,7 @@ const ROLE_COPY: Record<
       "Manage the guidance, terminology, facts, and assets that inform brand-aligned work.",
     workTitle: "Brand knowledge at a glance",
     workSummary:
-      "These totals come from the backend knowledge collections. The API does not currently list approved or ready-to-publish content.",
+      "These totals come from the backend knowledge collections. Approved content can be marked ready to publish from the review workspace.",
   },
   admin: {
     heading: "Workspace overview",
@@ -49,7 +49,7 @@ const ROLE_COPY: Record<
       "Monitor the service and manage the brand knowledge available to the workspace.",
     workTitle: "Workspace operations",
     workSummary:
-      "The dashboard reports live service health and backend knowledge totals. User management, workflow-wide statistics, and audit history are not exposed by the current API.",
+      "The dashboard reports live service health and backend knowledge totals. User-management endpoints are not exposed by the current API.",
   },
 };
 
@@ -219,11 +219,11 @@ export default function Home() {
           {role === "creator" && (
             <p className="dashboard-demo-link">
               <Link className="button" href="/editor">
-                Open Write &amp; Review demo
+                Open Write &amp; Review
               </Link>
               <span>
-                This editor uses browser-local demonstration content; it is not
-                a persisted draft.
+                Content, findings, comments, and workflow status are loaded from
+                the configured backend.
               </span>
             </p>
           )}
@@ -232,12 +232,11 @@ export default function Home() {
             <p className="dashboard-demo-link">
               {mayViewQueue && (
                 <Link className="button" href="/queue">
-                  Open review queue prototype
+                  Open review queue
                 </Link>
               )}
               <span>
-                The queue is a local demonstration until a backend queue API is
-                available.
+                Submitted items and reviewer decisions are stored by the backend.
               </span>
             </p>
           )}
@@ -253,9 +252,8 @@ export default function Home() {
           <p className="eyebrow">Workflow</p>
           <h2>Recent activity</h2>
           <p>
-            No workflow activity is shown because the backend does not expose
-            content-list, queue, or audit-history endpoints. This avoids
-            presenting browser-local demo events as organization records.
+            Review and workflow events are available in the backend audit trail.
+            Open the Audit Trail page to inspect persisted activity.
           </p>
           {role === "admin" && (
             <p className="muted">
@@ -277,12 +275,12 @@ export default function Home() {
             </h2>
             <p>
               {role === "creator"
-                ? "Content persistence and self-check workflow routes are needed before drafts, findings, suggested fixes, and reviewer comments can be shown here as backend data."
-                : "The backend supports review actions for known content IDs. A role-scoped queue endpoint is needed before pending content, severity counts, and review actions can be listed here."}
+                ? "Create a draft, run the backend review, resolve applicable findings, and submit it for review."
+                : "Inspect backend submissions and make reviewer decisions in the persisted review queue."}
             </p>
           </div>
           <Link className="button" href={role === "creator" ? "/editor" : "/queue"}>
-            {role === "creator" ? "Open demo editor" : "Open queue prototype"}
+            {role === "creator" ? "Open Write & Review" : "Open review queue"}
           </Link>
         </section>
       )}
@@ -293,10 +291,8 @@ export default function Home() {
             <p className="eyebrow">Content readiness</p>
             <h2 id="readiness-heading">Approved content and publishing</h2>
             <p>
-              The backend supports marking a known approved content item ready
-              to publish, but it does not provide a list of approved or
-              publish-ready content. No readiness totals or actions can be
-              populated safely.
+              Browse approved content in the review workspace and mark an item
+              ready to publish when appropriate.
             </p>
           </div>
         </section>

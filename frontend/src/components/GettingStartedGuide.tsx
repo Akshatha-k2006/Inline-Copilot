@@ -58,7 +58,7 @@ export default function GettingStartedGuide() {
           <p className="eyebrow">Quick start</p>
           <h2 id="getting-started-heading">Get started with CoRESpace</h2>
           <p className="muted">
-            Follow the five steps documented in the project README. This demo uses fictional data and a role switcher, not secure sign-in.
+            Create and review content in the connected backend workflow. The role switcher is a prototype, not secure sign-in.
           </p>
         </div>
         <button
@@ -99,18 +99,18 @@ export default function GettingStartedGuide() {
         </li>
         <li>
           <div>
-            <strong>Click Run review on the sample draft (or paste your own text).</strong>
+            <strong>Create a draft and run a backend review.</strong>
             <p>
-              Open Write &amp; Review to run the known-phrase demonstration checks or enter text.
+              Content and supported findings are loaded and saved through the configured API.
             </p>
             <Link href="/editor">Open Write &amp; Review</Link>
           </div>
         </li>
         <li>
           <div>
-            <strong>Accept, edit or dismiss each flag.</strong>
+            <strong>Resolve findings before submission.</strong>
             <p>
-              Review each finding and choose how to handle it. Results are mock suggestions, not verified checks.
+              Finding actions and updated content versions are persisted by the backend.
             </p>
             <Link href="/editor">Review the findings</Link>
           </div>

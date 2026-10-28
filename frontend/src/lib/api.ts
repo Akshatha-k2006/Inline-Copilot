@@ -4,6 +4,11 @@ import type {
   ApiGlossaryTerm,
   ApiGuideline,
   ContentCommentsResponse,
+  Content,
+  ContentAuditEvent,
+  ContentDraft,
+  ContentFindingsResponse,
+  ContentUpdate,
   ContentStatusResponse,
   FindingActionResponse,
   Health,
@@ -76,6 +81,8 @@ function defaultErrorMessage(status: number): string {
       return "The requested resource could not be found.";
     case 409:
       return "This action conflicts with the current server state. Refresh and try again.";
+    case 422:
+      return "The submitted data is invalid. Check the fields and try again.";
     case 500:
       return "The server could not complete the request. Please try again later.";
     default:
@@ -198,6 +205,32 @@ export const api = {
     request<FindingActionResponse>("PATCH", `/api/findings/${id}`, body),
   submitContent: (id: number) =>
     request<ContentStatusResponse>("POST", `/api/content/${id}/submit`),
+  listContent: (options?: RequestOptions) =>
+    request<Content[]>("GET", "/api/content", undefined, options),
+  getContent: (id: number, options?: RequestOptions) =>
+    request<Content>("GET", `/api/content/${id}`, undefined, options),
+  createContent: (body: ContentDraft) =>
+    request<Content>("POST", "/api/content", body),
+  updateContent: (id: number, body: ContentUpdate) =>
+    request<Content>("PUT", `/api/content/${id}`, body),
+  selfCheckContent: (id: number) =>
+    request<ContentStatusResponse>("POST", `/api/content/${id}/self-check`),
+  getContentFindings: (id: number, options?: RequestOptions) =>
+    request<ContentFindingsResponse>(
+      "GET",
+      `/api/content/${id}/findings`,
+      undefined,
+      options,
+    ),
+  getContentAudit: (id: number, options?: RequestOptions) =>
+    request<ContentAuditEvent[]>(
+      "GET",
+      `/api/content/${id}/audit`,
+      undefined,
+      options,
+    ),
+  getAudit: (options?: RequestOptions) =>
+    request<ContentAuditEvent[]>("GET", "/api/audit", undefined, options),
   decideContent: (
     id: number,
     body: { decision: "approve" | "request_changes"; comment?: string },

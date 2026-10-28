@@ -12,7 +12,16 @@ from sqlalchemy.orm import Session
 from app.config import BACKEND_ENV_FILE, Settings
 from app.db import Base
 from app.models import Content, Fact, Guideline, Term
-from app.routers.review import review_content
+from app.routers.review import review_content as review_content_endpoint
+
+
+def review_content(content_id, db):
+    return review_content_endpoint(
+        content_id,
+        x_user="test-user",
+        role="creator",
+        db=db,
+    )
 from app.services import llm_reviewer
 
 
@@ -93,7 +102,7 @@ class ReviewLLMTests(unittest.TestCase):
                     id=1,
                     title="Test content",
                     body="This is too loud and says badword is best.",
-                    created_by="test",
+                    created_by="test-user",
                 ),
             ]
         )

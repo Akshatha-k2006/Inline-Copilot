@@ -4,6 +4,7 @@ export type Role = "creator" | "reviewer" | "brand_manager" | "admin";
 
 export type ContentStatus =
   | "draft"
+  | "self_checked"
   | "in_review"
   | "changes_requested"
   | "approved"
@@ -22,16 +23,33 @@ export type FindingStatus = "open" | "accepted" | "edited" | "dismissed";
 export interface Content {
   id: number;
   title: string;
+  content_type: string;
   body: string;
   status: ContentStatus;
   version: number;
+  reviewed_version: number | null;
+  reviewed_at: string | null;
   created_by: string;
   updated_at: string;
 }
 
 export interface ContentDraft {
   title: string;
+  content_type: string;
   body: string;
+}
+
+export interface ContentUpdate extends ContentDraft {
+  version: number;
+}
+
+export interface ContentAuditEvent {
+  id: number;
+  content_id: number | null;
+  actor: string;
+  action: string;
+  details: Record<string, unknown>;
+  created_at: string;
 }
 
 export interface SeedResponse {
@@ -91,6 +109,14 @@ export interface BackendFinding {
   start_offset: number | null;
   end_offset: number | null;
   status: string;
+  content_version?: number;
+}
+
+export interface ContentFindingsResponse {
+  content_id: number;
+  content_version: number;
+  reviewed_version: number | null;
+  findings: BackendFinding[];
 }
 
 export interface ReviewResponse {
