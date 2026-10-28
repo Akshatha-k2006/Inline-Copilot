@@ -55,23 +55,42 @@ export default function FindingsPanel({
 
   return (
     <section
-      className="editor-card findings-panel"
+      className="editor-card findings-panel findings-panel-redesigned"
       aria-labelledby="findings-heading"
     >
-      <div className="panel-heading">
+      <div className="findings-panel-header">
         <div>
-          <p className="eyebrow">Review results</p>
+          <p className="eyebrow">Review Results</p>
           <h2 id="findings-heading">
             {findings === null
               ? "Findings"
               : `${activeFindings.length} open ${activeFindings.length === 1 ? "finding" : "findings"}`}
           </h2>
         </div>
-        {activeFindings.length > 0 && (
-          <span className="finding-count">
-            {highCount} errors · {warningCount} warnings · {infoCount} info
-          </span>
+        {canRunReview && onRunReview && (
+          <button
+            type="button"
+            className="button"
+            onClick={onRunReview}
+            disabled={reviewing || reviewState === "loading" || reviewState === "error"}
+          >
+            {reviewing ? "Rerunning..." : "Rerun Review"}
+          </button>
         )}
+      </div>
+      <div className="findings-severity-summary">
+        <div className="severity-summary-card severity-error">
+          <span className="severity-summary-count">{highCount}</span>
+          <span className="severity-summary-label">Errors</span>
+        </div>
+        <div className="severity-summary-card severity-warning">
+          <span className="severity-summary-count">{warningCount}</span>
+          <span className="severity-summary-label">Warnings</span>
+        </div>
+        <div className="severity-summary-card severity-info">
+          <span className="severity-summary-count">{infoCount}</span>
+          <span className="severity-summary-label">Info</span>
+        </div>
       </div>
 
       {findings === null ? (
@@ -156,13 +175,13 @@ export default function FindingsPanel({
           aria-labelledby="resolved-findings-heading"
         >
           <h3 id="resolved-findings-heading">
-            Resolved ({resolvedFindings.length}) · Dismissed ({dismissedCount})
+            Resolved / Dismissed ({resolvedFindings.length})
           </h3>
           <ul>
             {resolvedFindings.map((finding) => (
               <li key={finding.id} id={`finding-card-${finding.id}`}>
                 <span className={`finding-status status-${finding.status}`}>
-                  {finding.status}
+                  {finding.status === "dismissed" ? "dismissed" : finding.status}
                 </span>
                 <span>
                   {String(finding.check ?? "Unknown").replaceAll("_", " ")}
@@ -173,6 +192,9 @@ export default function FindingsPanel({
                     {"-> "}
                     {finding.final_text}
                   </span>
+                )}
+                {finding.status === "dismissed" && (finding as any).dismissal_reason && (
+                  <span className="muted">({(finding as any).dismissal_reason})</span>
                 )}
               </li>
             ))}
