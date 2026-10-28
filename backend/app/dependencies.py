@@ -1,6 +1,15 @@
+from ipaddress import ip_address
 from typing import Annotated
 
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, Header, HTTPException, Request
+
+from app.config import settings
+
+
+class Principal:
+    def __init__(self, role: str, user: str | None) -> None:
+        self.role = role
+        self.user = user
 
 
 def get_role(x_role: Annotated[str | None, Header()] = None) -> str:
@@ -15,7 +24,14 @@ def get_role(x_role: Annotated[str | None, Header()] = None) -> str:
             },
         )
 
-    return role
+    return Principal(role=role, user=x_user)
+
+
+def get_role(
+    principal: Annotated[Principal, Depends(get_authenticated_principal)],
+) -> str:
+    return principal.role
+
 
 
 def require_writer(role: Annotated[str, Depends(get_role)]) -> str:

@@ -24,6 +24,7 @@ export default function TopBar() {
       ? { ...item, href: "/queue" }
       : item,
   );
+  const isDevelopment = process.env.NODE_ENV === "development";
 
   return (
     <aside className="topbar">
@@ -69,10 +70,18 @@ export default function TopBar() {
       <div className="sidebar-profile">
         <span className="profile-avatar" aria-hidden="true">A</span>
         <span className="profile-details">
-          <strong>{user.replace(/\s+\([^)]*\)$/, "")}</strong>
-          <span>{label} · demo role, not authentication</span>
+          <strong>
+            {isDevelopment
+              ? user.replace(/\s+\([^)]*\)$/, "")
+              : "Authentication unavailable"}
+          </strong>
+          <span>
+            {isDevelopment
+              ? `${label} · local development role, not authentication`
+              : "Production API access is disabled until authentication is configured."}
+          </span>
         </span>
-        <RoleSwitcher />
+        {isDevelopment && <RoleSwitcher />}
       </div>
     </aside>
   );
