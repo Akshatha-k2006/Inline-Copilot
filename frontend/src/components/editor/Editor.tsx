@@ -253,6 +253,26 @@ export default function Editor() {
                 </div>
               </div>
             </div>
+            <div className="editor-toolbar-new" role="toolbar" aria-label="Formatting toolbar">
+              <div className="toolbar-group">
+                <button type="button" className="toolbar-btn" aria-label="Undo" disabled>↶</button>
+                <button type="button" className="toolbar-btn" aria-label="Redo" disabled>↷</button>
+              </div>
+              <div className="toolbar-group">
+                <button type="button" className="toolbar-btn" aria-label="Paragraph">¶</button>
+                <button type="button" className="toolbar-btn" aria-label="Bold"><strong>B</strong></button>
+                <button type="button" className="toolbar-btn" aria-label="Italic"><em>I</em></button>
+                <button type="button" className="toolbar-btn" aria-label="Underline"><u>U</u></button>
+              </div>
+              <div className="toolbar-group">
+                <button type="button" className="toolbar-btn" aria-label="Bulleted list">• List</button>
+                <button type="button" className="toolbar-btn" aria-label="Numbered list">1. List</button>
+              </div>
+              <div className="toolbar-group">
+                <button type="button" className="toolbar-btn" aria-label="Insert link">🔗</button>
+                <button type="button" className="toolbar-btn" aria-label="Insert image">🖼️</button>
+              </div>
+            </div>
             {findings.length > 0 ? (
               <HighlightedDraft body={body} findings={findings} selectedFindingId={selectedId} onSelect={onSelect} />
             ) : (
