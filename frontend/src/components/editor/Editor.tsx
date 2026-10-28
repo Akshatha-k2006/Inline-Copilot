@@ -1,372 +1,310 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
-import EmptyState from "@/components/EmptyState";
-import { api, ApiError } from "@/lib/api";
-import type { DemoFinding } from "@/lib/mock-findings";
 import {
-  CUSTOM_CONTENT_NOTICE,
-  DEMO_DRAFT,
-  DEMO_FINDINGS_NOTICE,
-  isReplacementSuggestion,
-} from "@/lib/mock-findings";
-import {
-  getDocumentFindings,
-  getWorkflowBlockersForDocument,
-  recordBackendReview,
-  resetDemoDocument,
-  resolveDemoFinding,
-  saveDemoDraft,
-  transitionDemoDocument,
-  useDemoWorkspace,
-} from "@/lib/mock-data";
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
+
+import { ApiError, api } from "@/lib/api";
 import { useRole } from "@/lib/role";
-import type { FindingStatus } from "@/lib/types";
-import type { BackendFinding } from "@/lib/types";
-import {
-  canEditContent,
-  contentStatusLabel,
-  reviewIsCurrent,
-} from "@/lib/workflow";
-import FindingsPanel from "./FindingsPanel";
-import HighlightedDraft from "./HighlightedDraft";
+import type {
+  BackendFinding,
+  Content,
+  ContentAuditEvent,
+  ContentFindingsResponse,
+  ReviewComment,
+} from "@/lib/types";
+import { canEditContent, contentStatusLabel } from "@/lib/workflow";
 
-const DEFAULT_TITLE = "Untitled draft";
+const CONTENT_TYPES = [
+  ["marketing_copy", "Marketing copy"],
+  ["blog_post", "Blog post"],
+  ["social_media", "Social media"],
+  ["email", "Email"],
+  ["other", "Other"],
+] as const;
 
-function toDemoFinding(
-  finding: BackendFinding,
-  contentId: number,
-  knowledge: ReturnType<typeof useDemoWorkspace>["knowledge"],
-): DemoFinding {
-  const rawSource = finding.evidence.source;
-  const sourceType =
-    rawSource.type === "term" ||
-    rawSource.type === "fact" ||
-    rawSource.type === "guideline"
-      ? rawSource.type
-      : "guideline";
-  const sourceId = typeof rawSource.id === "number" ? rawSource.id : 0;
-  const fallbackText =
-    typeof rawSource.text === "string"
-      ? rawSource.text
-      : "This finding was generated from the configured brand rules.";
-  const knowledgeSource =
-    sourceType === "term"
-      ? {
-          type: "term" as const,
-          record:
-            knowledge.glossary.find((item) => Number(item.id) === sourceId) ?? {
-              id: String(sourceId),
-              term: finding.evidence.matched_text,
-              definition: fallbackText,
-              preferredTerm: finding.suggested_fix ?? "",
-            },
-        }
-      : sourceType === "fact"
-        ? {
-            type: "fact" as const,
-            record:
-              knowledge.facts.find((item) => Number(item.id) === sourceId) ?? {
-                id: String(sourceId),
-                claim: fallbackText,
-                owner: "Brand knowledge base",
-                reviewDate: "",
-              },
-          }
-        : {
-            type: "guideline" as const,
-            record:
-              knowledge.guidelines.find((item) => Number(item.id) === sourceId) ?? {
-                id: String(sourceId),
-                title: "Brand rule",
-                description: fallbackText,
-              },
-          };
+function messageFor(error: unknown): string {
+  if (error instanceof ApiError) return error.message;
+  return error instanceof Error
+    ? error.message
+    : "The request could not be completed.";
+}
 
-  return {
-    id: finding.id,
-    content_id: contentId,
-    check: finding.check as DemoFinding["check"],
-    severity:
-      finding.severity === "high" || finding.severity === "low"
-        ? finding.severity
-        : "medium",
-    start: finding.start_offset ?? 0,
-    end: finding.end_offset ?? finding.start_offset ?? 0,
-    text: finding.evidence.matched_text,
-    explanation: finding.message,
-    source: {
-      type: sourceType,
-      id: sourceId,
-      label:
-        typeof rawSource.text === "string"
-          ? rawSource.text
-          : `${sourceType} ${sourceId}`,
-    },
-    suggestion: finding.suggested_fix,
-    status: finding.status as DemoFinding["status"],
-    final_text: null,
-    knowledge_source: knowledgeSource,
-  };
+function formatDate(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
 export default function Editor() {
-  const workspace = useDemoWorkspace();
-  const { role, user } = useRole();
-  const [title, setTitle] = useState(DEMO_DRAFT.title);
-  const [body, setBody] = useState(DEMO_DRAFT.body);
-  const [contentType, setContentType] = useState("Marketing Copy");
-  const [reviewing, setReviewing] = useState(false);
-  const [operationError, setOperationError] = useState("");
-  const [reviewedCustomText, setReviewedCustomText] = useState(false);
-  const [selectedFindingId, setSelectedFindingId] = useState<number | null>(null);
-  const [busyFindingIds, setBusyFindingIds] = useState<number[]>([]);
-  const bodyRef = useRef<HTMLTextAreaElement>(null);
-  const reviewInFlight = useRef(false);
-  const reviewRevision = useRef(0);
-  const currentDocument = workspace.documents.find(
-    (item) => item.id === DEMO_DRAFT.id,
-  );
-  const mayEdit = Boolean(
-    currentDocument && canEditContent(role, user, currentDocument),
-  );
-  const review = workspace.reviews.find(
-    (item) => item.document_id === currentDocument?.id,
-  );
-  const reviewCurrent = Boolean(
-    currentDocument && reviewIsCurrent(currentDocument, review),
-  );
-  const findings =
-    currentDocument &&
-    currentDocument.body === body &&
-    workspace.findingsBody === body
-      ? getDocumentFindings(workspace, currentDocument.id)
-      : null;
-  const comments = currentDocument
-    ? workspace.comments.filter(
-        (comment) => comment.document_id === currentDocument.id,
-      )
-    : [];
-  const workflowBlockers = currentDocument
-    ? getWorkflowBlockersForDocument(workspace, currentDocument.id)
-    : ["The demonstration document is unavailable."];
-  const canSubmit =
-    mayEdit &&
-    currentDocument !== undefined &&
-    (currentDocument.status === "draft" ||
-      currentDocument.status === "changes_requested");
+  const { role, user, isRoleLoaded } = useRole();
+
+  const [documents, setDocuments] = useState<Content[]>([]);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selected, setSelected] = useState<Content | null>(null);
+  const [findingsData, setFindingsData] =
+    useState<ContentFindingsResponse | null>(null);
+  const [comments, setComments] = useState<ReviewComment[]>([]);
+  const [audit, setAudit] = useState<ContentAuditEvent[]>([]);
+
+  const [loadingList, setLoadingList] = useState(true);
+  const [loadingSelected, setLoadingSelected] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  const [title, setTitle] = useState("");
+  const [contentType, setContentType] = useState<string>(CONTENT_TYPES[0][0]);
+  const [body, setBody] = useState("");
+  const [replacements, setReplacements] = useState<Record<number, string>>({});
+
+  const actionInFlight = useRef(false);
+  const selectedLoadId = useRef(0);
+  const listLoadId = useRef(0);
+
+  const loadList = useCallback(async () => {
+    const requestId = ++listLoadId.current;
+    setLoadingList(true);
+
+    try {
+      const result = await api.listContent();
+      if (requestId === listLoadId.current) {
+        setDocuments(result);
+        setError("");
+      }
+    } catch (cause) {
+      if (requestId === listLoadId.current) {
+        setError(messageFor(cause));
+        setDocuments([]);
+      }
+    } finally {
+      if (requestId === listLoadId.current) setLoadingList(false);
+    }
+  }, []);
+
+  const loadSelected = useCallback(async (id: number) => {
+    const requestId = ++selectedLoadId.current;
+    setLoadingSelected(true);
+
+    try {
+      const [content, findings, commentData, events] = await Promise.all([
+        api.getContent(id),
+        api.getContentFindings(id),
+        api.getReviewComments(id),
+        api.getContentAudit(id),
+      ]);
+
+      if (requestId !== selectedLoadId.current) return;
+
+      setSelected(content);
+      setTitle(content.title);
+      setContentType(content.content_type);
+      setBody(content.body);
+      setFindingsData(findings);
+      setComments(commentData.comments);
+      setAudit(events);
+      setReplacements({});
+      setError("");
+    } catch (cause) {
+      if (requestId !== selectedLoadId.current) return;
+      setSelected(null);
+      setError(messageFor(cause));
+    } finally {
+      if (requestId === selectedLoadId.current) setLoadingSelected(false);
+    }
+  }, []);
 
   useEffect(() => {
-    if (!currentDocument) return;
-    setTitle(currentDocument.title);
-    setBody(currentDocument.body);
-    setSelectedFindingId(null);
-  }, [currentDocument?.title, currentDocument?.body]);
+    if (!isRoleLoaded) return;
+    void loadList();
+  }, [isRoleLoaded, loadList, role]);
 
-  function resetReviewForEdit() {
-    reviewRevision.current += 1;
-    setSelectedFindingId(null);
-    setReviewedCustomText(false);
-  }
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const id = Number(params.get("id"));
 
-  function changeTitle(value: string) {
-    setTitle(value);
-    resetReviewForEdit();
-    persistDraftChange(value, body);
-  }
+    setCreating(params.get("new") === "1");
+    setSelectedId(Number.isSafeInteger(id) && id > 0 ? id : null);
+  }, []);
 
-  function changeBody(value: string) {
-    setBody(value);
-    resetReviewForEdit();
-    persistDraftChange(title, value);
-  }
-
-  function persistDraftChange(nextTitle: string, nextBody: string) {
-    if (!currentDocument || !mayEdit || !workspace.isHydrated) return;
-    try {
-      saveDemoDraft(currentDocument.id, nextTitle, nextBody, role, user);
-      setOperationError("");
-    } catch (error) {
-      setOperationError(
-        error instanceof Error ? error.message : "Could not save this draft.",
-      );
+  useEffect(() => {
+    if (selectedId !== null) {
+      void loadSelected(selectedId);
+    } else {
+      selectedLoadId.current += 1;
+      setSelected(null);
+      setFindingsData(null);
+      setComments([]);
+      setAudit([]);
+      setLoadingSelected(false);
     }
+  }, [selectedId, loadSelected]);
+
+  const mayEdit = selected ? canEditContent(role, user, selected) : false;
+  const isOwner = Boolean(
+    selected && selected.created_by === user.replace(/\s+\([^)]*\)$/, ""),
+  );
+  const isLocked = Boolean(selected && !mayEdit);
+  const findings = findingsData?.findings ?? [];
+  const currentFindings = findings.filter(
+    (finding) =>
+      finding.content_version === undefined ||
+      finding.content_version === selected?.version,
+  );
+  const statusLabel = selected ? contentStatusLabel(selected.status) : "";
+  const canCreate = role === "creator";
+  const reviewIsCurrent = findingsData?.reviewed_version === selected?.version;
+  const activeHighFindings = currentFindings.filter(
+    (finding) => finding.status === "open" && finding.severity === "high",
+  );
+
+  function openDocument(id: number) {
+    window.history.pushState({}, "", `/editor?id=${id}`);
+    setCreating(false);
+    setSelectedId(id);
+    setError("");
   }
 
-  function selectFinding(finding: DemoFinding, scrollToText = false) {
-    setSelectedFindingId(finding.id);
-    if (!scrollToText) return;
-
-    const highlight = document.getElementById(`draft-highlight-${finding.id}`);
-    highlight?.scrollIntoView({ block: "center", behavior: "smooth" });
-    bodyRef.current?.focus({ preventScroll: true });
-    bodyRef.current?.setSelectionRange(finding.start, finding.end);
+  function openCreateForm() {
+    window.history.pushState({}, "", "/editor?new=1");
+    setSelectedId(null);
+    setSelected(null);
+    setCreating(true);
+    setTitle("");
+    setContentType(CONTENT_TYPES[0][0]);
+    setBody("");
+    setFindingsData(null);
+    setComments([]);
+    setAudit([]);
+    setError("");
   }
 
-  function selectFromHighlightedDraft(finding: DemoFinding) {
-    selectFinding(finding);
-    document
-      .getElementById(`finding-card-${finding.id}`)
-      ?.scrollIntoView({ block: "center", behavior: "smooth" });
+  function returnToList() {
+    window.history.pushState({}, "", "/editor");
+    setSelectedId(null);
+    setCreating(false);
+    setSelected(null);
+    setError("");
   }
 
-  function loadSampleDraft() {
-    if (!workspace.isHydrated || !mayEdit || !currentDocument) return;
-    setOperationError("");
+  async function refreshSelected(id: number) {
+    await Promise.all([loadSelected(id), loadList()]);
+  }
+
+  async function exclusive(action: () => Promise<void>) {
+    if (actionInFlight.current) return;
+
+    actionInFlight.current = true;
+    setBusy(true);
+    setError("");
+
     try {
-      const sample = resetDemoDocument(role, user);
-      setTitle(sample.document.title);
-      setBody(sample.document.body);
-      setReviewedCustomText(false);
-      setSelectedFindingId(null);
-    } catch (error) {
-      setOperationError(
-        error instanceof Error
-          ? error.message
-          : "Could not reset the demonstration draft.",
-      );
-    }
-  }
-
-  async function runReview() {
-    if (!mayEdit || !currentDocument || !body.trim() || reviewInFlight.current) return;
-    const currentRevision = reviewRevision.current;
-    const submittedBody = body;
-    const submittedTitle = title;
-
-    reviewInFlight.current = true;
-    setReviewing(true);
-    setSelectedFindingId(null);
-
-    await new Promise<void>((resolve) => window.setTimeout(resolve, 350));
-    if (reviewRevision.current === currentRevision) {
-      try {
-        try {
-          saveDemoDraft(currentDocument.id, submittedTitle, submittedBody, role, user);
-          const savedContent = await api.updateContent(currentDocument.id, {
-            title: submittedTitle.trim(),
-            body: submittedBody,
-          });
-          const reviewResponse = await api.reviewContent(savedContent.id);
-          const backendFindings = reviewResponse.findings.map((finding) =>
-            toDemoFinding(finding, savedContent.id, workspace.knowledge),
-          );
-          recordBackendReview(submittedBody, backendFindings, role, user);
-          setReviewedCustomText(false);
-          setOperationError("");
-        } catch (error) {
-          setOperationError(
-            error instanceof ApiError
-              ? error.message
-              : error instanceof Error
-                ? error.message
-                : "Could not complete the backend review.",
-          );
-        }
-      } catch (error) {
-        setOperationError(
-          error instanceof Error ? error.message : "Could not save this demo review.",
-        );
-      }
-    }
-    reviewInFlight.current = false;
-    setReviewing(false);
-  }
-
-  async function resolveFinding(
-    finding: DemoFinding,
-    status: Exclude<FindingStatus, "open">,
-    finalText: string | null,
-  ) {
-    if (!workspace.isHydrated) return;
-    setBusyFindingIds((ids) => [...ids, finding.id]);
-    try {
-      if (status === "accepted" && finalText === null) {
-        throw new Error(
-          "This backend finding has no suggested correction to accept. Dismiss it or edit the text manually.",
-        );
-      }
-      await api.updateFinding(finding.id, {
-        action: status === "dismissed" ? "dismiss" : status === "edited" ? "edit" : "accept",
-        ...(status === "edited" ? { replacement: finalText ?? "" } : {}),
-      });
-      const result = resolveDemoFinding(
-        finding.id,
-        status,
-        finalText,
-        role,
-        user,
-      );
-      setBody(result.document.body);
-      setSelectedFindingId(null);
+      await action();
+    } catch (cause) {
+      setError(messageFor(cause));
     } finally {
-      setBusyFindingIds((ids) => ids.filter((id) => id !== finding.id));
+      actionInFlight.current = false;
+      setBusy(false);
     }
+  }
+
+  async function createContent(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (!title.trim() || !contentType || !body.trim()) {
+      setError("Enter a title, content type, and content body.");
+      return;
+    }
+
+    await exclusive(async () => {
+      const created = await api.createContent({
+        title: title.trim(),
+        content_type: contentType,
+        body: body.trim(),
+      });
+
+      setCreating(false);
+      setSelectedId(created.id);
+      window.history.replaceState({}, "", `/editor?id=${created.id}`);
+      await loadList();
+    });
+  }
+
+  async function saveDraft() {
+    if (!selected || !mayEdit) return;
+
+    await exclusive(async () => {
+      await api.updateContent(selected.id, {
+        title: title.trim(),
+        content_type: contentType,
+        body,
+        version: selected.version,
+      });
+      await refreshSelected(selected.id);
+    });
+  }
+
+  async function reviewAndCheck() {
+    if (!selected || !mayEdit) return;
+
+    await exclusive(async () => {
+      let current = selected;
+
+      if (
+        current.title !== title.trim() ||
+        current.content_type !== contentType ||
+        current.body !== body
+      ) {
+        current = await api.updateContent(current.id, {
+          title: title.trim(),
+          content_type: contentType,
+          body,
+          version: current.version,
+        });
+      }
+
+      await api.reviewContent(current.id);
+      await refreshSelected(current.id);
+
+      // Refresh first so the self-check runs against the latest persisted version.
+      await api.selfCheckContent(current.id);
+      await refreshSelected(current.id);
+    });
   }
 
   async function submitForReview() {
-    if (!canSubmit || !currentDocument) return;
-    setOperationError("");
-    try {
-      saveDemoDraft(currentDocument.id, title, body, role, user);
-      await api.selfCheckContent(currentDocument.id);
-      await api.submitContent(currentDocument.id);
-      const action =
-        currentDocument.status === "changes_requested" ? "resubmit" : "submit";
-      transitionDemoDocument(currentDocument.id, action, role, user);
-    } catch (error) {
-      setOperationError(
-        error instanceof Error ? error.message : "Could not submit this draft.",
-      );
-    }
+    if (!selected || selected.status !== "self_checked") return;
+
+    await exclusive(async () => {
+      await api.submitContent(selected.id);
+      await refreshSelected(selected.id);
+    });
   }
 
-  const emptyContent = !body.trim();
-  const isDemonstrationDraft = body === DEMO_DRAFT.body;
-  const reviewState = !workspace.isHydrated
-    ? "loading"
-    : workspace.persistenceWarning
-      ? "error"
-      : !review
-      ? "not-run"
-      : reviewCurrent
-        ? "current"
-        : "stale";
+  async function updateFinding(
+    finding: BackendFinding,
+    action: "accept" | "dismiss" | "edit",
+  ) {
+    if (!selected || !mayEdit) return;
 
-  if (workspace.isHydrated && !currentDocument) {
-    return (
-      <section className="editor-page">
-        <header className="editor-page-heading">
-          <div>
-            <p className="eyebrow">CoRESpace / Workspace</p>
-            <h1>Write &amp; Review</h1>
-            <p className="lead">
-              Prepare content, run supported demonstration checks, and review findings before submission.
-            </p>
-          </div>
-        </header>
-        {workspace.persistenceWarning && (
-          <p className="form-error" role="alert">
-            Saved demonstration data could not be loaded: {workspace.persistenceWarning}
-          </p>
-        )}
-        <EmptyState
-          title="No draft is available to open"
-          description="This demonstration currently has no saved content item. Return to the dashboard to begin the documented workflow; the editor will show a draft when one is available."
-          action={
-            <Link href="/" className="button button-primary">
-              Go to the dashboard
-            </Link>
-          }
-          secondaryAction={
-            <Link href="/knowledge?tab=guidelines" className="button">
-              Explore Guidelines
-            </Link>
-          }
-        />
-      </section>
-    );
+    const replacement = replacements[finding.id]?.trim();
+
+    if (action === "edit" && !replacement) {
+      setError("Enter a replacement before saving the correction.");
+      return;
+    }
+
+    await exclusive(async () => {
+      await api.updateFinding(finding.id, {
+        action,
+        ...(action === "edit" ? { replacement } : {}),
+      });
+      await refreshSelected(selected.id);
+    });
   }
 
   return (
@@ -376,222 +314,542 @@ export default function Editor() {
           <p className="eyebrow">CoRESpace / Workspace</p>
           <h1>Write &amp; Review</h1>
           <p className="lead">
-            Write or paste content and review it against the configured Lumina Home brand knowledge.
+            Create and manage content using the connected workspace API.
           </p>
         </div>
-        {mayEdit && (
+
+        <div className="editor-buttons">
+          <Link href="/" className="button">
+            Back to dashboard
+          </Link>
+          {canCreate && (
+            <button
+              type="button"
+              className="button button-primary"
+              onClick={openCreateForm}
+              disabled={busy}
+            >
+              Create New Content
+            </button>
+          )}
+        </div>
+      </header>
+
+      {error && (
+        <div className="form-error" role="alert">
+          <p>{error}</p>
           <button
             type="button"
             className="button"
-            onClick={() => void loadSampleDraft()}
-            disabled={reviewing || !workspace.isHydrated}
+            onClick={() => {
+              if (selectedId !== null) void refreshSelected(selectedId);
+              else void loadList();
+            }}
           >
-            Load demonstration draft
+            Retry
           </button>
-        )}
-      </header>
-
-      <p className="editor-demo-banner" role="note">
-        {DEMO_FINDINGS_NOTICE} The role switcher is a prototype, not authentication. Reviews use the configured backend brand rules.
-      </p>
-      {operationError && <p className="form-error" role="alert">{operationError}</p>}
-      {!workspace.isHydrated && (
-        <p className="editor-notice" role="status">Loading saved demonstration changes...</p>
-      )}
-      {workspace.persistenceWarning && (
-        <p className="editor-notice" role="alert">
-          Saved mock changes could not be restored: {workspace.persistenceWarning}
-        </p>
-      )}
-      <p className="editor-notice" role="note">
-        Drafts, reviews, and finding actions are sent to the backend. The surrounding demo workflow and audit display remain browser-local.
-      </p>
-      {reviewedCustomText && (
-        <p className="editor-notice" role="status">{CUSTOM_CONTENT_NOTICE}</p>
-      )}
-      {currentDocument && (
-        <div className="workflow-status-line">
-          <span className={`content-status status-${currentDocument.status}`}>
-            {contentStatusLabel(currentDocument.status)}
-          </span>
-          <span>Version {currentDocument.version}</span>
-          {review && (
-            <span>
-              {reviewCurrent
-                ? "Current mock review"
-                : "Review is stale; run the known demo checks again"}
-            </span>
-          )}
         </div>
       )}
-      {!mayEdit && (
-        <p className="editor-notice" role="note">
-          This document is read-only for {role.replaceAll("_", " ")}. Only its creator can edit or submit a draft.
+
+      {loadingList ? (
+        <p className="editor-notice" role="status">
+          Loading content from the backend...
         </p>
+      ) : (
+        <nav className="entry-list" aria-label="Your content">
+          {documents.map((document) => (
+            <article className="entry-card" key={document.id}>
+              <div className="entry-content">
+                <p className="eyebrow">Content #{document.id}</p>
+                <h2>{document.title}</h2>
+                <div className="fact-meta">
+                  <span className={`content-status status-${document.status}`}>
+                    {contentStatusLabel(document.status)}
+                  </span>
+                  <span>Version {document.version}</span>
+                  <span>{document.content_type.replaceAll("_", " ")}</span>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="button"
+                onClick={() => openDocument(document.id)}
+              >
+                {selectedId === document.id
+                  ? "Open content"
+                  : "Inspect content"}
+              </button>
+            </article>
+          ))}
+
+          {documents.length === 0 && !creating && (
+            <div className="empty-state">
+              <h2>No content yet</h2>
+              <p>Create a content item to start the review workflow.</p>
+            </div>
+          )}
+        </nav>
       )}
 
-      <div className="editor-layout">
-        <section className="editor-card compose-panel" aria-labelledby="compose-heading">
+      {creating ? (
+        <form
+          className="editor-card compose-panel"
+          onSubmit={(event) => void createContent(event)}
+        >
           <div className="panel-heading">
             <div>
-              <p className="eyebrow">Draft</p>
-              <h2 id="compose-heading">Your content</h2>
+              <p className="eyebrow">New draft</p>
+              <h2>Create New Content</h2>
             </div>
-            {isDemonstrationDraft && <span className="draft-id">Fictional sample</span>}
           </div>
 
           <div className="editor-fields">
-            <label className="form-field" htmlFor="draft-title">
+            <label className="form-field" htmlFor="new-content-title">
               Title
               <input
-                id="draft-title"
-                type="text"
+                id="new-content-title"
                 value={title}
-                onChange={(event) => changeTitle(event.target.value)}
-                placeholder="Give your draft a title"
-                readOnly={!mayEdit}
-                disabled={!workspace.isHydrated}
+                onChange={(event) => setTitle(event.target.value)}
+                required
+                maxLength={250}
               />
             </label>
-            <label className="form-field" htmlFor="content-type">
+
+            <label className="form-field" htmlFor="new-content-type">
               Content type
               <select
-                id="content-type"
+                id="new-content-type"
                 value={contentType}
                 onChange={(event) => setContentType(event.target.value)}
-                disabled={!mayEdit || !workspace.isHydrated}
+                required
               >
-                <option>Marketing Copy</option>
+                {CONTENT_TYPES.map(([value, label]) => (
+                  <option value={value} key={value}>
+                    {label}
+                  </option>
+                ))}
               </select>
             </label>
-            <label className="form-field" htmlFor="draft-body">
+
+            <label className="form-field" htmlFor="new-content-body">
               Content
               <textarea
-                id="draft-body"
-                ref={bodyRef}
+                id="new-content-body"
                 className="draft-textarea"
-                value={body}
-                onChange={(event) => changeBody(event.target.value)}
-                placeholder="Paste or write your content here..."
                 rows={14}
-                readOnly={!mayEdit}
-                disabled={!workspace.isHydrated}
+                value={body}
+                onChange={(event) => setBody(event.target.value)}
+                required
               />
             </label>
           </div>
 
-          {findings && findings.length > 0 && (
-            <HighlightedDraft
-              body={body}
-              findings={findings}
-              selectedFindingId={selectedFindingId}
-              onSelect={selectFromHighlightedDraft}
-            />
-          )}
-
           <div className="editor-controls">
-            <span className="character-count" aria-live="polite">
+            <span className="character-count">
               {body.length.toLocaleString()} characters
             </span>
-            {mayEdit && (
-              <div className="editor-buttons">
-                <button
-                  type="button"
-                  className="button"
-                  onClick={() => {
-                    changeBody("");
-                    changeTitle(DEFAULT_TITLE);
-                  }}
-                  disabled={!body || !workspace.isHydrated}
-                >
-                  Clear
-                </button>
-                <button
-                  type="button"
-                  className="button button-primary"
-                  onClick={() => void runReview()}
-                  disabled={emptyContent || reviewing || !workspace.isHydrated}
-                >
-                  {reviewing && <span className="loading-spinner" aria-hidden="true" />}
-                  {reviewing ? "Reviewing content..." : "Review content"}
-                </button>
-              </div>
-            )}
-          </div>
-          {canSubmit && (
-            <section className="workflow-action-card" aria-labelledby="submit-heading">
-              <h3 id="submit-heading">
-                {currentDocument?.status === "changes_requested"
-                  ? "Resubmit revised content"
-                  : "Submit for review"}
-              </h3>
-              <p>
-                A current demonstration review and no unresolved high-severity findings are required.
-                Dismissing a high-severity finding does not count as correcting it.
-              </p>
-              {workflowBlockers.length > 0 && (
-                <ul className="workflow-blockers">
-                  {workflowBlockers.map((blocker) => <li key={blocker}>{blocker}</li>)}
-                </ul>
-              )}
+            <div className="editor-buttons">
               <button
                 type="button"
-                className="button button-primary"
-                onClick={() => void submitForReview()}
-                disabled={!workspace.isHydrated || workflowBlockers.length > 0}
+                className="button"
+                onClick={returnToList}
+                disabled={busy}
               >
-                {currentDocument?.status === "changes_requested"
-                  ? "Resubmit for review"
-                  : "Submit for review"}
+                Cancel
               </button>
-            </section>
-          )}
-        </section>
+              <button
+                type="submit"
+                className="button button-primary"
+                disabled={busy || !title.trim() || !body.trim()}
+              >
+                {busy ? "Creating..." : "Create draft"}
+              </button>
+            </div>
+          </div>
+        </form>
+      ) : selectedId !== null ? (
+        loadingSelected ? (
+          <p className="editor-notice" role="status">
+            Loading content, findings, comments, and audit history...
+          </p>
+        ) : selected ? (
+          <>
+            <div className="workflow-status-line">
+              <span className={`content-status status-${selected.status}`}>
+                {statusLabel}
+              </span>
+              <span>Version {selected.version}</span>
+              <span>Updated {formatDate(selected.updated_at)}</span>
+              <span>Created by {selected.created_by}</span>
+            </div>
 
-        <FindingsPanel
-          findings={findings}
-          busyFindingIds={
-            workspace.isHydrated
-              ? busyFindingIds
-              : findings?.map((finding) => finding.id) ?? []
-          }
-          readOnly={!mayEdit}
-          reviewState={reviewState}
-          reviewing={reviewing}
-          canRunReview={
-            mayEdit &&
-            !emptyContent &&
-            workspace.isHydrated &&
-            !workspace.persistenceWarning
-          }
-          onRunReview={() => void runReview()}
-          selectedFindingId={selectedFindingId}
-          reviewedCustomText={reviewedCustomText}
-          onSelect={(finding) => selectFinding(finding, true)}
-          onResolve={mayEdit ? resolveFinding : undefined}
-        />
-      </div>
-      {currentDocument && (
-        <section className="card workflow-comments" aria-labelledby="review-comments-heading">
-          <h2 id="review-comments-heading">Review comments and requested changes</h2>
-          {comments.length === 0 ? (
-            <p className="muted">
-              {currentDocument.status === "draft"
-                ? "No review comments yet. Comments appear here if a reviewer leaves feedback after submission."
-                : "No review comments or requested changes have been recorded for this document."}
-            </p>
-          ) : (
-            <ul>
-              {comments.map((comment) => (
-                <li key={comment.id}>
-                  <p>{comment.text}</p>
-                  <small>{comment.author} · {comment.role.replaceAll("_", " ")} · {comment.kind.replaceAll("_", " ")}</small>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+            {isLocked && (
+              <p className="editor-notice" role="note">
+                This item is read-only for your role or current workflow status.{" "}
+                {selected.status === "approved" ||
+                selected.status === "ready_to_publish"
+                  ? "Approved content cannot be edited by creators; you can inspect it here or create a new item."
+                  : selected.status === "in_review"
+                    ? "This content is awaiting a reviewer decision. You can inspect it or create a separate draft."
+                    : "Only its creator can edit an eligible draft."}
+              </p>
+            )}
+
+            <div className="editor-layout">
+              <section
+                className="editor-card compose-panel"
+                aria-labelledby="compose-heading"
+              >
+                <div className="panel-heading">
+                  <div>
+                    <p className="eyebrow">Content #{selected.id}</p>
+                    <h2 id="compose-heading">Content details</h2>
+                  </div>
+                  <span>Version {selected.version}</span>
+                </div>
+
+                <div className="editor-fields">
+                  <label className="form-field" htmlFor="content-title">
+                    Title
+                    <input
+                      id="content-title"
+                      value={title}
+                      onChange={(event) => setTitle(event.target.value)}
+                      readOnly={!mayEdit}
+                    />
+                  </label>
+
+                  <label className="form-field" htmlFor="content-type">
+                    Content type
+                    <select
+                      id="content-type"
+                      value={contentType}
+                      onChange={(event) => setContentType(event.target.value)}
+                      disabled={!mayEdit}
+                    >
+                      {CONTENT_TYPES.map(([value, label]) => (
+                        <option value={value} key={value}>
+                          {label}
+                        </option>
+                      ))}
+                      {!CONTENT_TYPES.some(
+                        ([value]) => value === contentType,
+                      ) && <option value={contentType}>{contentType}</option>}
+                    </select>
+                  </label>
+
+                  <label className="form-field" htmlFor="content-body">
+                    Content
+                    <textarea
+                      id="content-body"
+                      className="draft-textarea"
+                      rows={14}
+                      value={body}
+                      onChange={(event) => setBody(event.target.value)}
+                      readOnly={!mayEdit}
+                    />
+                  </label>
+                </div>
+
+                <div className="editor-controls">
+                  <span className="character-count">
+                    {body.length.toLocaleString()} characters
+                  </span>
+                  {mayEdit && (
+                    <div className="editor-buttons">
+                      <button
+                        type="button"
+                        className="button button-primary"
+                        onClick={() => void saveDraft()}
+                        disabled={busy || !title.trim() || !body.trim()}
+                      >
+                        {busy ? "Saving..." : "Save draft"}
+                      </button>
+                      <button
+                        type="button"
+                        className="button"
+                        onClick={() => void reviewAndCheck()}
+                        disabled={busy || !body.trim() || !title.trim()}
+                      >
+                        {busy ? "Checking..." : "Run review checks"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {role === "creator" &&
+                  isOwner &&
+                  selected.status === "self_checked" && (
+                    <section className="workflow-action-card">
+                      <h3>Ready to submit</h3>
+                      <p>
+                        The backend review is current. Resolve open
+                        high-severity findings before submission.
+                      </p>
+                      <button
+                        type="button"
+                        className="button button-primary"
+                        onClick={() => void submitForReview()}
+                        disabled={
+                          busy ||
+                          !reviewIsCurrent ||
+                          activeHighFindings.length > 0
+                        }
+                      >
+                        {busy ? "Submitting..." : "Submit for review"}
+                      </button>
+                    </section>
+                  )}
+              </section>
+
+              <section
+                className="editor-card findings-panel"
+                aria-labelledby="findings-heading"
+              >
+                <div className="panel-heading">
+                  <div>
+                    <p className="eyebrow">Backend review results</p>
+                    <h2 id="findings-heading">Findings</h2>
+                  </div>
+                </div>
+
+                {!findingsData || findingsData.reviewed_version === null ? (
+                  <p className="muted">
+                    No review has been run for this content.
+                  </p>
+                ) : !reviewIsCurrent ? (
+                  <p className="editor-notice" role="status">
+                    These findings are for version{" "}
+                    {findingsData.content_version}; the current content is
+                    version {selected.version}. Run review checks again.
+                  </p>
+                ) : currentFindings.length === 0 ? (
+                  <p className="editor-notice" role="status">
+                    The backend review returned no findings for this version.
+                  </p>
+                ) : (
+                  <div className="finding-list">
+                    {currentFindings.map((finding) => {
+                      const matchedText = finding.evidence?.matched_text ?? "";
+
+                      return (
+                        <article
+                          className={`finding-card severity-${finding.severity}`}
+                          key={finding.id}
+                        >
+                          <div className="finding-heading">
+                            <div>
+                              <span
+                                className={`severity-badge severity-badge-${finding.severity}`}
+                              >
+                                {finding.severity}
+                              </span>
+                              <h3>{finding.check.replaceAll("_", " ")}</h3>
+                            </div>
+                            <span
+                              className={`finding-status status-${finding.status}`}
+                            >
+                              {finding.status.replaceAll("_", " ")}
+                            </span>
+                          </div>
+
+                          <p>{finding.message}</p>
+                          {matchedText && (
+                            <p>
+                              <strong>Matched text:</strong>{" "}
+                              <q>{matchedText}</q>
+                            </p>
+                          )}
+                          {finding.suggested_fix && (
+                            <p>
+                              <strong>Suggested correction:</strong>{" "}
+                              {finding.suggested_fix}
+                            </p>
+                          )}
+
+                          {finding.status === "open" &&
+                            mayEdit &&
+                            selected.status === "draft" && (
+                              <>
+                                <label
+                                  className="form-field"
+                                  htmlFor={`finding-replacement-${finding.id}`}
+                                >
+                                  Custom correction
+                                  <textarea
+                                    id={`finding-replacement-${finding.id}`}
+                                    rows={2}
+                                    value={replacements[finding.id] ?? ""}
+                                    onChange={(event) =>
+                                      setReplacements((existing) => ({
+                                        ...existing,
+                                        [finding.id]: event.target.value,
+                                      }))
+                                    }
+                                  />
+                                </label>
+                                <div className="finding-actions">
+                                  <button
+                                    type="button"
+                                    className="button"
+                                    onClick={() =>
+                                      void updateFinding(finding, "accept")
+                                    }
+                                    disabled={busy || !finding.suggested_fix}
+                                  >
+                                    Accept suggestion
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="button"
+                                    onClick={() =>
+                                      void updateFinding(finding, "edit")
+                                    }
+                                    disabled={
+                                      busy || !replacements[finding.id]?.trim()
+                                    }
+                                  >
+                                    Save correction
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="button"
+                                    onClick={() =>
+                                      void updateFinding(finding, "dismiss")
+                                    }
+                                    disabled={busy}
+                                  >
+                                    Dismiss
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                        </article>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {activeHighFindings.length > 0 && (
+                  <ul className="workflow-blockers">
+                    <li>
+                      {activeHighFindings.length} open high-severity finding(s)
+                      must be resolved before submission.
+                    </li>
+                  </ul>
+                )}
+              </section>
+            </div>
+
+            <section
+              className="card workflow-comments"
+              aria-labelledby="comments-heading"
+            >
+              <h2 id="comments-heading">Review comments</h2>
+              {comments.length === 0 ? (
+                <p className="muted">No persisted review comments.</p>
+              ) : (
+                <ul>
+                  {comments.map((comment) => (
+                    <li key={comment.id}>
+                      <p>{comment.body}</p>
+                      <small>
+                        {comment.author} · {formatDate(comment.created_at)}
+                      </small>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+
+            <section
+              className="card workflow-comments"
+              aria-labelledby="audit-heading"
+            >
+              <h2 id="audit-heading">Recent backend activity</h2>
+              {audit.length === 0 ? (
+                <p className="muted">
+                  No audit events have been recorded for this item.
+                </p>
+              ) : (
+                <ol>
+                  {audit
+                    .slice(-5)
+                    .reverse()
+                    .map((event: ContentAuditEvent) => (
+                      <li key={event.id}>
+                        <p>{event.action.replaceAll("_", " ")}</p>
+                        <small>
+                          {event.actor} · {formatDate(event.created_at)}
+                        </small>
+                      </li>
+                    ))}
+                </ol>
+              )}
+            </section>
+          </>
+        ) : (
+          <div className="empty-state" role="alert">
+            <h2>Content could not be opened</h2>
+            <p>Confirm the content ID and your role permissions, then retry.</p>
+          </div>
+        )
+      ) : (
+        <div className="empty-state">
+          <h2>Select content to inspect</h2>
+          <p>
+            Previously submitted and approved content remains available for
+            inspection.
+          </p>
+        </div>
       )}
+
+      {selected && selected.status === "in_review" && role === "creator" && (
+        <p className="editor-notice" role="note">
+          The content is with a reviewer. Create another draft while this item
+          is under review.
+        </p>
+      )}
+
+      {selected &&
+        (selected.status === "approved" ||
+          selected.status === "ready_to_publish") && (
+          <p className="editor-notice" role="note">
+            {selected.status === "approved"
+              ? "A Brand Manager or Admin may move approved content to ready to publish."
+              : "This content is ready to publish. Creator editing is disabled."}
+          </p>
+        )}
+
+      {selected && (
+        <p className="muted">
+          {comments.length} persisted comment(s) · {audit.length} persisted
+          audit event(s)
+        </p>
+      )}
+
+      <div className="editor-buttons">
+        {(selectedId !== null || creating) && (
+          <button
+            type="button"
+            className="button"
+            onClick={returnToList}
+            disabled={busy}
+          >
+            Return to content list
+          </button>
+        )}
+        {canCreate && (
+          <button
+            type="button"
+            className="button button-primary"
+            onClick={openCreateForm}
+            disabled={busy}
+          >
+            Create New Content
+          </button>
+        )}
+      </div>
     </section>
   );
 }

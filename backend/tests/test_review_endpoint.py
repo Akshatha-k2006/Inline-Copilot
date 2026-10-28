@@ -31,7 +31,7 @@ class ReviewEndpointTests(unittest.TestCase):
                     title="Review test",
                     body="best badword",
                     version=3,
-                    created_by="test",
+                    created_by="test-user",
                 ),
                 Term(
                     id=1,
@@ -76,6 +76,7 @@ class ReviewEndpointTests(unittest.TestCase):
 
             raw_path = path.encode("ascii")
             headers = []
+            headers.append((b"x-role", b"creator"))
             if user is not None:
                 headers.append((b"x-user", user.encode("ascii")))
             request_payload = b""
@@ -316,19 +317,21 @@ class ReviewEndpointTests(unittest.TestCase):
         )
         self.assertEqual([item.id for item in accepted], [first["id"], second["id"]])
         self.assertTrue(all(item.content_version == 5 for item in accepted))
-        self.assertEqual(self.db.query(AuditEvent).count(), 2)
+        self.assertEqual(self.db.query(AuditEvent).count(), 4)
         self.assertEqual(
             [
                 (
                     event.action,
-                    event.details["previous_version"],
-                    event.details["new_version"],
+                    event.details.get("previous_version"),
+                    event.details.get("new_version"),
                 )
                 for event in self.db.query(AuditEvent).order_by(AuditEvent.id)
             ],
             [
+                ("content_reviewed", None, None),
                 ("finding_accepted", 3, 4),
                 ("finding_accepted", 4, 5),
+                ("content_reviewed", None, None),
             ],
         )
 
@@ -446,7 +449,12 @@ class ReviewEndpointTests(unittest.TestCase):
                 ],
             ),
         ):
-            result = review_content(1, self.db)
+            result = review_content(
+                1,
+                x_user="test-user",
+                role="creator",
+                db=self.db,
+            )
 
         self.assertEqual(
             [
@@ -1014,6 +1022,14 @@ class ReviewEndpointTests(unittest.TestCase):
                     )
                 )
                 connection.execute(
+                    text(
+                        "CREATE TABLE content "
+                        "(id INTEGER PRIMARY KEY, title VARCHAR(250) NOT NULL, "
+                        "body TEXT NOT NULL, status VARCHAR(50) NOT NULL, "
+                        "version INTEGER NOT NULL, created_by VARCHAR(150) NOT NULL)"
+                    )
+                )
+                connection.execute(
                     text("INSERT INTO findings (id, content_id) VALUES (1, 9)")
                 )
 
@@ -1025,6 +1041,15 @@ class ReviewEndpointTests(unittest.TestCase):
                 for column in inspect(legacy_engine).get_columns("findings")
             }
             self.assertIn("content_version", columns)
+            content_columns = {
+                column["name"]
+                for column in inspect(legacy_engine).get_columns("content")
+            }
+            self.assertTrue(
+                {"content_type", "reviewed_version", "reviewed_at"}.issubset(
+                    content_columns
+                )
+            )
             with legacy_engine.connect() as connection:
                 self.assertEqual(
                     connection.execute(

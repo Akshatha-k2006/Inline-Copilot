@@ -1,6 +1,7 @@
 
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -9,6 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.dependencies import get_role
 from app.models import AuditEvent, Content, Finding
 from app.schemas import FindingActionRequest, FindingActionResponse
 from app.services.terminology_checker import check_terminology
@@ -106,7 +108,12 @@ def _finding_sort_key(finding: dict) -> tuple:
 
 
 @router.post("/content/{content_id}/review")
-def review_content(content_id: int, db: Session = Depends(get_db)):
+def review_content(
+    content_id: int,
+    x_user: Annotated[str, Header()],
+    role: Annotated[str, Depends(get_role)],
+    db: Session = Depends(get_db),
+):
     try:
         content = (
             db.query(Content)
@@ -131,6 +138,22 @@ def review_content(content_id: int, db: Session = Depends(get_db)):
             detail={
                 "error": "not_found",
                 "message": "Content not found.",
+            },
+        )
+    if role != "creator" or content.created_by != x_user.strip().rsplit(" (", 1)[0]:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "forbidden",
+                "message": "Only the content's creator can run its review.",
+            },
+        )
+    if content.status != "draft":
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "invalid_status_transition",
+                "message": "Only draft content can be reviewed.",
             },
         )
 
@@ -217,6 +240,21 @@ def review_content(content_id: int, db: Session = Depends(get_db)):
             db.add(finding)
             saved_findings.append(finding)
 
+        content.reviewed_version = content.version
+        content.reviewed_at = datetime.now(timezone.utc)
+        db.add(
+            AuditEvent(
+                content_id=content.id,
+                actor=x_user.strip(),
+                action="content_reviewed",
+                details={
+                    "actor_role": role,
+                    "content_version": content.version,
+                    "finding_count": len(saved_findings),
+                    "engine": {"rules": "ok", "llm": llm_status},
+                },
+            )
+        )
         db.commit()
     except SQLAlchemyError as exc:
         db.rollback()
@@ -268,6 +306,7 @@ def update_finding(
     finding_id: int,
     action_request: FindingActionRequest,
     x_user: Annotated[str, Header()],
+    role: Annotated[str, Depends(get_role)],
     db: Session = Depends(get_db),
 ):
     actor = x_user.strip()
@@ -295,6 +334,16 @@ def update_finding(
         )
         if content is None:
             raise _action_error(404, "not_found", "Content not found.")
+        if (
+            role != "creator"
+            or content.created_by != actor.rsplit(" (", 1)[0]
+            or content.status != "draft"
+        ):
+            raise _action_error(
+                403,
+                "forbidden",
+                "Only the content's creator can update findings on a draft.",
+            )
 
         finding = (
             db.query(Finding)
@@ -418,7 +467,12 @@ def update_finding(
                     Content.id == content.id,
                     Content.version == old_version,
                 )
-                .values(body=updated_body, version=updated_version)
+                .values(
+                    body=updated_body,
+                    version=updated_version,
+                    reviewed_version=None,
+                    reviewed_at=None,
+                )
             )
             if update_result.rowcount != 1:
                 raise _action_error(

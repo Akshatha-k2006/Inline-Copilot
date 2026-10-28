@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 class GuidelineCreate(BaseModel):
     title: str
@@ -45,23 +45,67 @@ class ContentStatusResponse(BaseModel):
     content_version: int
 
 
+<<<<<<< HEAD
+class ContentCreateRequest(BaseModel):
+    title: str = Field(min_length=1, max_length=250)
+    content_type: str = Field(min_length=1, max_length=100)
+    body: str = Field(min_length=1)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def validate_content(self) -> "ContentCreateRequest":
+        self.title = self.title.strip()
+        self.content_type = self.content_type.strip()
+        if not self.title or not self.content_type or not self.body.strip():
+            raise ValueError("Title, content type, and body are required.")
+        return self
+
+
+class ContentUpdateRequest(ContentCreateRequest):
+    version: int = Field(ge=1)
+
+
+class ContentResponse(BaseModel):
+    id: int
+    title: str
+    content_type: str
+    body: str
+    status: str
+    version: int
+    reviewed_version: int | None
+    reviewed_at: datetime | None
+=======
 class ContentResponse(BaseModel):
     id: int
     title: str
     body: str
     status: str
     version: int
+>>>>>>> 5f147fc0427cbf068a8b772a050824737fe6a82d
     created_by: str
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
 
 
+<<<<<<< HEAD
+class AuditEventResponse(BaseModel):
+    id: int
+    content_id: int | None
+    actor: str
+    action: str
+    details: dict
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+=======
 class ContentUpdate(BaseModel):
     title: str
     body: str
 
     model_config = ConfigDict(extra="forbid")
+>>>>>>> 5f147fc0427cbf068a8b772a050824737fe6a82d
 
 
 class ReviewDecisionRequest(BaseModel):

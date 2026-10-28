@@ -4,7 +4,11 @@ import type {
   ApiGlossaryTerm,
   ApiGuideline,
   ContentCommentsResponse,
-  ContentResponse,
+  Content,
+  ContentAuditEvent,
+  ContentDraft,
+  ContentFindingsResponse,
+  ContentUpdate,
   ContentStatusResponse,
   FindingActionResponse,
   Health,
@@ -77,6 +81,8 @@ function defaultErrorMessage(status: number): string {
       return "The requested resource could not be found.";
     case 409:
       return "This action conflicts with the current server state. Refresh and try again.";
+    case 422:
+      return "The submitted data is invalid. Check the fields and try again.";
     case 500:
       return "The server could not complete the request. Please try again later.";
     default:
@@ -164,9 +170,11 @@ export const api = {
     request<T>("PATCH", path, body, options),
   delete: <T>(path: string, options?: RequestOptions) =>
     request<T>("DELETE", path, undefined, options),
+
   health: (options?: RequestOptions) =>
     request<Health>("GET", "/api/health", undefined, options),
   seedSample: () => request<SeedResponse>("POST", "/api/seed/load"),
+
   listGuidelines: (options?: RequestOptions) =>
     request<ApiGuideline[]>("GET", "/api/guidelines", undefined, options),
   createGuideline: (body: Omit<ApiGuideline, "id">) =>
@@ -175,6 +183,7 @@ export const api = {
     request<ApiGuideline>("PUT", `/api/guidelines/${id}`, body),
   deleteGuideline: (id: number) =>
     request<void>("DELETE", `/api/guidelines/${id}`),
+
   listGlossary: (options?: RequestOptions) =>
     request<ApiGlossaryTerm[]>("GET", "/api/glossary", undefined, options),
   createGlossaryTerm: (body: Omit<ApiGlossaryTerm, "id">) =>
@@ -183,6 +192,7 @@ export const api = {
     request<ApiGlossaryTerm>("PUT", `/api/glossary/${id}`, body),
   deleteGlossaryTerm: (id: number) =>
     request<void>("DELETE", `/api/glossary/${id}`),
+
   listFacts: (options?: RequestOptions) =>
     request<ApiFact[]>("GET", "/api/facts", undefined, options),
   createFact: (body: Omit<ApiFact, "id" | "outdated">) =>
@@ -190,6 +200,7 @@ export const api = {
   updateFact: (id: number, body: Omit<ApiFact, "id" | "outdated">) =>
     request<ApiFact>("PUT", `/api/facts/${id}`, body),
   deleteFact: (id: number) => request<void>("DELETE", `/api/facts/${id}`),
+
   listAssets: (options?: RequestOptions) =>
     request<ApiAsset[]>("GET", "/api/assets", undefined, options),
   createAsset: (body: Omit<ApiAsset, "id">) =>
@@ -197,23 +208,51 @@ export const api = {
   updateAsset: (id: number, body: Omit<ApiAsset, "id">) =>
     request<ApiAsset>("PUT", `/api/assets/${id}`, body),
   deleteAsset: (id: number) => request<void>("DELETE", `/api/assets/${id}`),
+
+  listContent: (options?: RequestOptions) =>
+    request<Content[]>("GET", "/api/content", undefined, options),
+  createContent: (body: ContentDraft) =>
+    request<Content>("POST", "/api/content", body),
+  getContent: (id: number, options?: RequestOptions) =>
+    request<Content>("GET", `/api/content/${id}`, undefined, options),
+  updateContent: (id: number, body: ContentUpdate) =>
+    request<Content>("PUT", `/api/content/${id}`, body),
+
   reviewContent: (id: number) =>
     request<ReviewResponse>("POST", `/api/content/${id}/review`),
-  getContent: (id: number, options?: RequestOptions) =>
-    request<ContentResponse>("GET", `/api/content/${id}`, undefined, options),
-  updateContent: (id: number, body: { title: string; body: string }) =>
-    request<ContentResponse>("PUT", `/api/content/${id}`, body),
-  updateFinding: (id: number, body: { action: "accept" | "edit" | "dismiss"; replacement?: string }) =>
-    request<FindingActionResponse>("PATCH", `/api/findings/${id}`, body),
+  updateFinding: (
+    id: number,
+    body: { action: "accept" | "edit" | "dismiss"; replacement?: string },
+  ) => request<FindingActionResponse>("PATCH", `/api/findings/${id}`, body),
   submitContent: (id: number) =>
     request<ContentStatusResponse>("POST", `/api/content/${id}/submit`),
   selfCheckContent: (id: number) =>
     request<ContentStatusResponse>("POST", `/api/content/${id}/self-check`),
+  getContentFindings: (id: number, options?: RequestOptions) =>
+    request<ContentFindingsResponse>(
+      "GET",
+      `/api/content/${id}/findings`,
+      undefined,
+      options,
+    ),
+  getContentAudit: (id: number, options?: RequestOptions) =>
+    request<ContentAuditEvent[]>(
+      "GET",
+      `/api/content/${id}/audit`,
+      undefined,
+      options,
+    ),
+  getAudit: (options?: RequestOptions) =>
+    request<ContentAuditEvent[]>("GET", "/api/audit", undefined, options),
   decideContent: (
     id: number,
     body: { decision: "approve" | "request_changes"; comment?: string },
   ) =>
-    request<ReviewDecisionResponse>("POST", `/api/content/${id}/decision`, body),
+    request<ReviewDecisionResponse>(
+      "POST",
+      `/api/content/${id}/decision`,
+      body,
+    ),
   markReadyToPublish: (id: number) =>
     request<ContentStatusResponse>(
       "POST",

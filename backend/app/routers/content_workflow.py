@@ -24,6 +24,112 @@ from app.services.content_workflow import transition_content_status
 router = APIRouter(tags=["Content workflow"])
 logger = logging.getLogger(__name__)
 
+def _authorize_creator(content_id: int, role: str, actor: str, db: Session) -> None:
+    if role != "creator":
+        return
+    content = db.get(Content, content_id)
+    if content is None:
+        return
+    normalized_actor = actor.strip().rsplit(" (", 1)[0]
+    if content.created_by != normalized_actor:
+        raise HTTPException(
+            status_code=403,
+            detail={"error": "forbidden", "message": "Creators can act only on their own content."},
+        )
+
+
+@router.get("/content/{content_id}", response_model=ContentResponse)
+def get_content(
+    content_id: int,
+    role: Annotated[str, Depends(get_role)],
+    db: Annotated[Session, Depends(get_db)],
+) -> ContentResponse:
+    content = db.get(Content, content_id)
+    if content is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "not_found", "message": "Content not found."},
+        )
+    return ContentResponse.model_validate(content)
+
+
+@router.put("/content/{content_id}", response_model=ContentResponse)
+def update_content(
+    content_id: int,
+    request: ContentUpdate,
+    x_user: Annotated[str, Header()],
+    role: Annotated[str, Depends(get_role)],
+    db: Annotated[Session, Depends(get_db)],
+) -> ContentResponse:
+    actor = x_user.strip()
+    content = db.get(Content, content_id)
+    if content is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"error": "not_found", "message": "Content not found."},
+        )
+    if role != "creator" or content.created_by != actor:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "forbidden",
+                "message": "Only the content creator can edit this draft.",
+            },
+        )
+    if not actor or not request.title.strip() or not request.body.strip():
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "validation_error",
+                "message": "A title and content body are required.",
+            },
+        )
+    if content.status not in {"draft", "changes_requested"}:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "invalid_status_transition",
+                "message": "Only editable drafts can be updated.",
+            },
+        )
+
+    content.title = request.title
+    content.body = request.body
+    content.version += 1
+    db.commit()
+    db.refresh(content)
+    return ContentResponse.model_validate(content)
+
+
+@router.post(
+    "/content/{content_id}/self-check",
+    response_model=ContentStatusResponse,
+)
+def self_check_content(
+    content_id: int,
+    x_user: Annotated[str, Header()],
+    role: Annotated[str, Depends(get_role)],
+    db: Annotated[Session, Depends(get_db)],
+) -> ContentStatusResponse:
+    try:
+        content = transition_content_status(
+            db, content_id, "self_checked", x_user, role
+        )
+    except SQLAlchemyError as exc:
+        logger.exception("Unable to self-check content.")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "workflow_failed",
+                "message": "Unable to self-check content.",
+            },
+        ) from exc
+    return ContentStatusResponse(
+        content_id=content.id,
+        status=content.status,
+        content_version=content.version,
+    )
+
 
 @router.get("/content/{content_id}", response_model=ContentResponse)
 def get_content(
@@ -128,6 +234,7 @@ def submit_content(
     role: Annotated[str, Depends(get_role)],
     db: Annotated[Session, Depends(get_db)],
 ) -> ContentStatusResponse:
+    _authorize_creator(content_id, role, x_user, db)
     try:
         content = transition_content_status(
             db,
@@ -245,6 +352,34 @@ def mark_content_ready_to_publish(
 
 
 @router.post(
+    "/content/{content_id}/self-check",
+    response_model=ContentStatusResponse,
+)
+def self_check_content(
+    content_id: int,
+    x_user: Annotated[str, Header()],
+    role: Annotated[str, Depends(get_role)],
+    db: Annotated[Session, Depends(get_db)],
+) -> ContentStatusResponse:
+    _authorize_creator(content_id, role, x_user, db)
+    try:
+        content = transition_content_status(
+            db, content_id, "self_checked", x_user, role
+        )
+    except SQLAlchemyError as exc:
+        logger.exception("Unable to mark content self-checked.")
+        raise HTTPException(
+            status_code=500,
+            detail={"error": "workflow_failed", "message": "Unable to complete content check."},
+        ) from exc
+    return ContentStatusResponse(
+        content_id=content.id,
+        status=content.status,
+        content_version=content.version,
+    )
+
+
+@router.post(
     "/content/{content_id}/comments",
     response_model=ReviewCommentResponse,
     status_code=201,
@@ -353,7 +488,7 @@ def get_review_comments(
                 },
             )
         if role == "creator":
-            can_read = content.created_by == actor
+            can_read = content.created_by == actor.rsplit(" (", 1)[0]
         else:
             can_read = role in {"reviewer", "brand_manager", "admin"}
         if not can_read:
