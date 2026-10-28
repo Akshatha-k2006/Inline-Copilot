@@ -1,453 +1,96 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
-import SampleBrandButton from "@/components/SampleBrandButton";
-import { ApiError, api } from "@/lib/api";
-import { loadBrandData } from "@/lib/knowledge";
 import { useRole } from "@/lib/role";
-import { canManageKnowledge, canViewReviewQueue } from "@/lib/workflow";
-import type { BrandData } from "@/lib/brand-data";
-import type { Content, ContentAuditEvent, Health, Role } from "@/lib/types";
-
-interface DashboardData {
-  health: Health;
-  knowledge: BrandData;
-  content: Content[];
-  audit: ContentAuditEvent[];
-}
-
-const ROLE_COPY: Record<
-  Role,
-  { heading: string; summary: string; workTitle: string; workSummary: string }
-> = {
-  creator: {
-    heading: "Create content with confidence",
-    summary: "Create content and prepare clear, evidence-led work for review.",
-    workTitle: "Your content",
-    workSummary:
-      "Create and reopen your persisted content in the Write & Review workspace.",
-  },
-  reviewer: {
-    heading: "Make every review count",
-    summary:
-      "Review submitted work, leave clear feedback, and make decisions when content is ready.",
-    workTitle: "Content awaiting your review",
-    workSummary:
-      "Open submitted content, inspect persisted findings, add comments, and record a review decision.",
-  },
-  brand_manager: {
-    heading: "Keep the brand system clear",
-    summary:
-      "Manage the guidance, terminology, facts, and assets that inform brand-aligned work.",
-    workTitle: "Brand knowledge at a glance",
-    workSummary:
-      "These totals come from the backend knowledge collections. Approved content can be marked ready to publish from the review workspace.",
-  },
-  admin: {
-    heading: "Workspace overview",
-    summary:
-      "Monitor the service and manage the brand knowledge available to the workspace.",
-    workTitle: "Workspace operations",
-    workSummary:
-      "The dashboard reports live service health and backend knowledge totals. User-management endpoints are not exposed by the current API.",
-  },
-};
-
-const KNOWLEDGE_LINKS = [
-  { tab: "guidelines", label: "Guidelines" },
-  { tab: "glossary", label: "Glossary" },
-  { tab: "facts", label: "Facts" },
-  { tab: "assets", label: "Assets" },
-] as const;
+import {
+  formatMockTimestamp,
+  getDocumentFindings,
+  getQueuedDocuments,
+  MOCK_DATA_NOTICE,
+  useDemoWorkspace,
+} from "@/lib/mock-data";
+import { contentStatusLabel } from "@/lib/workflow";
 
 function displayName(user: string): string {
   return user.replace(/\s+\([^)]*\)$/, "");
 }
 
 export default function Home() {
-  const { role, label, user, isRoleLoaded } = useRole();
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [retry, setRetry] = useState(0);
-  const mayManageKnowledge = canManageKnowledge(role);
-  const mayViewQueue = canViewReviewQueue(role);
-  const copy = ROLE_COPY[role];
-
-  const refresh = useCallback(() => {
-    setRetry((current) => current + 1);
-  }, []);
-
-  useEffect(() => {
-    if (!isRoleLoaded) return;
-
-    const controller = new AbortController();
-    setLoading(true);
-    setError("");
-
-    void Promise.all([
-      api.health({ signal: controller.signal }),
-      loadBrandData({ signal: controller.signal }),
-      api.listContent({ signal: controller.signal }),
-      api.getAudit({ signal: controller.signal }),
-    ])
-      .then(([health, knowledge, content, audit]) => {
-        setData({ health, knowledge, content, audit });
-      })
-      .catch((cause: unknown) => {
-        if (cause instanceof DOMException && cause.name === "AbortError") return;
-        setError(
-          cause instanceof ApiError
-            ? cause.message
-            : cause instanceof Error
-              ? cause.message
-              : "Could not load dashboard data.",
-        );
-        setData(null);
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false);
-      });
-
-    return () => controller.abort();
-  }, [isRoleLoaded, retry, role]);
-
-  const contentCount = (status: Content["status"]) =>
-    data?.content.filter((item) => item.status === status).length ?? 0;
-  const returnedForChanges =
-    data?.audit.filter(
-      (event) =>
-        event.action === "content_status_changed" &&
-        event.details.previous_status === "in_review" &&
-        event.details.new_status === "draft",
-    ).length ?? 0;
-  const knowledgeCounts = data
-    ? [
-        { label: "Guidelines", value: data.knowledge.guidelines.length },
-        { label: "Terminology entries", value: data.knowledge.glossary.length },
-        { label: "Approved facts", value: data.knowledge.facts.length },
-        {
-          label: "Facts requiring re-approval",
-          value: data.knowledge.facts.filter((fact) => fact.outdated).length,
-        },
-        { label: "Assets", value: data.knowledge.assets.length },
-      ]
-    : [];
-  const totalKnowledge = knowledgeCounts
-    .filter((item) => item.label !== "Facts requiring re-approval")
-    .reduce((total, item) => total + item.value, 0);
-  const counts = !data
-    ? []
-    : role === "creator"
-      ? [
-          { label: "Your content", value: data.content.length },
-          {
-            label: "Needs attention",
-            value: contentCount("draft") + contentCount("self_checked"),
-          },
-          { label: "Awaiting review", value: contentCount("in_review") },
-          { label: "Approved", value: contentCount("approved") },
-        ]
-      : role === "reviewer"
-        ? [
-            { label: "Awaiting your review", value: contentCount("in_review") },
-            { label: "Approved content", value: contentCount("approved") },
-            { label: "Returned for changes", value: returnedForChanges },
-          ]
-        : role === "brand_manager"
-          ? knowledgeCounts
-          : [
-              { label: "Total content", value: data.content.length },
-              { label: "Draft", value: contentCount("draft") },
-              { label: "Self-checked", value: contentCount("self_checked") },
-              { label: "Awaiting review", value: contentCount("in_review") },
-              { label: "Approved", value: contentCount("approved") },
-              {
-                label: "Ready to publish",
-                value: contentCount("ready_to_publish"),
-              },
-              { label: "Returned for changes", value: returnedForChanges },
-              ...knowledgeCounts,
-            ];
-  const dashboardTitle =
-    role === "creator"
-      ? "Your workflow"
-      : role === "reviewer"
-        ? "Review activity"
-        : role === "brand_manager"
-          ? "Brand knowledge"
-          : "Operations overview";
+  const { role, user, label } = useRole();
+  const workspace = useDemoWorkspace();
+  const document = workspace.documents[0];
+  const findings = document ? getDocumentFindings(workspace, document.id) : [];
+  const openFindings = findings.filter((finding) => finding.status === "open");
+  const queued = getQueuedDocuments(workspace);
+  const isManager = role === "brand_manager" || role === "admin";
 
   return (
     <section className="page dashboard">
       <header className="dashboard-welcome">
         <div>
-          <p className="eyebrow">CoRESpace / Home</p>
+          <p className="eyebrow">CoRESpace / {label}</p>
           <h1>Welcome back, {displayName(user)}</h1>
-          <p className="lead">{copy.heading}</p>
-          <p className="dashboard-summary">{copy.summary}</p>
+          <p className="lead">
+            {role === "creator"
+              ? "Write on-brand content with guidance at your fingertips."
+              : role === "reviewer"
+                ? "Review submitted work with clear evidence and context."
+                : "Keep the brand system consistent and ready to use."}
+          </p>
+          <p className="dashboard-summary">{MOCK_DATA_NOTICE}</p>
         </div>
-        <span className="dashboard-role-badge">{label}</span>
+        <Link className="button button-primary" href="/editor">
+          {role === "creator" ? "Continue writing" : "Open workspace"}
+        </Link>
       </header>
 
-      <section
-        className="dashboard-data-section"
-        aria-labelledby="snapshot-heading"
-      >
+      <section className="demo-stat-grid" aria-label="Workspace snapshot">
+        <div className="demo-stat-card"><strong>{workspace.documents.length}</strong><small>Documents</small></div>
+        <div className="demo-stat-card"><strong>{openFindings.length}</strong><small>Open findings</small></div>
+        <div className="demo-stat-card"><strong>{queued.length}</strong><small>Awaiting review</small></div>
+        <div className="demo-stat-card"><strong>{workspace.knowledge.guidelines.length}</strong><small>Approved guidelines</small></div>
+      </section>
+
+      <section className="dashboard-data-section">
         <div className="dashboard-section-heading">
-          <div>
-            <p className="eyebrow">Live from your backend</p>
-            <h2 id="snapshot-heading">{dashboardTitle}</h2>
-          </div>
-          {data && (
-            <span
-              className={
-                data.health.status === "ok"
-                  ? "dashboard-service-status is-online"
-                  : "dashboard-service-status"
-              }
-              role="status"
-            >
-              <span className="dashboard-status-dot" aria-hidden="true" />
-              {data.health.status === "ok"
-                ? "API connected"
-                : `API status: ${data.health.status}`}
-            </span>
+          <div><p className="eyebrow">Your workspace</p><h2>{role === "reviewer" ? "Review queue" : "Recent documents"}</h2></div>
+          <span className="sample-data-label">Sample data</span>
+        </div>
+        <div className="card">
+          {role === "reviewer" && queued.length === 0 ? (
+            <p className="muted">No documents are waiting for review yet.</p>
+          ) : document ? (
+            <div className="entry-card">
+              <div className="entry-content">
+                <p className="eyebrow">{document.content_type.replaceAll("_", " ")}</p>
+                <h2>{document.title}</h2>
+                <p className="muted">
+                  Updated {formatMockTimestamp(document.updated_at)} · {contentStatusLabel(document.status)}
+                </p>
+              </div>
+              <Link className="button" href={`/editor?id=${document.id}`}>Open document</Link>
+            </div>
+          ) : (
+            <p className="muted">No assigned documents.</p>
           )}
         </div>
-
-        {loading || !isRoleLoaded ? (
-          <p className="editor-notice" role="status">
-            Loading live dashboard data...
-          </p>
-        ) : error ? (
-          <div className="dashboard-error" role="alert">
-            <p>Dashboard data could not be loaded: {error}</p>
-            <button type="button" className="button" onClick={refresh}>
-              Retry
-            </button>
-          </div>
-        ) : data ? (
-          <>
-            <div
-              className="dashboard-stat-grid"
-              aria-label={`${dashboardTitle} metrics from the backend`}
-            >
-              {counts.map((item) => (
-                <article className="dashboard-stat-card" key={item.label}>
-                  <span>{item.label}</span>
-                  <strong>{item.value}</strong>
-                  <small>Current backend data</small>
-                </article>
-              ))}
-            </div>
-            {totalKnowledge === 0 && (
-              <p className="dashboard-empty-note" role="status">
-                {role === "creator" || role === "reviewer"
-                  ? "No content records are available for this role."
-                  : "The backend collections are empty. A Brand Manager or Admin can add knowledge or load the sample brand."}
-              </p>
-            )}
-          </>
-        ) : null}
       </section>
 
-      <section
-        className="dashboard-work-grid"
-        aria-label={`${label} dashboard`}
-      >
-        <article className="card dashboard-work-card">
-          <p className="eyebrow">For {label}</p>
-          <h2>{copy.workTitle}</h2>
-          <p className="dashboard-work-summary">{copy.workSummary}</p>
-
-          {role === "brand_manager" && (
-            <nav
-              className="dashboard-knowledge-links"
-              aria-label="Brand knowledge"
-            >
-              {KNOWLEDGE_LINKS.map((item) => (
-                <Link
-                  className="button"
-                  href={`/knowledge?tab=${item.tab}`}
-                  key={item.tab}
-                >
-                  {item.label}
-                </Link>
-              ))}
-            </nav>
-          )}
-
-          {role === "admin" && (
-            <div className="dashboard-actions">
-              <Link className="button button-primary" href="/knowledge">
-                Manage brand knowledge
-              </Link>
-              <SampleBrandButton />
-            </div>
-          )}
-
-          {role === "creator" && (
-            <p className="dashboard-demo-link">
-              <Link className="button" href="/editor">
-                Open Write &amp; Review
-              </Link>
-              <span>
-                Content, findings, comments, and workflow status are loaded from
-                the configured backend.
-              </span>
-            </p>
-          )}
-
-          {role === "reviewer" && (
-            <p className="dashboard-demo-link">
-              {mayViewQueue && (
-                <Link className="button" href="/queue">
-                  Open review queue
-                </Link>
-              )}
-              <span>
-                Submitted items and reviewer decisions are stored by the
-                backend.
-              </span>
-            </p>
-          )}
-
-          {mayManageKnowledge && role !== "admin" && (
-            <Link className="button button-primary" href="/knowledge">
-              Open brand knowledge
-            </Link>
-          )}
-        </article>
-
-        <article className="card dashboard-activity-card">
-          <p className="eyebrow">Workflow</p>
-          <h2>Recent activity</h2>
-          {loading ? (
-            <p className="muted" role="status">Loading persisted activity...</p>
-          ) : !data || data.audit.length === 0 ? (
-            <p className="muted">No recent activity is available for this role.</p>
-          ) : (
-            <ol className="dashboard-activity-list">
-              {data.audit.slice(-5).reverse().map((event) => {
-                const title =
-                  typeof event.details.resource_name === "string"
-                    ? event.details.resource_name
-                    : data.content.find(
-                        (item) => item.id === event.content_id,
-                      )?.title ?? `Content #${event.content_id ?? "workspace"}`;
-                return (
-                  <li key={event.id}>
-                    <span>{event.action.replaceAll("_", " ")}</span>
-                    <strong>{title}</strong>
-                    <small>
-                      {event.actor} · {new Date(event.created_at).toLocaleString()}
-                    </small>
-                  </li>
-                );
-              })}
-            </ol>
-          )}
-          {role === "admin" && (
-            <p className="muted">
-              No user-management endpoint is implemented; administrative account
-              controls are not available here.
-            </p>
-          )}
-        </article>
-      </section>
-
-      {(role === "creator" || role === "reviewer") && (
-        <section
-          className="dashboard-next-steps card"
-          aria-labelledby="next-steps-heading"
-        >
-          <div>
-            <p className="eyebrow">Next steps</p>
-            <h2 id="next-steps-heading">
-              {role === "creator"
-                ? "Prepare content for review"
-                : "Review submitted content"}
-            </h2>
-            <p>
-              {role === "creator"
-                ? "Create content, run the backend review, resolve applicable findings, and submit it for review."
-                : "Inspect backend submissions and make reviewer decisions in the persisted review queue."}
-            </p>
-          </div>
-          <Link
-            className="button"
-            href={role === "creator" ? "/editor" : "/queue"}
-          >
-            {role === "creator" ? "Open Write & Review" : "Open review queue"}
-          </Link>
+      {role === "creator" && (
+        <section className="card">
+          <p className="eyebrow">Getting started</p>
+          <h2>Make your first polished draft</h2>
+          <p className="muted">Open the inline editor, run a review, and resolve each finding using its supporting brand source.</p>
+          <Link className="button button-primary" href="/editor">Open Inline Editor</Link>
         </section>
       )}
 
-      {data && (
-        <section
-          className="dashboard-data-section"
-          aria-labelledby="recent-content-heading"
-        >
-          <div className="dashboard-section-heading">
-            <div>
-              <p className="eyebrow">Persisted in the backend</p>
-              <h2 id="recent-content-heading">
-                Recent content ({data.content.length})
-              </h2>
-            </div>
-            <Link className="button" href="/editor">
-              View all content
-            </Link>
-          </div>
-          {data.content.length === 0 ? (
-            <p className="dashboard-empty-note" role="status">
-              No content has been created yet.{" "}
-              <Link href="/editor?new=1">Create Content</Link>
-            </p>
-          ) : (
-            <nav className="entry-list" aria-label="Recent backend content">
-              {data.content.slice(0, 5).map((item) => (
-                <Link
-                  className="entry-card"
-                  href={
-                    role === "reviewer"
-                      ? "/queue"
-                      : `/editor?id=${item.id}`
-                  }
-                  key={item.id}
-                >
-                  <div className="entry-content">
-                    <p className="eyebrow">Content #{item.id}</p>
-                    <h3>{item.title}</h3>
-                    <div className="fact-meta">
-                      <span className={`content-status status-${item.status}`}>
-                        {item.status.replaceAll("_", " ")}
-                      </span>
-                      <span>{item.content_type.replaceAll("_", " ")}</span>
-                    </div>
-                  </div>
-                </Link>
-              ))}
-            </nav>
-          )}
-        </section>
-      )}
-
-      {role === "brand_manager" && (
-        <section
-          className="dashboard-next-steps card"
-          aria-labelledby="readiness-heading"
-        >
-          <div>
-            <p className="eyebrow">Content readiness</p>
-            <h2 id="readiness-heading">Approved content and publishing</h2>
-            <p>
-              Browse approved content in the review workspace and mark an item
-              ready to publish when appropriate.
-            </p>
-          </div>
+      {isManager && (
+        <section className="card">
+          <p className="eyebrow">Brand library</p>
+          <h2>One shared source of truth</h2>
+          <p className="muted">Manage sample guidelines, terminology, approved facts, and assets. Changes are saved in this browser.</p>
+          <Link className="button" href="/knowledge">Browse brand library</Link>
         </section>
       )}
     </section>

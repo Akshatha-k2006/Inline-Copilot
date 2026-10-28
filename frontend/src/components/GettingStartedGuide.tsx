@@ -58,7 +58,7 @@ export default function GettingStartedGuide() {
           <p className="eyebrow">Quick start</p>
           <h2 id="getting-started-heading">Get started with CoRESpace</h2>
           <p className="muted">
-            Create and review content in the connected backend workflow. The role switcher is a prototype, not secure sign-in.
+            Create and review content using the shared local demonstration workspace. The role switcher simulates responsibilities, not secure sign-in.
           </p>
         </div>
         <button
@@ -99,7 +99,7 @@ export default function GettingStartedGuide() {
         </li>
         <li>
           <div>
-            <strong>Create a draft and run a backend review.</strong>
+            <strong>Create a draft and run the local demo review.</strong>
             <p>
               Content and supported findings are loaded and saved through the configured API.
             </p>
@@ -110,7 +110,7 @@ export default function GettingStartedGuide() {
           <div>
             <strong>Resolve findings before submission.</strong>
             <p>
-              Finding actions and updated content versions are persisted by the backend.
+              Finding actions and updated content versions are persisted in this browser.
             </p>
             <Link href="/editor">Review the findings</Link>
           </div>

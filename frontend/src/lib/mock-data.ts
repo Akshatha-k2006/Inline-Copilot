@@ -26,6 +26,7 @@ export const MOCK_DATA_NOTICE =
 
 export type DemoAuditAction =
   | "created"
+  | "document_deleted"
   | "draft_edited"
   | "draft_reset"
   | "reviewed"
@@ -37,6 +38,7 @@ export type DemoAuditAction =
   | "review_comment_added"
   | "changes_requested"
   | "approved"
+  | "rejected"
   | "ready_to_publish";
 
 export interface DemoAuditChange {
@@ -267,6 +269,87 @@ export function getDocumentFindings(
   return data.findings.filter((finding) => finding.content_id === documentId);
 }
 
+export function createDemoDocument(
+  title: string,
+  body: string,
+  role: Role,
+  user: string,
+): Content {
+  if (role !== "creator") {
+    throw new Error("Only the Creator can create a document.");
+  }
+  const normalizedTitle = title.trim();
+  const normalizedBody = body.trim();
+  if (!normalizedTitle || !normalizedBody) {
+    throw new Error("Enter a document title and some content.");
+  }
+  const id =
+    workspace.documents.reduce((largest, item) => Math.max(largest, item.id), 0) +
+    1;
+  const at = new Date().toISOString();
+  const document: Content = {
+    id,
+    title: normalizedTitle,
+    content_type: "other",
+    body: normalizedBody,
+    status: "draft",
+    version: 1,
+    reviewed_version: null,
+    reviewed_at: null,
+    created_by: actorName(user),
+    updated_at: at,
+  };
+  commitWorkspace({
+    ...workspace,
+    documents: [...workspace.documents, document],
+    history: appendHistory(
+      workspace.history,
+      role,
+      user,
+      id,
+      "created",
+      `Created ${document.title}.`,
+      at,
+      { content_title: document.title },
+    ),
+  });
+  return document;
+}
+
+export function deleteDemoDocument(
+  documentId: number,
+  role: Role,
+  user: string,
+): void {
+  const document = workspace.documents.find((item) => item.id === documentId);
+  if (!document) throw new Error("The demonstration document is unavailable.");
+  if (role !== "creator" || actorName(user) !== document.created_by) {
+    throw new Error("Only the document owner can delete a draft.");
+  }
+  if (document.status !== "draft" && document.status !== "changes_requested") {
+    throw new Error("Only drafts or documents returned for changes can be deleted.");
+  }
+  const at = new Date().toISOString();
+  commitWorkspace({
+    ...workspace,
+    documents: workspace.documents.filter((item) => item.id !== documentId),
+    findings: workspace.findings.filter((item) => item.content_id !== documentId),
+    comments: workspace.comments.filter((item) => item.document_id !== documentId),
+    submissions: workspace.submissions.filter((item) => item.document_id !== documentId),
+    reviews: workspace.reviews.filter((item) => item.document_id !== documentId),
+    history: appendHistory(
+      workspace.history,
+      role,
+      user,
+      documentId,
+      "document_deleted",
+      `Deleted ${document.title}.`,
+      at,
+      { content_title: document.title },
+    ),
+  });
+}
+
 export function getWorkflowBlockersForDocument(
   data: DemoWorkspace,
   documentId: number,
@@ -414,13 +497,6 @@ function commitKnowledge(knowledge: BrandData): void {
       !findings.some((current) => current.id === finding.id),
   );
 
-  commitWorkspace({
-    ...workspace,
-    knowledge,
-    findings: [...findings, ...retained],
-    findingsBody: null,
-    reviews: [],
-  });
   commitWorkspace({ ...workspace, knowledge, findings });
 }
 
@@ -538,6 +614,24 @@ export function resetMockKnowledge(role: Role): void {
     throw new Error("Only a brand manager or admin can load the sample brand.");
   }
   commitKnowledge(cloneBrandData(SAMPLE_BRAND));
+}
+
+export function resetDemoWorkspace(role: Role): void {
+  if (!canManageKnowledge(role)) {
+    throw new Error("Only a brand manager or admin can reset the demonstration workspace.");
+  }
+  commitWorkspace({
+    knowledge: cloneBrandData(initialKnowledge),
+    documents: [{ ...initialDocument }],
+    findings: [],
+    findingsBody: null,
+    history: initialHistory.map((entry) => ({ ...entry })),
+    comments: [],
+    submissions: [],
+    reviews: [],
+    persistenceWarning: null,
+    isHydrated: true,
+  });
 }
 
 export function saveDemoDraft(
@@ -662,12 +756,12 @@ export function resetDemoDocument(
 
 export function transitionDemoDocument(
   documentId: number,
-  action: "submit" | "resubmit" | "approve" | "request_changes",
+  action: "submit" | "resubmit" | "approve" | "request_changes" | "reject",
   role: Role,
   user: string,
   comment = "",
 ): Content {
-  if (!["submit", "resubmit", "approve", "request_changes"].includes(action)) {
+  if (!["submit", "resubmit", "approve", "request_changes", "reject"].includes(action)) {
     throw new Error("Unsupported workflow transition.");
   }
   const document = workspace.documents.find((item) => item.id === documentId);
@@ -759,49 +853,7 @@ export function transitionDemoDocument(
           comment: comment.trim() || undefined,
         },
       );
-      if (comment.trim()) {
-        history = appendHistory(
-          history,
-          role,
-          user,
-          documentId,
-          "review_comment_added",
-          `Added an approval comment to ${document.title}.`,
-          at,
-          { content_title: document.title, comment: comment.trim() },
-        );
-      }
-      history = appendHistory(
-        history,
-        role,
-        user,
-        documentId,
-        "ready_to_publish",
-        `${document.title} is ready to publish after reviewer approval and required checks.`,
-        at,
-        {
-          content_title: document.title,
-          changes: [
-            {
-              field: "status",
-              previous: "approved",
-              next: "ready_to_publish",
-            },
-          ],
-        },
-      );
-      if (comment.trim()) {
-        comments = appendReviewComment(
-          comments,
-          documentId,
-          role,
-          user,
-          comment.trim(),
-          "comment",
-          at,
-        );
-      }
-    } else {
+    } else if (action === "request_changes") {
       if (comment.trim().length < 10) {
         throw new Error("Add a meaningful comment of at least 10 characters explaining the requested changes.");
       }
@@ -832,6 +884,34 @@ export function transitionDemoDocument(
               next: "changes_requested",
             },
           ],
+          comment: comment.trim(),
+        },
+      );
+    } else {
+      if (comment.trim().length < 10) {
+        throw new Error("Add a meaningful reason of at least 10 characters before rejecting.");
+      }
+      status = "rejected";
+      comments = appendReviewComment(
+        comments,
+        documentId,
+        role,
+        user,
+        comment.trim(),
+        "comment",
+        at,
+      );
+      history = appendHistory(
+        history,
+        role,
+        user,
+        documentId,
+        "rejected",
+        `Rejected ${document.title}: ${comment.trim()}`,
+        at,
+        {
+          content_title: document.title,
+          changes: [{ field: "status", previous: "in_review", next: "rejected" }],
           comment: comment.trim(),
         },
       );
@@ -923,6 +1003,7 @@ export function resolveDemoFinding(
   finalText: string | null,
   role: Role,
   user: string,
+  dismissalReason = "",
 ): ResolveDemoFindingResult {
   const finding = workspace.findings.find((item) => item.id === findingId);
   if (!finding || finding.status !== "open") {
@@ -930,6 +1011,9 @@ export function resolveDemoFinding(
   }
   if (!["accepted", "edited", "dismissed"].includes(status)) {
     throw new Error("Unsupported finding action.");
+  }
+  if (status === "dismissed" && !dismissalReason.trim()) {
+    throw new Error("Choose a reason before dismissing this finding.");
   }
 
   const document = workspace.documents.find(
@@ -1040,9 +1124,11 @@ export function resolveDemoFinding(
         finding_id: finding.id,
         finding_title: `${finding.check.replaceAll("_", " ")}: ${finding.text}`,
         comment:
-          status === "accepted" && !replacesText
-            ? "No replacement was available; the finding was accepted without changing document text."
-            : undefined,
+            status === "dismissed"
+              ? `Dismissal reason: ${dismissalReason.trim()}`
+              : status === "accepted" && !replacesText
+                ? "No replacement was available; the finding was accepted without changing document text."
+                : undefined,
         changes: replacesText
           ? [
               {
