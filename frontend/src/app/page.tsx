@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import BackendStatus from "@/components/BackendStatus";
 import EmptyState from "@/components/EmptyState";
 import GettingStartedGuide from "@/components/GettingStartedGuide";
 import SampleBrandButton from "@/components/SampleBrandButton";
@@ -118,8 +117,6 @@ export default function Home() {
           )}
         </p>
       </div>
-
-      <BackendStatus />
     </section>
   );
 }

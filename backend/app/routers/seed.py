@@ -2,11 +2,13 @@
 import json
 from datetime import date, datetime, time, timezone
 from pathlib import Path
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.db import get_db
+from app.dependencies import require_writer
 from app.models import Asset, Comment, Content, Fact, Finding, Guideline, Term
 
 router = APIRouter(tags=["seed"])
@@ -21,7 +23,10 @@ def parse_review_date(value: str) -> datetime:
 
 
 @router.post("/seed/load")
-def load_seed_data(db: Session = Depends(get_db)):
+def load_seed_data(
+    role: Annotated[str, Depends(require_writer)],
+    db: Session = Depends(get_db),
+):
     try:
         with SEED_FILE.open("r", encoding="utf-8") as file:
             data = json.load(file)
