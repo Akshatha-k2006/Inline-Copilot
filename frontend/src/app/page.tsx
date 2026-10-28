@@ -45,15 +45,30 @@ export default function Home() {
       </header>
 
       <section className="demo-stat-grid" aria-label="Workspace snapshot">
-        <div className="demo-stat-card"><strong>{workspace.documents.length}</strong><small>Documents</small></div>
-        <div className="demo-stat-card"><strong>{openFindings.length}</strong><small>Open findings</small></div>
-        <div className="demo-stat-card"><strong>{queued.length}</strong><small>Awaiting review</small></div>
-        <div className="demo-stat-card"><strong>{workspace.knowledge.guidelines.length}</strong><small>Approved guidelines</small></div>
+        <div className="demo-stat-card">
+          <strong>{workspace.documents.length}</strong>
+          <small>Documents</small>
+        </div>
+        <div className="demo-stat-card">
+          <strong>{openFindings.length}</strong>
+          <small>Open findings</small>
+        </div>
+        <div className="demo-stat-card">
+          <strong>{queued.length}</strong>
+          <small>Awaiting review</small>
+        </div>
+        <div className="demo-stat-card">
+          <strong>{workspace.knowledge.guidelines.length}</strong>
+          <small>Approved guidelines</small>
+        </div>
       </section>
 
       <section className="dashboard-data-section">
         <div className="dashboard-section-heading">
-          <div><p className="eyebrow">Your workspace</p><h2>{role === "reviewer" ? "Review queue" : "Recent documents"}</h2></div>
+          <div>
+            <p className="eyebrow">Your workspace</p>
+            <h2>{role === "reviewer" ? "Review queue" : "Recent documents"}</h2>
+          </div>
           <span className="sample-data-label">Sample data</span>
         </div>
         <div className="card">
@@ -62,13 +77,21 @@ export default function Home() {
           ) : document ? (
             <div className="entry-card">
               <div className="entry-content">
-                <p className="eyebrow">{document.content_type.replaceAll("_", " ")}</p>
+                <p className="eyebrow">
+                  {String(document.content_type ?? "Unknown").replaceAll(
+                    "_",
+                    " ",
+                  )}
+                </p>
                 <h2>{document.title}</h2>
                 <p className="muted">
-                  Updated {formatMockTimestamp(document.updated_at)} · {contentStatusLabel(document.status)}
+                  Updated {formatMockTimestamp(document.updated_at)} ·{" "}
+                  {contentStatusLabel(document.status)}
                 </p>
               </div>
-              <Link className="button" href={`/editor?id=${document.id}`}>Open document</Link>
+              <Link className="button" href={`/editor?id=${document.id}`}>
+                Open document
+              </Link>
             </div>
           ) : (
             <p className="muted">No assigned documents.</p>
@@ -80,8 +103,13 @@ export default function Home() {
         <section className="card">
           <p className="eyebrow">Getting started</p>
           <h2>Make your first polished draft</h2>
-          <p className="muted">Open the inline editor, run a review, and resolve each finding using its supporting brand source.</p>
-          <Link className="button button-primary" href="/editor">Open Inline Editor</Link>
+          <p className="muted">
+            Open the inline editor, run a review, and resolve each finding using
+            its supporting brand source.
+          </p>
+          <Link className="button button-primary" href="/editor">
+            Open Inline Editor
+          </Link>
         </section>
       )}
 
@@ -89,8 +117,13 @@ export default function Home() {
         <section className="card">
           <p className="eyebrow">Brand library</p>
           <h2>One shared source of truth</h2>
-          <p className="muted">Manage sample guidelines, terminology, approved facts, and assets. Changes are saved in this browser.</p>
-          <Link className="button" href="/knowledge">Browse brand library</Link>
+          <p className="muted">
+            Manage sample guidelines, terminology, approved facts, and assets.
+            Changes are saved in this browser.
+          </p>
+          <Link className="button" href="/knowledge">
+            Browse brand library
+          </Link>
         </section>
       )}
     </section>
