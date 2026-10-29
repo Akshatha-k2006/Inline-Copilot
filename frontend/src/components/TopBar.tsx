@@ -82,10 +82,10 @@ export default function TopBar() {
       </nav>
 
       <div className="sidebar-profile">
-        <span className="profile-avatar" aria-hidden="true">{(user.replace(/\s+\([^)]*\)$/, "") || "A").charAt(0).toUpperCase()}</span>
+        <span className="profile-avatar" aria-hidden="true">A</span>
         <span className="profile-details">
           <strong>
-            {user.replace(/\s+\([^)]*\)$/, "") || "User"}
+            {user.replace(/\s+\([^)]*\)$/, "")}
           </strong>
           <span>
             {label} · demo role

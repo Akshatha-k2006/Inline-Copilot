@@ -21,9 +21,9 @@ html {
 body {
   margin: 0;
   display: grid;
-  grid-template-columns: 260px minmax(0, 1fr);
+  grid-template-columns: 252px minmax(0, 1fr);
   min-height: 100vh;
-  background: #f6f7fb;
+  background: var(--bg);
   color: var(--text);
   font-family:
     system-ui,
@@ -90,10 +90,10 @@ a {
   top: 0;
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 32px;
   height: 100vh;
-  padding: 24px 18px 18px;
-  background: #1a1d2e;
+  padding: 28px 16px 20px;
+  background: #20233f;
   color: #fff;
 }
 
@@ -168,9 +168,8 @@ a {
 }
 
 .nav-link.active {
-  background: linear-gradient(90deg, #6941e8 0%, #7c3aed 100%);
+  background: #6941e8;
   color: #fff;
-  box-shadow: inset 3px 0 0 #a78bfa;
 }
 
 .sidebar-profile {
@@ -249,10 +248,10 @@ a {
 /* Page layout */
 .container {
   width: 100%;
-  max-width: 1600px;
+  max-width: 1440px;
   min-width: 0;
   margin: 0 auto;
-  padding: 28px clamp(16px, 3vw, 32px) 88px;
+  padding: 40px clamp(20px, 4vw, 56px) 72px;
 }
 
 .page {
@@ -1333,11 +1332,7 @@ a {
 .editor-page {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-}
-
-.editor-page--redesigned {
-  gap: 14px;
+  gap: 24px;
 }
 
 .editor-page-heading {
@@ -1366,11 +1361,11 @@ a {
   text-transform: uppercase;
 }
 
-.editor-workspace {
+.editor-layout {
   display: grid;
-  grid-template-columns: minmax(240px, 20%) minmax(0, 44%) minmax(320px, 36%);
-  align-items: stretch;
-  gap: 16px;
+  grid-template-columns: minmax(200px, 220px) minmax(0, 2fr) minmax(320px, 380px);
+  align-items: start;
+  gap: 18px;
 }
 
 .editor-header {
@@ -1404,69 +1399,13 @@ a {
   min-width: 0;
 }
 
-.editor-document-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  padding: 18px;
-  min-height: calc(100vh - 220px);
-}
-
-.document-panel-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.panel-title {
-  margin: 0;
-  font-size: 1.1rem;
-}
-
-.document-list-card {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  width: 100%;
-  padding: 12px 12px 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: #fff;
-  text-align: left;
-  cursor: pointer;
-}
-
-.document-list-card.active {
-  border-color: #c7b6ff;
-  background: #f6f3ff;
-  box-shadow: inset 3px 0 0 #7c3aed;
-}
-
-.document-list-card-main {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.editor-document-list {
+  position: sticky;
+  top: 24px;
+  display: grid;
   gap: 10px;
-}
-
-.document-list-card-title {
-  font-size: 0.98rem;
-}
-
-.document-list-card-meta {
-  color: var(--muted);
-  font-size: 0.78rem;
-}
-
-.document-status-badge {
-  padding: 3px 8px;
-  border-radius: 999px;
-  background: #f0f2f8;
-  color: #39445f;
-  font-size: 0.75rem;
-  font-weight: 700;
-  text-transform: capitalize;
+  align-content: start;
+  padding: 14px;
 }
 
 .document-list-item {
@@ -1494,83 +1433,15 @@ a {
   font-size: 0.78rem;
 }
 
-.editor-main-panel {
-  display: flex;
-  flex-direction: column;
+.editor-main {
+  display: grid;
   gap: 14px;
-  padding: clamp(18px, 3vw, 28px);
-  min-height: calc(100vh - 220px);
-  box-shadow: 0 10px 30px rgba(32, 41, 74, 0.05);
-}
-
-.editor-main-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.editor-main-title-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: 100%;
-}
-
-.editor-main-title-input {
-  width: 100%;
-  border: none;
-  background: transparent;
-  font-size: 1.6rem;
-  font-weight: 750;
-  padding: 4px 0;
-}
-
-.editor-main-title-input:focus {
-  outline: none;
-  border-bottom: 1px solid #c7b6ff;
-}
-
-.editor-main-meta {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.editor-toolbar-new {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 8px 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: #f9f9ff;
-}
-
-.toolbar-group {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding-right: 10px;
-  border-right: 1px solid var(--border);
-}
-
-.toolbar-group:last-child {
-  border-right: none;
-}
-
-.toolbar-btn {
-  padding: 6px 8px;
-  border: none;
-  background: transparent;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.toolbar-btn:hover:not(:disabled) {
-  background: #eee9ff;
+  padding: clamp(16px, 2.5vw, 24px);
+  min-height: fit-content;
+  height: fit-content;
+  align-content: start;
+  align-self: start;
+  box-shadow: 0 10px 30px rgba(32, 41, 74, 0.06);
 }
 
 .editor-toolbar {
@@ -1624,10 +1495,6 @@ a {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
 }
 
-.document-editor-large {
-  min-height: 460px;
-}
-
 .document-editor:focus {
   border-color: #9b83f2;
   outline: 3px solid rgb(105 65 232 / 14%);
@@ -1644,14 +1511,10 @@ a {
   min-width: 0;
 }
 
-.editor-findings-panel {
-  min-height: calc(100vh - 220px);
-}
-
-.editor-findings-panel .findings-panel {
+.editor-side .findings-panel {
   position: sticky;
   top: 24px;
-  max-height: calc(100vh - 200px);
+  max-height: calc(100vh - 48px);
   overflow-y: auto;
 }
 
@@ -1786,11 +1649,11 @@ a {
 
 .editor-card {
   min-width: 0;
-  padding: clamp(16px, 2vw, 22px);
+  padding: clamp(18px, 2vw, 28px);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  box-shadow: 0 6px 24px rgb(32 41 74 / 4%);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgb(32 41 74 / 4%);
 }
 
 .editor-card .panel-heading {
@@ -1946,90 +1809,6 @@ a {
   white-space: pre-wrap;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
   min-height: 320px;
-}
-
-.editor-bottom-bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 12px 18px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: #fff;
-  position: sticky;
-  bottom: 16px;
-  box-shadow: 0 12px 32px rgba(32, 41, 74, 0.06);
-}
-
-.editor-bottom-left {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.bottom-finding-count {
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: #f6f3ff;
-  color: #4c35a8;
-  font-weight: 700;
-  font-size: 0.85rem;
-}
-
-.editor-bottom-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.findings-panel-redesigned .findings-panel-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-
-.findings-severity-summary {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  margin-bottom: 16px;
-}
-
-.severity-summary-card {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-}
-
-.severity-error {
-  background: #fff0f1;
-  border-color: #f7c7cc;
-}
-
-.severity-warning {
-  background: #fff7ed;
-  border-color: #f5d0a8;
-}
-
-.severity-info {
-  background: #f0f7ff;
-  border-color: #c7ddff;
-}
-
-.severity-summary-count {
-  font-size: 1.4rem;
-  font-weight: 750;
-}
-
-.severity-summary-label {
-  color: var(--muted);
-  font-size: 0.85rem;
 }
 
 .finding-highlight {
@@ -2588,27 +2367,6 @@ a {
   }
 }
 
-@media (max-width: 1100px) {
-  .editor-workspace {
-    grid-template-columns: minmax(220px, 1fr) minmax(0, 1fr);
-  }
-  .editor-findings-panel {
-    grid-column: 1 / -1;
-  }
-  .editor-findings-panel .findings-panel {
-    position: static;
-    max-height: none;
-  }
-  .editor-bottom-bar {
-    position: static;
-    flex-wrap: wrap;
-  }
-
-  .editor-main-title-input {
-    font-size: 1.3rem;
-  }
-}
-
 @media (max-width: 850px) {
   .dashboard-stat-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2660,14 +2418,13 @@ a {
     padding: 28px 20px 52px;
   }
 
-  .editor-workspace {
+  .editor-layout {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .editor-document-panel,
-  .editor-main-panel,
-  .editor-findings-panel {
-    min-height: auto;
+  .editor-document-list,
+  .editor-side .findings-panel {
+    position: static;
   }
 
   .findings-panel {
