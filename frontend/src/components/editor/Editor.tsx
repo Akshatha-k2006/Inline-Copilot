@@ -236,7 +236,7 @@ export default function Editor() {
     return run(async () => {
       const created = await createBackendDocument(
         newTitle.trim() || "Untitled document",
-        DRAFT_BODY_PLACEHOLDER,
+        "",
         role,
       );
       setSelectedDocumentId(created.id);

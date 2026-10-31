@@ -328,8 +328,8 @@ export async function createDocument(
   }
   const normalizedTitle = title.trim();
   const normalizedBody = body.trim();
-  if (!normalizedTitle || !normalizedBody) {
-    throw new Error("Enter a document title and some content.");
+  if (!normalizedTitle) {
+    throw new Error("Enter a document title before creating a draft.");
   }
 
   const created = await api.createContent({

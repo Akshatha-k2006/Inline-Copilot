@@ -47,6 +47,8 @@ name after removing its displayed role suffix.
 - `POST /api/content` accepts `title`, `content_type`, and `body`, creates a
   separate draft with version `1`, and returns `201` with its database `id`,
   initial status, version, owner, and timestamps. Only Creators may create.
+  `body` may be empty for a new draft; the editor shows its own placeholder
+  until text is entered.
 - `GET /api/content/{id}` returns the persisted content record.
 - `PUT /api/content/{id}` accepts `title`, `content_type`, `body`, and the
   expected `version`. Only the owning Creator may update a draft. A successful

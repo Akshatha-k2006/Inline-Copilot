@@ -185,6 +185,14 @@ class ContentApiTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual([item["id"] for item in drafts], [second["id"]])
 
+    def test_create_allows_empty_body_for_a_new_draft(self):
+        status, created = self.create("Empty draft", "")
+
+        self.assertEqual(status, 201)
+        self.assertEqual(created["body"], "")
+        self.assertEqual(created["status"], "draft")
+        self.assertEqual(created["version"], 1)
+
     def test_approval_updates_same_persisted_content_and_browser_read_route(self):
         _, created = self.create()
         _, submitted = self.submit(created["id"])
