@@ -473,8 +473,10 @@ export default function Editor() {
             sharing your work.
           </p>
         </div>
-        <span className={`status-pill status-${document.status}`}>
-          {contentStatusLabel(document.status)}
+        <span
+          className={`status-pill status-${creating ? "draft" : document.status}`}
+        >
+          {creating ? "New draft" : contentStatusLabel(document.status)}
         </span>
       </header>
       {statusNotice && (
@@ -497,7 +499,7 @@ export default function Editor() {
           {reviewNotice}
         </p>
       )}
-      {document && documentComments.length > 0 && (
+      {!creating && document && documentComments.length > 0 && (
         <section
           className="editor-card reviewer-feedback-card"
           aria-labelledby="reviewer-feedback-heading"
@@ -558,7 +560,7 @@ export default function Editor() {
           </div>
           {visibleDocuments.map((item) => (
             <button
-              className={`document-list-item${item.id === document?.id ? " active" : ""}`}
+              className={`document-list-item${!creating && item.id === document?.id ? " active" : ""}`}
               type="button"
               key={item.id}
               onClick={() => {
@@ -585,16 +587,19 @@ export default function Editor() {
             </p>
           )}
           <p className="muted">Sample data · stored in the backend</p>
-          {document && role === "creator" && document.status === "draft" && (
-            <button
-              className="button button-danger"
-              type="button"
-              disabled={busy}
-              onClick={removeDocument}
-            >
-              Delete draft
-            </button>
-          )}
+          {!creating &&
+            document &&
+            role === "creator" &&
+            document.status === "draft" && (
+              <button
+                className="button button-danger"
+                type="button"
+                disabled={busy}
+                onClick={removeDocument}
+              >
+                Delete draft
+              </button>
+            )}
         </aside>
         <section className="editor-main card">
           {creating ? (
@@ -741,7 +746,7 @@ export default function Editor() {
           )}
         </section>
         <div className="editor-side">
-          {document && (
+          {!creating && document && (
             <FindingsPanel
               findings={findings}
               busyFindingIds={busyFindingIds}
