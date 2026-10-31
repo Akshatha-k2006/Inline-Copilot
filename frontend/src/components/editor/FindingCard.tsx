@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import type { DemoFinding } from "@/lib/mock-findings";
-import { isReplacementSuggestion } from "@/lib/mock-findings";
+import type { DemoFinding } from "@/lib/findings";
+import { isReplacementSuggestion } from "@/lib/findings";
 import type { FindingStatus, Severity } from "@/lib/types";
 
 interface FindingCardProps {

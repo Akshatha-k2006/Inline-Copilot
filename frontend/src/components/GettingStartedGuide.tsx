@@ -99,7 +99,7 @@ export default function GettingStartedGuide() {
         </li>
         <li>
           <div>
-            <strong>Create a draft and run the local demo review.</strong>
+            <strong>Create a draft and run the full backend review.</strong>
             <p>
               Content and supported findings are loaded and saved through the configured API.
             </p>
@@ -110,7 +110,7 @@ export default function GettingStartedGuide() {
           <div>
             <strong>Resolve findings before submission.</strong>
             <p>
-              Finding actions and updated content versions are persisted in this browser.
+              Finding actions and updated content versions are persisted in the backend.
             </p>
             <Link href="/editor">Review the findings</Link>
           </div>

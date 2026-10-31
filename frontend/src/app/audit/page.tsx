@@ -3,11 +3,12 @@
 import Link from "next/link";
 import EmptyState from "@/components/EmptyState";
 import { useRole } from "@/lib/role";
-import { useDemoWorkspace, formatMockTimestamp } from "@/lib/mock-data";
+import { formatTimestamp } from "@/lib/format";
+import { useWorkspace } from "@/lib/workspace-store";
 
 export default function AuditPage() {
   const { role } = useRole();
-  const workspace = useDemoWorkspace();
+  const workspace = useWorkspace();
   if (role !== "admin" && role !== "brand_manager")
     return (
       <section className="page">
@@ -46,7 +47,7 @@ export default function AuditPage() {
         <ol className="mock-history-list">
           {[...workspace.history].reverse().map((event) => (
             <li className="mock-history-item" key={event.id}>
-              <time dateTime={event.at}>{formatMockTimestamp(event.at)}</time>
+              <time dateTime={event.at}>{formatTimestamp(event.at)}</time>
               <div>
                 <span className="audit-event-type">
                   {String(event.action ?? "Unknown").replaceAll("_", " ")}

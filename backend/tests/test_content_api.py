@@ -96,7 +96,7 @@ class ContentApiTests(unittest.TestCase):
             response_body = b"".join(
                 item.get("body", b"") for item in sent if item["type"] == "http.response.body"
             )
-            return status, json.loads(response_body)
+            return status, (json.loads(response_body) if response_body else None)
 
         return asyncio.run(dispatch())
 
@@ -317,6 +317,52 @@ class ContentApiTests(unittest.TestCase):
             body={"title": "   ", "content_type": "marketing_copy", "body": "   "},
         )
         self.assertEqual(invalid_status, 422)
+
+    def test_creator_can_delete_own_draft_and_audit_survives(self):
+        _, created = self.create()
+
+        status, body = self.request(
+            f"/api/content/{created['id']}", method="DELETE"
+        )
+
+        self.assertEqual(status, 204)
+        self.assertIsNone(body)
+        self.assertIsNone(self.db.get(Content, created["id"]))
+        event = (
+            self.db.query(AuditEvent)
+            .filter(AuditEvent.action == "content_deleted")
+            .one()
+        )
+        self.assertIsNone(event.content_id)
+        self.assertEqual(event.actor, "Asha")
+        self.assertEqual(event.details["title"], "First item")
+
+    def test_delete_requires_owning_creator_and_draft_status(self):
+        _, created = self.create()
+
+        owner_status, _ = self.request(
+            f"/api/content/{created['id']}",
+            method="DELETE",
+            user="Other Creator",
+        )
+        self.assertEqual(owner_status, 403)
+        reviewer_status, _ = self.request(
+            f"/api/content/{created['id']}",
+            method="DELETE",
+            role="reviewer",
+            user="Ravi (Reviewer)",
+        )
+        self.assertEqual(reviewer_status, 403)
+
+        content = self.db.get(Content, created["id"])
+        content.status = "in_review"
+        self.db.commit()
+        status_status, response = self.request(
+            f"/api/content/{created['id']}", method="DELETE"
+        )
+        self.assertEqual(status_status, 403)
+        self.assertEqual(response["error"], "forbidden")
+        self.assertIsNotNone(self.db.get(Content, created["id"]))
 
     def create_with_role(self, role):
         return self.request(

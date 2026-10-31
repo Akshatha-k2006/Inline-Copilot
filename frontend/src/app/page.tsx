@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useRole } from "@/lib/role";
+import { formatTimestamp } from "@/lib/format";
 import {
-  formatMockTimestamp,
+  BACKEND_DATA_NOTICE,
   getDocumentFindings,
   getQueuedDocuments,
-  MOCK_DATA_NOTICE,
-  useDemoWorkspace,
-} from "@/lib/mock-data";
+  useWorkspace,
+} from "@/lib/workspace-store";
 import { contentStatusLabel } from "@/lib/workflow";
 
 function displayName(user: string): string {
@@ -17,7 +17,7 @@ function displayName(user: string): string {
 
 export default function Home() {
   const { role, user, label } = useRole();
-  const workspace = useDemoWorkspace();
+  const workspace = useWorkspace();
   const document = workspace.documents[0];
   const findings = document ? getDocumentFindings(workspace, document.id) : [];
   const openFindings = findings.filter((finding) => finding.status === "open");
@@ -37,7 +37,7 @@ export default function Home() {
                 ? "Review submitted work with clear evidence and context."
                 : "Keep the brand system consistent and ready to use."}
           </p>
-          <p className="dashboard-summary">{MOCK_DATA_NOTICE}</p>
+          <p className="dashboard-summary">{BACKEND_DATA_NOTICE}</p>
         </div>
         <Link className="button button-primary" href="/editor">
           {role === "creator" ? "Continue writing" : "Open workspace"}
@@ -85,7 +85,7 @@ export default function Home() {
                 </p>
                 <h2>{document.title}</h2>
                 <p className="muted">
-                  Updated {formatMockTimestamp(document.updated_at)} ·{" "}
+                  Updated {formatTimestamp(document.updated_at)} ·{" "}
                   {contentStatusLabel(document.status)}
                 </p>
               </div>
@@ -123,7 +123,7 @@ export default function Home() {
           <h2>One shared source of truth</h2>
           <p className="muted">
             Manage sample guidelines, terminology, approved facts, and assets.
-            Changes are saved in this browser.
+            Changes are saved in the backend.
           </p>
           <Link className="button" href="/knowledge">
             Browse brand library

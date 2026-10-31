@@ -1215,6 +1215,19 @@ a {
   color: var(--muted);
 }
 
+.reviewer-feedback-card {
+  margin-bottom: 16px;
+}
+
+.reviewer-feedback-card .panel-heading {
+  margin-bottom: 12px;
+}
+
+.reviewer-feedback-context {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
 .review-feedback-actions {
   display: flex;
   flex-wrap: wrap;

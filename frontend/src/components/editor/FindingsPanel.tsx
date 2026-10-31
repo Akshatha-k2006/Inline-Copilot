@@ -1,6 +1,6 @@
 "use client";
 
-import type { DemoFinding } from "@/lib/mock-findings";
+import type { DemoFinding } from "@/lib/findings";
 import type { FindingStatus } from "@/lib/types";
 import FindingCard from "./FindingCard";
 
@@ -62,55 +62,66 @@ export default function FindingsPanel({
         <div>
           <p className="eyebrow">Review results</p>
           <h2 id="findings-heading">
-            {findings === null
-              ? "Findings"
-              : `${activeFindings.length} open ${activeFindings.length === 1 ? "finding" : "findings"}`}
+            {reviewing
+              ? "Reviewing..."
+              : findings === null
+                ? "Findings"
+                : `${activeFindings.length} open ${activeFindings.length === 1 ? "finding" : "findings"}`}
           </h2>
         </div>
-        {activeFindings.length > 0 && (
+        {activeFindings.length > 0 && !reviewing && (
           <span className="finding-count">
             {highCount} errors · {warningCount} warnings · {infoCount} info
           </span>
         )}
       </div>
 
-      {findings === null ? (
+      {reviewing || reviewState === "loading" ? (
+        <div className="editor-empty-state" role="status" aria-live="polite">
+          <span className="empty-state-mark" aria-hidden="true">
+            …
+          </span>
+          <h3>Reviewing content</h3>
+          <p>
+            Checking tone, terminology, claims, and approved facts. This
+            usually takes a few seconds.
+          </p>
+        </div>
+      ) : reviewState === "error" ? (
+        <div className="editor-empty-state">
+          <span className="empty-state-mark" aria-hidden="true">
+            !
+          </span>
+          <h3>Review results unavailable</h3>
+          <p>
+            The backend review could not be completed. This is not a successful
+            empty review.
+          </p>
+        </div>
+      ) : reviewState !== "current" ? (
         <div className="editor-empty-state">
           <span className="empty-state-mark" aria-hidden="true">
             ✓
           </span>
           <h3>
-            {reviewState === "loading"
-              ? "Loading review results"
-              : reviewState === "error"
-                ? "Review results unavailable"
-                : reviewState === "stale"
-                  ? "Review this version again"
-                  : "Review not run yet"}
+            {reviewState === "stale"
+              ? "Review this version again"
+              : "Review not run yet"}
           </h3>
           <p>
-            {reviewState === "loading"
-              ? "The local demo review is still loading."
-              : reviewState === "error"
-                ? "The local demo review could not be completed. This is not a successful empty review."
-                : reviewState === "stale"
-                  ? "The draft changed after its last review, so those results are out of date. Review this version again."
-                  : readOnly
-                    ? "No demo review is recorded for this content yet."
-                    : "Review the draft to check its configured guidelines, terminology, and facts."}
+            {reviewState === "stale"
+              ? "The draft changed after its last review, so those results are out of date. Review this version again."
+              : readOnly
+                ? "No backend review is recorded for this content yet."
+                : "Review the draft to check its configured guidelines, terminology, and facts."}
           </p>
           {canRunReview && onRunReview && (
             <button
               type="button"
               className="button button-primary"
               onClick={onRunReview}
-              disabled={
-                reviewing ||
-                reviewState === "loading" ||
-                reviewState === "error"
-              }
             >
-              {reviewing ? "Reviewing content..." : "Review content"}
+              Review content
             </button>
           )}
         </div>
@@ -128,10 +139,10 @@ export default function FindingsPanel({
           </h3>
           <p>
             {reviewedCustomText
-              ? "The demo engine did not identify configured issues in this draft. Editorial approval may still be required."
+              ? "The backend review did not identify configured issues in this draft. Editorial approval may still be required."
               : resolvedFindings.length > 0
                 ? "Resolved findings remain below for reference. This does not indicate a verified review result."
-                : "The demo engine detected no configured issues in this content. It does not replace editorial approval."}
+                : "The backend review detected no configured issues in this content. It does not replace editorial approval."}
           </p>
         </div>
       ) : (

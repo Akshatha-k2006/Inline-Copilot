@@ -4,29 +4,78 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRole } from "@/lib/role";
 import {
+  createDocument as createBackendDocument,
+  deleteDocument as deleteBackendDocument,
   getDocumentFindings,
-  createDemoDocument,
-  deleteDemoDocument,
-  recordDemoReview,
-  resolveDemoFinding,
-  saveDemoDraft,
-  transitionDemoDocument,
-  useDemoWorkspace,
-} from "@/lib/mock-data";
-import type { DemoFinding } from "@/lib/mock-findings";
-import type { FindingStatus } from "@/lib/types";
+  resolveFinding,
+  runContentReview,
+  saveDraft,
+  submitDocument,
+  useWorkspace,
+} from "@/lib/workspace-store";
+import type { DemoFinding } from "@/lib/findings";
+import type { Content, FindingStatus } from "@/lib/types";
+import { formatTimestamp } from "@/lib/format";
 import { contentStatusLabel } from "@/lib/workflow";
 import FindingsPanel from "./FindingsPanel";
 import HighlightedDraft from "./HighlightedDraft";
 
+const DRAFT_BODY_PLACEHOLDER = "Start writing your on-brand content here.";
+
+function hasPendingChangesRequest(
+  history: {
+    content_id: number | null;
+    action: string;
+    status_change?: {
+      previous: string | null;
+      next: string | null;
+      actor_role: string | null;
+    };
+  }[],
+  document: Content,
+): boolean {
+  if (document.status !== "draft") return false;
+  const events = history.filter((entry) => entry.content_id === document.id);
+  let sentBackAt = -1;
+  events.forEach((entry, index) => {
+    if (
+      entry.action === "content_status_changed" &&
+      entry.status_change?.next === "draft" &&
+      entry.status_change.actor_role === "reviewer"
+    ) {
+      sentBackAt = index;
+    }
+  });
+  if (sentBackAt === -1) return false;
+  // Saving an edit after a reviewer sent the draft back means the creator is
+  // addressing the feedback; resubmission is allowed once that version is
+  // reviewed again.
+  return !events
+    .slice(sentBackAt + 1)
+    .some((entry) => entry.action === "content_updated");
+}
+
 export default function Editor() {
-  const { role, user } = useRole();
-  const workspace = useDemoWorkspace();
-  const [selectedDocumentId, setSelectedDocumentId] = useState<number | null>(null);
-  const visibleDocuments = role === "creator"
-    ? workspace.documents
-    : workspace.documents.filter((item) => item.status === "in_review" || item.status === "changes_requested" || item.status === "approved" || item.status === "rejected" || item.status === "ready_to_publish");
-  const document = visibleDocuments.find((item) => item.id === selectedDocumentId) ?? visibleDocuments[0] ?? workspace.documents.find((item) => item.id === selectedDocumentId);
+  const { role } = useRole();
+  const workspace = useWorkspace();
+  const [selectedDocumentId, setSelectedDocumentId] = useState<number | null>(
+    null,
+  );
+  const visibleDocuments =
+    role === "creator"
+      ? workspace.documents
+      : workspace.documents.filter(
+          (item) =>
+            item.status === "in_review" ||
+            item.status === "changes_requested" ||
+            item.status === "approved" ||
+            item.status === "rejected" ||
+            item.status === "ready_to_publish",
+        );
+  const document =
+    visibleDocuments.find((item) => item.id === selectedDocumentId) ??
+    visibleDocuments[0] ??
+    workspace.documents.find((item) => item.id === selectedDocumentId);
   const [title, setTitle] = useState(document?.title ?? "");
   const [body, setBody] = useState(document?.body ?? "");
   const [creating, setCreating] = useState(false);
@@ -34,22 +83,50 @@ export default function Editor() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
+  const [reviewNotice, setReviewNotice] = useState("");
+  const [busyFindingIds, setBusyFindingIds] = useState<number[]>([]);
+  const [showHighlights, setShowHighlights] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const newTitleInputRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
 
-  const findings = document ? getDocumentFindings(workspace, document.id) : [];
-  const review = workspace.reviews.find((item) => item.document_id === document?.id);
-  const reviewState = review && review.document_version === document?.version && review.body === body
-    ? "current"
-    : review ? "stale" : "not-run";
+  const findings = document
+    ? getDocumentFindings(workspace, document.id)
+    : [];
+  const documentComments = document
+    ? workspace.comments.filter(
+        (comment) => comment.document_id === document.id,
+      )
+    : [];
+  const changesRequested = document
+    ? hasPendingChangesRequest(workspace.history, document)
+    : false;
+  const reviewState =
+    document && document.reviewed_version === document.version && body === document.body
+      ? "current"
+      : document && document.reviewed_version !== null
+        ? "stale"
+        : "not-run";
   const canEdit = role === "creator" && document?.status === "draft";
   const openCount = findings.filter((finding) => finding.status === "open").length;
-  const readingTime = Math.max(1, Math.ceil(body.trim().split(/\s+/).filter(Boolean).length / 200));
+  const canSubmit =
+    role === "creator" &&
+    document !== undefined &&
+    !changesRequested &&
+    (document.status === "self_checked" ||
+      (canEdit && reviewState === "current" && openCount === 0));
+  const readingTime = Math.max(
+    1,
+    Math.ceil(body.trim().split(/\s+/).filter(Boolean).length / 200),
+  );
 
   useEffect(() => {
     if (selectedDocumentId !== null) return;
-    const requestedId = Number(new URLSearchParams(window.location.search).get("id"));
+    const requestedId = Number(
+      new URLSearchParams(window.location.search).get("id"),
+    );
     const requestedDocument = Number.isInteger(requestedId)
       ? workspace.documents.find((item) => item.id === requestedId)
       : undefined;
@@ -65,59 +142,103 @@ export default function Editor() {
     setBody(document?.body ?? "");
   }, [document?.id, document?.updated_at]);
 
-  function run(action: () => void, success: string) {
+  useEffect(() => {
+    setReviewNotice("");
+    setShowHighlights(false);
+  }, [document?.id]);
+
+  async function run(
+    action: () => Promise<void>,
+    success: string,
+  ): Promise<void> {
+    if (busy) return;
+    setBusy(true);
     try {
-      action();
+      await action();
       setMessage(success);
       setError("");
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "The demo action could not be completed.");
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "The action could not be completed.",
+      );
       setMessage("");
+    } finally {
+      setBusy(false);
     }
   }
 
-  function save() {
-    if (!document || !canEdit) return;
-    run(() => {
-      const saved = saveDemoDraft(document.id, title, body, role, user);
+  function save(): Promise<void> {
+    if (!document || !canEdit) return Promise.resolve();
+    return run(async () => {
+      const saved = await saveDraft(document.id, title, body, role);
       setTitle(saved.title);
-    }, "Draft saved locally.");
+      setBody(saved.body);
+    }, "Draft saved to the backend.");
   }
 
-  function reviewDraft() {
-    if (!document || !canEdit) return;
-    run(() => {
-      if (title !== document.title || body !== document.body) {
-        saveDemoDraft(document.id, title, body, role, user);
+  function reviewDraft(): Promise<void> {
+    if (!document || !canEdit || reviewing) return Promise.resolve();
+    return run(async () => {
+      setReviewing(true);
+      setReviewNotice("");
+      try {
+        let current = document;
+        if (title !== document.title || body !== document.body) {
+          current = await saveDraft(document.id, title, body, role);
+        }
+        const response = await runContentReview(current.id, role);
+        setSelectedId(null);
+        if (response.engine.llm === "timeout") {
+          setReviewNotice(
+            "Rule-based checks completed, but the AI-assisted review timed out. These findings may be incomplete; run the review again to retry the AI checks.",
+          );
+        } else if (response.engine.llm === "error") {
+          setReviewNotice(
+            "Rule-based checks completed, but the AI-assisted review was unavailable. These findings may be incomplete.",
+          );
+        } else if (response.engine.llm === "disabled") {
+          setReviewNotice(
+            "Rule-based checks completed. AI-assisted checks are not configured on this backend.",
+          );
+        }
+      } finally {
+        setReviewing(false);
       }
-      recordDemoReview(document.id, body, role, user);
-    }, "Review complete. Findings are based on the sample brand rules.");
+    }, "Review complete. Findings are based on the backend brand knowledge.");
   }
 
   function resolve(
     finding: DemoFinding,
     status: Exclude<FindingStatus, "open">,
     finalText: string | null,
-    dismissalReason = "",
-  ) {
-    if (!document) return;
-    run(() => {
-      const result = resolveDemoFinding(finding.id, status, finalText, role, user, dismissalReason);
-      setTitle(result.document.title);
-      setBody(result.document.body);
-    }, status === "dismissed" ? "Finding dismissed and recorded in the demo audit." : "Finding resolved.");
+  ): Promise<void> {
+    if (!document) return Promise.resolve();
+    return run(async () => {
+      setBusyFindingIds((ids) => [...ids, finding.id]);
+      try {
+        await resolveFinding(finding.id, status, finalText, role);
+      } finally {
+        setBusyFindingIds((ids) => ids.filter((id) => id !== finding.id));
+      }
+    }, status === "dismissed" ? "Finding dismissed and recorded in the audit trail." : "Finding resolved.");
   }
 
-  function submit() {
-    if (!document) return;
-    run(() => {
-      transitionDemoDocument(document.id, document.status === "changes_requested" ? "resubmit" : "submit", role, user);
+  function submit(): Promise<void> {
+    if (!document) return Promise.resolve();
+    return run(async () => {
+      await submitDocument(document.id, role);
     }, "Draft submitted for review.");
   }
 
-  function createDocument() {
-    run(() => {
-      const created = createDemoDocument(newTitle.trim() || "Untitled document", "Start writing your on-brand content here.", role, user);
+  function createDocument(): Promise<void> {
+    return run(async () => {
+      const created = await createBackendDocument(
+        newTitle.trim() || "Untitled document",
+        DRAFT_BODY_PLACEHOLDER,
+        role,
+      );
       setSelectedDocumentId(created.id);
       setTitle(created.title);
       setBody(created.body);
@@ -129,68 +250,217 @@ export default function Editor() {
     }, "Document created.");
   }
 
+  function removeDocument(): void {
+    if (!document) return;
+    if (!globalThis.confirm("Delete this draft?")) return;
+    void run(async () => {
+      await deleteBackendDocument(document.id, role);
+      const fallback = workspace.documents.find(
+        (item) => item.id !== document.id,
+      );
+      setSelectedDocumentId(fallback?.id ?? null);
+    }, "Document deleted.");
+  }
+
   const onSelect = (finding: DemoFinding) => {
     setSelectedId(finding.id);
-    globalThis.document.getElementById(`draft-highlight-${finding.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (canEdit && openCount > 0 && reviewState === "current") {
+      setShowHighlights(true);
+    }
+    window.setTimeout(() => {
+      globalThis.document
+        .getElementById(`draft-highlight-${finding.id}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 0);
   };
 
-  if (!document && role === "creator") return (
-    <section className="page editor-page">
-      <header className="editor-header">
-        <div>
-          <p className="eyebrow">CoRESpace / Inline Editor</p>
-          <h1>Write with confidence</h1>
-          <p className="lead">Review exact phrases against approved brand knowledge before sharing your work.</p>
-        </div>
-      </header>
-      {message && <p className="editor-notice" role="status">{message}</p>}
-      {error && <p className="form-error" role="alert">{error}</p>}
-      <div className="editor-layout">
-        <aside className="editor-document-list card">
-          <div className="panel-heading"><p className="eyebrow">My documents</p><button className="button" type="button" onClick={() => { setCreating(true); setSelectedDocumentId(null); setNewTitle("Untitled document"); window.setTimeout(() => newTitleInputRef.current?.focus(), 0); }}>New</button></div>
-          {workspace.documents.map((item) => <button className="document-list-item" type="button" key={item.id} onClick={() => { setSelectedDocumentId(item.id); setCreating(false); }}>
-            <strong>{item.title}</strong>
-            <span>{contentStatusLabel(item.status)}</span>
-          </button>)}
-          <p className="muted">Sample data · saved in this browser</p>
-        </aside>
-        <section className="editor-main card">
-          {creating ? (
-            <>
-              <div className="editor-toolbar">
-                <h2 style={{ margin: 0 }}>Create a new document</h2>
-              </div>
-              <div className="card inline-create" style={{ margin: 0 }}>
-                <p className="muted">A new local draft will be shared across the demo roles.</p>
-                <label className="form-field" style={{ width: "100%" }}>
-                  <span>Title</span>
-                  <input ref={newTitleInputRef} value={newTitle} onChange={(event) => setNewTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); createDocument(); } }} />
-                </label>
-                <div className="form-actions">
-                  <button className="button button-primary" type="button" onClick={createDocument}>Create draft</button>
-                  <button className="button" type="button" onClick={() => { setCreating(false); setNewTitle("Untitled document"); }}>Cancel</button>
-                </div>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="editor-toolbar">
-                <input ref={titleInputRef} aria-label="Document title" className="title-input" value={title} onChange={(event) => setTitle(event.target.value)} disabled placeholder="Untitled document" />
-                <span className="autosave-indicator">Saved locally</span>
-              </div>
-              <textarea aria-label="Document body" className="document-editor" value="" disabled placeholder="Start writing your on-brand content here..." />
-              <div className="editor-actions">
-                <button className="button button-primary" type="button" onClick={() => { setCreating(true); setSelectedDocumentId(null); setNewTitle("Untitled document"); window.setTimeout(() => newTitleInputRef.current?.focus(), 0); }}>Create your first draft</button>
-              </div>
-            </>
-          )}
-        </section>
-        <div className="editor-side"></div>
-      </div>
-    </section>
-  );
+  const statusNotice = !workspace.isLoaded && workspace.isLoading
+    ? "Loading workspace from the backend..."
+    : !workspace.isLoaded && workspace.error
+      ? `The backend workspace could not be loaded: ${workspace.error}`
+      : "";
 
-  if (!document && role !== "creator") return <section className="page"><h1>No documents to review</h1><p className="muted">No drafts have been submitted for review yet.</p><Link className="button button-primary" href="/queue">Open review queue</Link></section>;
+  if (!document && role === "creator")
+    return (
+      <section className="page editor-page">
+        <header className="editor-header">
+          <div>
+            <p className="eyebrow">CoRESpace / Inline Editor</p>
+            <h1>Write with confidence</h1>
+            <p className="lead">
+              Review exact phrases against approved brand knowledge before
+              sharing your work.
+            </p>
+          </div>
+        </header>
+        {statusNotice && (
+          <p className="editor-notice" role="status">
+            {statusNotice}
+          </p>
+        )}
+        {message && (
+          <p className="editor-notice" role="status">
+            {message}
+          </p>
+        )}
+        {error && (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        )}
+        <div className="editor-layout">
+          <aside className="editor-document-list card">
+            <div className="panel-heading">
+              <p className="eyebrow">My documents</p>
+              <button
+                className="button"
+                type="button"
+                onClick={() => {
+                  setCreating(true);
+                  setSelectedDocumentId(null);
+                  setNewTitle("Untitled document");
+                  window.setTimeout(
+                    () => newTitleInputRef.current?.focus(),
+                    0,
+                  );
+                }}
+              >
+                New
+              </button>
+            </div>
+            {workspace.documents.map((item) => (
+              <button
+                className="document-list-item"
+                type="button"
+                key={item.id}
+                onClick={() => {
+                  setSelectedDocumentId(item.id);
+                  setCreating(false);
+                }}
+              >
+                <strong>{item.title}</strong>
+                <span>{contentStatusLabel(item.status)}</span>
+              </button>
+            ))}
+            <p className="muted">Sample data · stored in the backend</p>
+          </aside>
+          <section className="editor-main card">
+            {creating ? (
+              <>
+                <div className="editor-toolbar">
+                  <h2 style={{ margin: 0 }}>Create a new document</h2>
+                </div>
+                <div className="card inline-create" style={{ margin: 0 }}>
+                  <p className="muted">
+                    A new draft is saved to the backend and shared across the
+                    demo roles.
+                  </p>
+                  <label className="form-field" style={{ width: "100%" }}>
+                    <span>Title</span>
+                    <input
+                      ref={newTitleInputRef}
+                      value={newTitle}
+                      onChange={(event) => setNewTitle(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          void createDocument();
+                        }
+                      }}
+                    />
+                  </label>
+                  <div className="form-actions">
+                    <button
+                      className="button button-primary"
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void createDocument()}
+                    >
+                      Create draft
+                    </button>
+                    <button
+                      className="button"
+                      type="button"
+                      onClick={() => {
+                        setCreating(false);
+                        setNewTitle("Untitled document");
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="editor-toolbar">
+                  <input
+                    ref={titleInputRef}
+                    aria-label="Document title"
+                    className="title-input"
+                    value={title}
+                    onChange={(event) => setTitle(event.target.value)}
+                    disabled
+                    placeholder="Untitled document"
+                  />
+                  <span className="autosave-indicator">Saved to backend</span>
+                </div>
+                <textarea
+                  aria-label="Document body"
+                  className="document-editor"
+                  value=""
+                  disabled
+                  placeholder={DRAFT_BODY_PLACEHOLDER}
+                />
+                <div className="editor-actions">
+                  <button
+                    className="button button-primary"
+                    type="button"
+                    onClick={() => {
+                      setCreating(true);
+                      setSelectedDocumentId(null);
+                      setNewTitle("Untitled document");
+                      window.setTimeout(
+                        () => newTitleInputRef.current?.focus(),
+                        0,
+                      );
+                    }}
+                  >
+                    Create your first draft
+                  </button>
+                </div>
+              </>
+            )}
+          </section>
+          <div className="editor-side"></div>
+        </div>
+      </section>
+    );
+
+  if (!document && role !== "creator")
+    return (
+      <section className="page">
+        {statusNotice && (
+          <p className="editor-notice" role="status">
+            {statusNotice}
+          </p>
+        )}
+        <h1>No documents to review</h1>
+        <p className="muted">No drafts have been submitted for review yet.</p>
+        <Link className="button button-primary" href="/queue">
+          Open review queue
+        </Link>
+      </section>
+    );
+
+  // Resolved findings stay in the findings list, but they must not keep the
+  // creator locked in the read-only highlighted view. Editors can also switch
+  // to highlights on demand instead of losing the ability to type.
+  const showHighlighted =
+    openCount > 0 &&
+    reviewState === "current" &&
+    body === document.body &&
+    (showHighlights || !canEdit);
 
   return (
     <section className="page editor-page">
@@ -198,22 +468,133 @@ export default function Editor() {
         <div>
           <p className="eyebrow">CoRESpace / Inline Editor</p>
           <h1>Write with confidence</h1>
-          <p className="lead">Review exact phrases against approved brand knowledge before sharing your work.</p>
+          <p className="lead">
+            Review exact phrases against approved brand knowledge before
+            sharing your work.
+          </p>
         </div>
-        <span className={`status-pill status-${document.status}`}>{contentStatusLabel(document.status)}</span>
+        <span className={`status-pill status-${document.status}`}>
+          {contentStatusLabel(document.status)}
+        </span>
       </header>
-      {message && <p className="editor-notice" role="status">{message}</p>}
-      {error && <p className="form-error" role="alert">{error}</p>}
+      {statusNotice && (
+        <p className="editor-notice" role="status">
+          {statusNotice}
+        </p>
+      )}
+      {message && (
+        <p className="editor-notice" role="status">
+          {message}
+        </p>
+      )}
+      {error && (
+        <p className="form-error" role="alert">
+          {error}
+        </p>
+      )}
+      {reviewNotice && !error && (
+        <p className="editor-notice" role="status">
+          {reviewNotice}
+        </p>
+      )}
+      {document && documentComments.length > 0 && (
+        <section
+          className="editor-card reviewer-feedback-card"
+          aria-labelledby="reviewer-feedback-heading"
+        >
+          <div className="panel-heading">
+            <div>
+              <p className="eyebrow">Reviewer feedback</p>
+              <h2 id="reviewer-feedback-heading">
+                {changesRequested ? "Changes requested" : "Review notes"}
+              </h2>
+              <p className="reviewer-feedback-context">
+                <strong>{document.title}</strong> · version {document.version} ·{" "}
+                {documentComments.length} review{" "}
+                {documentComments.length === 1 ? "note" : "notes"}
+              </p>
+              {changesRequested && (
+                <p className="muted">
+                  Address the feedback, run a full review, then submit the draft
+                  again.
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="review-feedback-history">
+            {documentComments.map((comment) => (
+              <p key={comment.id}>
+                <strong>{comment.author}</strong>
+                <span>{comment.text}</span>
+                <small>{formatTimestamp(comment.at)}</small>
+              </p>
+            ))}
+          </div>
+        </section>
+      )}
       <div className="editor-layout">
         <aside className="editor-document-list card">
-          <div className="panel-heading"><p className="eyebrow">{role === "creator" ? "My documents" : "Submitted documents"}</p>{role === "creator" && <button className="button" type="button" onClick={() => { setCreating(true); setSelectedDocumentId(null); setNewTitle("Untitled document"); window.setTimeout(() => newTitleInputRef.current?.focus(), 0); }}>New</button>}</div>
-          {visibleDocuments.map((item) => <button className={`document-list-item${item.id === document?.id ? " active" : ""}`} type="button" key={item.id} onClick={() => { setSelectedDocumentId(item.id); setCreating(false); if (canEdit) { setTimeout(() => bodyRef.current?.focus(), 0); } }}>
-            <strong>{item.title}</strong>
-            <span>{contentStatusLabel(item.status)}</span>
-          </button>)}
-          {visibleDocuments.length === 0 && <p className="muted">{role === "creator" ? "No documents yet." : "No submitted documents."}</p>}
-          <p className="muted">Sample data · saved in this browser</p>
-          {document && role === "creator" && (document.status === "draft" || document.status === "changes_requested") && <button className="button button-danger" type="button" onClick={() => { if (globalThis.confirm("Delete this draft?")) { run(() => { deleteDemoDocument(document.id, role, user); const fallback = workspace.documents.find((item) => item.id !== document.id && (role === "creator" || item.status === "in_review" || item.status === "changes_requested" || item.status === "approved" || item.status === "rejected" || item.status === "ready_to_publish")); setSelectedDocumentId(fallback?.id ?? null); }, "Document deleted."); } }}>Delete draft</button>}
+          <div className="panel-heading">
+            <p className="eyebrow">
+              {role === "creator" ? "My documents" : "Submitted documents"}
+            </p>
+            {role === "creator" && (
+              <button
+                className="button"
+                type="button"
+                onClick={() => {
+                  setCreating(true);
+                  setSelectedDocumentId(null);
+                  setNewTitle("Untitled document");
+                  window.setTimeout(
+                    () => newTitleInputRef.current?.focus(),
+                    0,
+                  );
+                }}
+              >
+                New
+              </button>
+            )}
+          </div>
+          {visibleDocuments.map((item) => (
+            <button
+              className={`document-list-item${item.id === document?.id ? " active" : ""}`}
+              type="button"
+              key={item.id}
+              onClick={() => {
+                setSelectedDocumentId(item.id);
+                setCreating(false);
+                if (canEdit) {
+                  setTimeout(() => bodyRef.current?.focus(), 0);
+                }
+              }}
+            >
+              <strong>{item.title}</strong>
+              <span>
+                {hasPendingChangesRequest(workspace.history, item)
+                  ? "Changes requested"
+                  : contentStatusLabel(item.status)}
+              </span>
+            </button>
+          ))}
+          {visibleDocuments.length === 0 && (
+            <p className="muted">
+              {role === "creator"
+                ? "No documents yet."
+                : "No submitted documents."}
+            </p>
+          )}
+          <p className="muted">Sample data · stored in the backend</p>
+          {document && role === "creator" && document.status === "draft" && (
+            <button
+              className="button button-danger"
+              type="button"
+              disabled={busy}
+              onClick={removeDocument}
+            >
+              Delete draft
+            </button>
+          )}
         </aside>
         <section className="editor-main card">
           {creating ? (
@@ -222,68 +603,174 @@ export default function Editor() {
                 <h2 style={{ margin: 0 }}>Create a new document</h2>
               </div>
               <div className="card inline-create" style={{ margin: 0 }}>
-                <p className="muted">A new local draft will be shared across the demo roles.</p>
+                <p className="muted">
+                  A new draft is saved to the backend and shared across the demo
+                  roles.
+                </p>
                 <label className="form-field" style={{ width: "100%" }}>
                   <span>Title</span>
-                  <input ref={newTitleInputRef} value={newTitle} onChange={(event) => setNewTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); createDocument(); } }} />
+                  <input
+                    ref={newTitleInputRef}
+                    value={newTitle}
+                    onChange={(event) => setNewTitle(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        void createDocument();
+                      }
+                    }}
+                  />
                 </label>
                 <div className="form-actions">
-                  <button className="button button-primary" type="button" onClick={createDocument}>Create draft</button>
-                  <button className="button" type="button" onClick={() => { setCreating(false); if (document) { setTitle(document.title); setBody(document.body); } else { setSelectedDocumentId(workspace.documents[0]?.id ?? null); } }}>Cancel</button>
+                  <button
+                    className="button button-primary"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void createDocument()}
+                  >
+                    Create draft
+                  </button>
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={() => {
+                      setCreating(false);
+                      if (document) {
+                        setTitle(document.title);
+                        setBody(document.body);
+                      } else {
+                        setSelectedDocumentId(
+                          workspace.documents[0]?.id ?? null,
+                        );
+                      }
+                    }}
+                  >
+                    Cancel
+                  </button>
                 </div>
               </div>
             </>
-          ) : !document ? (
-            <div className="editor-empty-state">
-              <span className="empty-state-mark" aria-hidden="true">i</span>
-              <h3>No document to edit</h3>
-              <p className="muted">{role === "creator" ? "Create a draft to get started." : "Nothing has been submitted for review yet."}</p>
-              {role === "creator" && <button className="button button-primary" type="button" onClick={() => { setCreating(true); setSelectedDocumentId(null); setTitle(""); setBody(""); setNewTitle("Untitled document"); window.setTimeout(() => newTitleInputRef.current?.focus(), 0); }}>Create a new draft</button>}
-            </div>
-          ) : (<>
-          <div className="editor-toolbar">
-            <input ref={titleInputRef} aria-label="Document title" className="title-input" value={title} onChange={(event) => setTitle(event.target.value)} disabled={!canEdit} placeholder="Untitled document" />
-            <span className="autosave-indicator">Saved locally</span>
-          </div>
-          {findings.length > 0 ? (
-            <HighlightedDraft body={body} findings={findings} selectedFindingId={selectedId} onSelect={onSelect} />
           ) : (
-            <textarea
-              ref={bodyRef}
-              aria-label="Document body"
-              className="document-editor"
-              value={body}
-              onChange={(event) => setBody(event.target.value)}
-              disabled={!canEdit}
-              spellCheck
-              placeholder="Start writing your on-brand content here..."
-            />
+            <>
+              <div className="editor-toolbar">
+                <input
+                  ref={titleInputRef}
+                  aria-label="Document title"
+                  className="title-input"
+                  value={title}
+                  onChange={(event) => setTitle(event.target.value)}
+                  disabled={!canEdit}
+                  placeholder="Untitled document"
+                />
+                <span className="autosave-indicator">Saved to backend</span>
+              </div>
+              {showHighlighted ? (
+                <HighlightedDraft
+                  body={body}
+                  findings={findings}
+                  selectedFindingId={selectedId}
+                  onSelect={onSelect}
+                />
+              ) : (
+                <textarea
+                  ref={bodyRef}
+                  aria-label="Document body"
+                  className="document-editor"
+                  value={body}
+                  onChange={(event) => setBody(event.target.value)}
+                  disabled={!canEdit}
+                  spellCheck
+                  placeholder={DRAFT_BODY_PLACEHOLDER}
+                />
+              )}
+              <div className="editor-meta">
+                <span>
+                  {body.trim().split(/\s+/).filter(Boolean).length} words ·{" "}
+                  {readingTime} min read
+                </span>
+                <span>
+                  {reviewState === "current" ? "Review is current" : "Review needed"}
+                </span>
+              </div>
+              <div className="editor-actions">
+                {canEdit && (
+                  <button
+                    className="button"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void save()}
+                  >
+                    Save draft
+                  </button>
+                )}
+                {canEdit && (
+                  <button
+                    className="button button-primary"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void reviewDraft()}
+                  >
+                    {reviewing ? "Reviewing..." : "Run full review"}
+                  </button>
+                )}
+                {canEdit &&
+                  openCount > 0 &&
+                  reviewState === "current" &&
+                  body === document.body && (
+                    <button
+                      className="button"
+                      type="button"
+                      disabled={busy}
+                      onClick={() => setShowHighlights((current) => !current)}
+                    >
+                      {showHighlighted ? "Edit text" : "Show highlights"}
+                    </button>
+                  )}
+                {canSubmit && (
+                  <button
+                    className="button button-success"
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void submit()}
+                  >
+                    Submit for review
+                  </button>
+                )}
+              </div>
+            </>
           )}
-          <div className="editor-meta"><span>{body.trim().split(/\s+/).filter(Boolean).length} words · {readingTime} min read</span><span>{reviewState === "current" ? "Review is current" : "Review needed"}</span></div>
-          <div className="editor-actions">
-            {canEdit && <button className="button" type="button" onClick={save}>Save draft</button>}
-            {canEdit && <button className="button button-primary" type="button" onClick={reviewDraft}>Run full review</button>}
-            {canEdit && reviewState === "current" && openCount === 0 && <button className="button button-success" type="button" onClick={submit}>Submit for review</button>}
-          </div>
-          </>)}
         </section>
         <div className="editor-side">
-          {document && <FindingsPanel
-            findings={findings}
-            busyFindingIds={[]}
-            readOnly={!canEdit}
-            reviewState={reviewState}
-            canRunReview={canEdit}
-            onRunReview={reviewDraft}
-            selectedFindingId={selectedId}
-            reviewedCustomText={false}
-            onSelect={onSelect}
-            onResolve={(finding, status, finalText, dismissalReason) => Promise.resolve(resolve(finding, status, finalText, dismissalReason))}
-          />}
+          {document && (
+            <FindingsPanel
+              findings={findings}
+              busyFindingIds={busyFindingIds}
+              readOnly={!canEdit || busy}
+              reviewState={reviewState}
+              reviewing={reviewing}
+              canRunReview={canEdit && !busy}
+              onRunReview={() => void reviewDraft()}
+              selectedFindingId={selectedId}
+              reviewedCustomText={false}
+              onSelect={onSelect}
+              onResolve={(finding, status, finalText) =>
+                resolve(finding, status, finalText)
+              }
+            />
+          )}
         </div>
       </div>
-      {document && !canEdit && role === "creator" && <p className="muted">This document is locked while it is in review. Reviewers can inspect it from the Review Queue.</p>}
-      {document && role !== "creator" && <Link className="button" href="/queue">Open review queue</Link>}
+      {document && !canEdit && role === "creator" && (
+        <p className="muted">
+          This document is locked while it is in review. Reviewers can inspect
+          it from the Review Queue.
+        </p>
+      )}
+      {document && role !== "creator" && (
+        <Link className="button" href="/queue">
+          Open review queue
+        </Link>
+      )}
     </section>
   );
 }

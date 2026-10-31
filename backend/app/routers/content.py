@@ -174,6 +174,55 @@ def update_content(
         raise _error(500, "content_failed", "Unable to update content.") from exc
 
 
+@router.delete("/content/{content_id}", status_code=204)
+def delete_content(
+    content_id: int,
+    x_user: Annotated[str, Header()],
+    role: Annotated[str, Depends(get_role)],
+    db: Session = Depends(get_db),
+) -> None:
+    actor = _actor_name(x_user)
+    try:
+        content = (
+            db.query(Content)
+            .filter(Content.id == content_id)
+            .with_for_update()
+            .first()
+        )
+        if content is None:
+            raise _error(404, "not_found", "Content not found.")
+        _authorize_content(content, role, actor)
+        if role != "creator" or content.status != "draft":
+            raise _error(
+                403,
+                "forbidden",
+                "Only the content's creator can delete a draft.",
+            )
+
+        db.add(
+            AuditEvent(
+                content_id=None,
+                actor=actor,
+                action="content_deleted",
+                details={
+                    "actor_role": role,
+                    "content_id": content.id,
+                    "title": content.title,
+                    "version": content.version,
+                },
+            )
+        )
+        db.delete(content)
+        db.commit()
+    except HTTPException:
+        db.rollback()
+        raise
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.exception("Unable to delete content.")
+        raise _error(500, "content_failed", "Unable to delete content.") from exc
+
+
 @router.get("/content/{content_id}/findings")
 def get_content_findings(
     content_id: int,
