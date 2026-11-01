@@ -9,6 +9,7 @@ import {
   getDocumentFindings,
   resolveFinding,
   runContentReview,
+  refreshWorkspace,
   saveDraft,
   submitDocument,
   useWorkspace,
@@ -229,6 +230,48 @@ export default function Editor() {
       setTitle(saved.title);
       setBody(saved.body);
     }, "Draft saved to the backend.");
+  }
+
+  function saveContrast(
+    foregroundColor: string | null,
+    backgroundColor: string | null,
+    textSize: "normal" | "large" | null,
+  ): Promise<void> {
+    if (!document || !canEdit) return Promise.resolve();
+    return run(async () => {
+      await saveDraft(document.id, title, body, role, {
+        foreground_color: foregroundColor,
+        background_color: backgroundColor,
+        text_size: textSize,
+      });
+    }, "Color settings saved. Run review to check contrast.");
+  }
+
+  async function recheckAccessibility(finding: DemoFinding): Promise<void> {
+    if (!document) return;
+    await run(async () => {
+      const response = await api.recheckAccessibilityFinding(
+        document.id,
+        finding.id,
+      );
+      await refreshWorkspace();
+      setReviewNotice(
+        response.finding.status === "resolved"
+          ? "Accessibility issue resolved."
+          : "Accessibility issue remains. Review the updated suggestion.",
+      );
+    }, "Accessibility check completed.");
+  }
+
+  function editAccessibility(finding: DemoFinding): void {
+    const imageId = finding.accessibility?.image_id;
+    if (!imageId) return;
+    globalThis.document
+      .getElementById(`alt-text-${imageId}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    window.setTimeout(() => {
+      globalThis.document.getElementById(`alt-text-${imageId}`)?.focus();
+    }, 250);
   }
 
   function reviewDraft(): Promise<void> {
@@ -803,6 +846,10 @@ export default function Editor() {
                 <ImageAccessibilityPanel
                   contentId={document.id}
                   canEdit={canEdit}
+                  foregroundColor={document.foreground_color}
+                  backgroundColor={document.background_color}
+                  textSize={document.text_size}
+                  onSaveContrast={saveContrast}
                 />
               )}
               <div className="editor-meta">
@@ -884,6 +931,8 @@ export default function Editor() {
               evidenceLoading={evidenceLoading}
               evidenceError={evidenceError}
               onRequestEvidence={requestEvidence}
+              onRecheck={recheckAccessibility}
+              onEditAccessibility={editAccessibility}
             />
           )}
         </div>

@@ -30,6 +30,8 @@ interface FindingsPanelProps {
     reason: string,
     assignee: string,
   ) => Promise<void>;
+  onRecheck?: (finding: DemoFinding) => Promise<void>;
+  onEditAccessibility?: (finding: DemoFinding) => void;
 }
 
 export default function FindingsPanel({
@@ -48,6 +50,8 @@ export default function FindingsPanel({
   evidenceLoading = false,
   evidenceError = "",
   onRequestEvidence,
+  onRecheck,
+  onEditAccessibility,
 }: FindingsPanelProps) {
   const activeFindings =
     findings?.filter((finding) => finding.status === "open") ?? [];
@@ -65,6 +69,9 @@ export default function FindingsPanel({
   const dismissedCount = resolvedFindings.filter(
     (finding) => finding.status === "dismissed",
   ).length;
+  const hasAccessibilityFindings = findings?.some(
+    (finding) => finding.check === "accessibility",
+  );
 
   return (
     <section
@@ -132,7 +139,7 @@ export default function FindingsPanel({
             </p>
           </div>
         </div>
-      ) : reviewState !== "current" ? (
+      ) : reviewState !== "current" && !hasAccessibilityFindings ? (
         <div className="findings-scroll">
           <div className="editor-empty-state">
             <span className="empty-state-mark" aria-hidden="true">
@@ -234,6 +241,8 @@ export default function FindingsPanel({
                 evidenceLoading={evidenceLoading}
                 evidenceError={evidenceError}
                 onRequestEvidence={onRequestEvidence}
+                onRecheck={onRecheck}
+                onEditAccessibility={onEditAccessibility}
               />
             ))}
           </div>

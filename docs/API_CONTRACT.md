@@ -67,12 +67,20 @@ name after removing its displayed role suffix.
   expected `version`. Only the owning Creator may update a draft. A successful
   change increments the version, clears the reviewed-version marker, and
   writes an audit event. A stale expected version returns `409`.
+- Content create/update requests may optionally include `foreground_color`,
+  `background_color` (`#RGB` or `#RRGGBB`), and `text_size` (`normal` or
+  `large`). When all three are present, review evaluates the actual colors
+  against WCAG AA; incomplete color data is not evaluated.
 - `DELETE /api/content/{id}` removes a draft. Only the owning Creator may
   delete a draft; other statuses return `403`. It returns status `204` and
   writes an audit event that survives the deletion.
 - `GET /api/content/{id}/findings` returns persisted findings and content and
   reviewed versions.
 - `GET /api/content/{id}/audit` returns audit events for one item.
+- `POST /api/content/{id}/findings/{finding_id}/recheck` reruns an
+  accessibility finding against the latest saved image alt text or configured
+  colors. It updates that existing finding with `resolved` or `open` status;
+  it does not create a duplicate.
 - `GET /api/audit` returns the actor's permitted audit events; Creators see
   only events for their own content.
 - `GET /api/content/{id}/images` returns images attached to the content,

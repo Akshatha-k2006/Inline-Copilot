@@ -9,7 +9,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db import Base, get_db
 from app.exception_handlers import register_exception_handlers
-from app.models import Content, ContentImage, Finding
+from app.models import Asset, Content, ContentImage, Finding
 from app.routers import content as content_router
 from app.routers import review
 
@@ -127,6 +127,49 @@ class ReviewAccessibilityTests(unittest.TestCase):
         second = self.review()
         self.assertEqual(second.status_code, 200)
         self.assertEqual(self.accessibility_findings(second.json()), [])
+
+    def test_recheck_resolves_same_alt_text_finding(self):
+        first = self.review()
+        finding = self.accessibility_findings(first.json())[0]
+        with Session(self.engine) as db:
+            image = db.get(ContentImage, self.image_id)
+            image.alt_text = "Wide banner for the landing page."
+            db.commit()
+        response = self.client.post(
+            f"/api/content/{self.content_id}/findings/{finding['id']}/recheck",
+            headers={"X-Role": "creator", "X-User": "Asha (Creator)"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "resolved")
+        self.assertEqual(response.json()["finding"]["id"], finding["id"])
+        with Session(self.engine) as db:
+            persisted = db.get(Finding, finding["id"])
+            self.assertEqual(persisted.status, "resolved")
+
+    def test_review_includes_contrast_finding_when_colors_are_configured(self):
+        with Session(self.engine) as db:
+            content = db.get(Content, self.content_id)
+            content.foreground_color = "#777777"
+            content.background_color = "#FFFFFF"
+            content.text_size = "normal"
+            db.add(
+                Asset(
+                    name="Palette",
+                    description="Slate #777777 and white #FFFFFF",
+                    asset_type="palette",
+                )
+            )
+            db.commit()
+        response = self.review()
+        self.assertEqual(response.status_code, 200)
+        contrast = [
+            item
+            for item in self.accessibility_findings(response.json())
+            if item["evidence"]["source"]["type"] == "contrast"
+        ]
+        self.assertEqual(len(contrast), 1)
+        self.assertIn("4.5:1", contrast[0]["message"])
+        self.assertEqual(contrast[0]["evidence"]["contrast"]["required_ratio"], 4.5)
 
     def test_persisted_finding_has_fix_and_low_manual_review(self):
         response = self.review()

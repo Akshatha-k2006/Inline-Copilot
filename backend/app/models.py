@@ -87,6 +87,9 @@ class Content(Base):
         String(100), nullable=False, default="marketing_copy", server_default="marketing_copy"
     )
     body: Mapped[str] = mapped_column(Text, nullable=False)
+    foreground_color: Mapped[str | None] = mapped_column(String(7), nullable=True)
+    background_color: Mapped[str | None] = mapped_column(String(7), nullable=True)
+    text_size: Mapped[str | None] = mapped_column(String(20), nullable=True)
     status: Mapped[str] = mapped_column(String(50), default="draft")
     version: Mapped[int] = mapped_column(Integer, default=1)
     reviewed_version: Mapped[int | None] = mapped_column(Integer, nullable=True)

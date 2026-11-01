@@ -71,6 +71,7 @@ function statusFromBackend(value: string): FindingStatus {
     case "accepted":
     case "edited":
     case "dismissed":
+    case "resolved":
       return value;
     default:
       return "open";
@@ -84,6 +85,8 @@ function checkFromBackend(value: string): CheckType {
     case "messaging":
     case "unsupported_claim":
     case "outdated_info":
+      return value;
+    case "accessibility":
       return value;
     default:
       return "messaging";
@@ -221,6 +224,40 @@ export function toDemoFinding(
           source: asText(source.citation, knowledgeSource.record.source),
         }
       : undefined;
+  const contrast = asRecord(evidence.contrast);
+  const accessibility =
+    sourceType === "image"
+      ? {
+          image_id: sourceId,
+          image_filename: asText(source.text, matchedText),
+        }
+      : sourceType === "contrast"
+        ? {
+            foreground_color: asText(contrast.foreground_color),
+            background_color: asText(contrast.background_color),
+            contrast_ratio:
+              typeof contrast.contrast_ratio === "number"
+                ? contrast.contrast_ratio
+                : undefined,
+            required_ratio:
+              typeof contrast.required_ratio === "number"
+                ? contrast.required_ratio
+                : undefined,
+            text_size: asText(contrast.text_size),
+          }
+        : undefined;
+  const displaySource =
+    sourceType === "image" || sourceType === "contrast"
+      ? {
+          type: "accessibility" as const,
+          id: sourceId,
+          label: "Accessibility check",
+        }
+      : {
+          type: knowledgeSource.type,
+          id: sourceId,
+          label: sourceLabel(knowledgeSource),
+        };
 
   return {
     id: finding.id,
@@ -231,11 +268,7 @@ export function toDemoFinding(
     end,
     text: matchedText || message,
     explanation: message,
-    source: {
-      type: knowledgeSource.type,
-      id: sourceId,
-      label: sourceLabel(knowledgeSource),
-    },
+    source: displaySource,
     suggestion: suggestedFix,
     status,
     final_text:
@@ -244,5 +277,6 @@ export function toDemoFinding(
     fact_details: factDetails,
     range_valid: rangeValid,
     content_version: finding.content_version ?? fallbackVersion,
+    accessibility,
   };
 }

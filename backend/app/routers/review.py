@@ -22,7 +22,7 @@ from app.schemas import FindingActionRequest, FindingActionResponse
 from app.services.terminology_checker import check_terminology
 from app.services.fact_checker import check_claims
 from app.services.tone_checker import check_tone
-from app.services.accessibility_checker import check_accessibility
+from app.services.accessibility_checker import check_accessibility, check_contrast
 from app.config import settings
 from app.services.llm_reviewer import (
     LLMProviderError,
@@ -180,6 +180,45 @@ def review_content(
         claim_findings = check_claims(content.body, db)
         tone_findings = check_tone(content.body, db)
         accessibility_findings = check_accessibility(db, content)
+        if content.foreground_color and content.background_color and content.text_size:
+            try:
+                contrast_result = check_contrast(
+                    db,
+                    content.foreground_color,
+                    content.background_color,
+                    content.text_size,
+                )
+            except ValueError:
+                contrast_result = None
+            if contrast_result and contrast_result["finding"]:
+                contrast_finding = contrast_result["finding"]
+                contrast_evidence = {
+                    key: value
+                    for key, value in contrast_result.items()
+                    if key != "finding"
+                }
+                contrast_finding.update(
+                    {
+                        "matched_text": (
+                            f"{content.foreground_color} on "
+                            f"{content.background_color}"
+                        ),
+                        "start_offset": None,
+                        "end_offset": None,
+                        "evidence": {
+                            "source": {
+                                "type": "contrast",
+                                "text": "Configured text colors",
+                            },
+                            "contrast": contrast_evidence,
+                        },
+                        "source": {
+                            "type": "contrast",
+                            "text": "Configured text colors",
+                        },
+                    }
+                )
+                accessibility_findings.append(contrast_finding)
 
         llm_status = "ok"
         try:
@@ -240,6 +279,8 @@ def review_content(
                     item["suggested_fix"] is None,
                 ),
             }
+            if item["evidence"].get("contrast"):
+                evidence["contrast"] = item["evidence"]["contrast"]
             if item.get("suggestion_source"):
                 evidence["suggestion_source"] = item["suggestion_source"]
 
@@ -327,6 +368,138 @@ def review_content(
                 if llm_status == "ok" and not settings.llm_api_key
                 else llm_status
             ),
+        },
+    }
+
+
+@router.post("/content/{content_id}/findings/{finding_id}/recheck")
+def recheck_accessibility_finding(
+    content_id: int,
+    finding_id: int,
+    x_user: Annotated[str, Header()],
+    role: Annotated[str, Depends(get_role)],
+    db: Session = Depends(get_db),
+):
+    actor = x_user.strip()
+    content = db.query(Content).filter(Content.id == content_id).first()
+    finding = db.query(Finding).filter(
+        Finding.id == finding_id,
+        Finding.content_id == content_id,
+    ).first()
+    if content is None or finding is None:
+        raise _action_error(404, "not_found", "Accessibility finding not found.")
+    if (
+        role != "creator"
+        or content.created_by != actor.rsplit(" (", 1)[0]
+        or content.status != "draft"
+    ):
+        raise _action_error(
+            403,
+            "forbidden",
+            "Only the content's creator can recheck a draft.",
+        )
+    if finding.check_type != "accessibility":
+        raise _action_error(
+            409,
+            "not_accessibility_finding",
+            "Only accessibility findings can be rechecked here.",
+        )
+    if finding.content_version != content.version and finding.check_type != "accessibility":
+        raise _action_error(409, "stale_finding", "The finding belongs to an older content version.")
+
+    evidence = finding.evidence if isinstance(finding.evidence, dict) else {}
+    source = evidence.get("source") if isinstance(evidence.get("source"), dict) else {}
+    result_status = "open"
+    result_message = finding.message
+    result_suggestion = finding.suggested_fix
+    if source.get("type") == "image":
+        image = db.get(ContentImage, source.get("id"))
+        failing = image is None or not image.alt_text.strip()
+        if failing:
+            result_message = (
+                f"Image '{image.filename if image else source.get('text', 'image')}' "
+                "is missing alt text."
+            )
+            result_suggestion = (
+                f"Add concise alt text describing the relevant information or "
+                f"purpose of '{image.filename if image else source.get('text', 'image')}'."
+            )
+        else:
+            result_status = "resolved"
+            result_message = f"Image '{image.filename}' now has alternative text."
+            result_suggestion = None
+    elif source.get("type") == "contrast":
+        contrast = evidence.get("contrast")
+        if not isinstance(contrast, dict):
+            contrast = {}
+        if not (
+            content.foreground_color
+            and content.background_color
+            and content.text_size
+        ) and not contrast:
+            raise _action_error(409, "contrast_unavailable", "Contrast colors are unavailable.")
+        try:
+            foreground_color = content.foreground_color or str(
+                contrast["foreground_color"]
+            )
+            background_color = content.background_color or str(
+                contrast["background_color"]
+            )
+            current_text_size = content.text_size or str(contrast["text_size"])
+            contrast_result = check_contrast(
+                db,
+                foreground_color,
+                background_color,
+                current_text_size,
+            )
+        except (KeyError, ValueError) as exc:
+            raise _action_error(409, "contrast_unavailable", str(exc)) from exc
+        if contrast_result["finding"]:
+            result_message = contrast_result["finding"]["message"]
+            result_suggestion = contrast_result["finding"]["suggested_fix"]
+            evidence["contrast"] = contrast_result
+        else:
+            result_status = "resolved"
+            result_message = "The configured colors now meet the WCAG AA threshold."
+            result_suggestion = None
+            evidence["contrast"] = contrast_result
+    else:
+        raise _action_error(409, "contrast_unavailable", "This accessibility check cannot be evaluated.")
+
+    finding.status = result_status
+    finding.content_version = content.version
+    finding.message = result_message
+    finding.suggested_fix = result_suggestion
+    finding.evidence = evidence
+    db.add(
+        AuditEvent(
+            content_id=content.id,
+            actor=actor,
+            action="accessibility_finding_rechecked",
+            details={
+                "finding_id": finding.id,
+                "status": result_status,
+                "check": source.get("type"),
+            },
+        )
+    )
+    db.commit()
+    db.refresh(finding)
+    return {
+        "content_id": content.id,
+        "content_version": content.version,
+        "status": result_status,
+        "message": result_message,
+        "finding": {
+            "id": finding.id,
+            "check": finding.check_type,
+            "severity": finding.severity,
+            "message": finding.message,
+            "evidence": finding.evidence,
+            "suggested_fix": finding.suggested_fix,
+            "start_offset": finding.start_offset,
+            "end_offset": finding.end_offset,
+            "status": finding.status,
         },
     }
 

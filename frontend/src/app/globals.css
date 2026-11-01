@@ -1423,6 +1423,24 @@ a {
   font-size: 0.9rem;
 }
 
+.contrast-controls {
+  display: grid;
+  gap: 12px;
+  margin-top: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.contrast-control-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.accessibility-contrast-details {
+  margin: 0;
+}
+
 .text-button {
   display: block;
   padding: 0;
@@ -1436,7 +1454,8 @@ a {
 
 @media (max-width: 700px) {
   .image-item,
-  .image-ready {
+  .image-ready,
+  .contrast-control-grid {
     grid-template-columns: 1fr;
   }
 }

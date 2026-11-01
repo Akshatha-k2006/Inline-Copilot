@@ -199,8 +199,8 @@ async function fetchFindings(
     return response.findings
       .filter(
         (finding: BackendFinding) =>
-          (finding.content_version ?? response.content_version) ===
-          document.version,
+          (finding.content_version ?? response.content_version) === document.version ||
+          finding.check === "accessibility",
       )
       .map((finding) =>
         toDemoFinding(finding, document.id, knowledge, response.content_version),
@@ -378,6 +378,9 @@ export async function createDocument(
     title: normalizedTitle,
     content_type: "other",
     body: normalizedBody,
+    foreground_color: null,
+    background_color: null,
+    text_size: null,
   });
   await refreshWorkspace();
   return created;
@@ -388,6 +391,7 @@ export async function saveDraft(
   title: string,
   body: string,
   role: Role,
+  colors?: Pick<Content, "foreground_color" | "background_color" | "text_size">,
 ): Promise<Content> {
   const document = requireDocument(documentId);
   if (role !== "creator") {
@@ -401,7 +405,13 @@ export async function saveDraft(
   if (!normalizedTitle) throw new Error("Add a document title before saving.");
   if (!body.trim()) throw new Error("Add content before saving.");
 
-  if (document.title === normalizedTitle && document.body === body) {
+  if (
+    document.title === normalizedTitle &&
+    document.body === body &&
+    document.foreground_color === (colors?.foreground_color ?? document.foreground_color) &&
+    document.background_color === (colors?.background_color ?? document.background_color) &&
+    document.text_size === (colors?.text_size ?? document.text_size)
+  ) {
     return document;
   }
 
@@ -409,6 +419,9 @@ export async function saveDraft(
     title: normalizedTitle,
     content_type: document.content_type || "other",
     body,
+    foreground_color: colors?.foreground_color ?? document.foreground_color,
+    background_color: colors?.background_color ?? document.background_color,
+    text_size: colors?.text_size ?? document.text_size,
     version: document.version,
   });
   await refreshWorkspace();

@@ -260,6 +260,11 @@ export const api = {
     id: number,
     body: { action: "accept" | "edit" | "dismiss"; replacement?: string },
   ) => request<FindingActionResponse>("PATCH", `/api/findings/${id}`, body),
+  recheckAccessibilityFinding: (contentId: number, findingId: number) =>
+    request<FindingActionResponse>(
+      "POST",
+      `/api/content/${contentId}/findings/${findingId}/recheck`,
+    ),
   submitContent: (id: number) =>
     request<ContentStatusResponse>("POST", `/api/content/${id}/submit`),
   selfCheckContent: (id: number) =>
