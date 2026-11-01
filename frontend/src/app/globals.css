@@ -1452,6 +1452,67 @@ a {
   cursor: pointer;
 }
 
+.brand-manager-dashboard {
+  display: grid;
+  gap: 24px;
+}
+
+.dashboard-period {
+  min-width: 180px;
+}
+
+.dashboard-loading {
+  padding: 24px;
+}
+
+.dashboard-table-wrap {
+  overflow-x: auto;
+}
+
+.dashboard-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.dashboard-table th,
+.dashboard-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.dashboard-table th {
+  color: var(--muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+}
+
+.dashboard-work-grid,
+.dashboard-clarifications {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.dashboard-list-card,
+.dashboard-clarifications .card {
+  padding: 18px;
+}
+
+.dashboard-list-card ul {
+  display: grid;
+  gap: 10px;
+  padding-left: 20px;
+}
+
+@media (max-width: 700px) {
+  .dashboard-work-grid,
+  .dashboard-clarifications {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 700px) {
   .image-item,
   .image-ready,
