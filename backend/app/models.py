@@ -105,6 +105,30 @@ class Content(Base):
     comments = relationship(
         "Comment", back_populates="content", cascade="all, delete-orphan"
     )
+    images = relationship(
+        "ContentImage", back_populates="content", cascade="all, delete-orphan"
+    )
+
+
+class ContentImage(Base):
+    __tablename__ = "content_images"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    content_id: Mapped[int] = mapped_column(
+        ForeignKey("content.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    filename: Mapped[str] = mapped_column(String(250), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    storage_path: Mapped[str] = mapped_column(Text, nullable=False)
+    alt_text: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    content = relationship("Content", back_populates="images")
 
 
 class Finding(Base):

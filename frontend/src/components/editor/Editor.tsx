@@ -20,6 +20,7 @@ import { contentStatusLabel } from "@/lib/workflow";
 import { api } from "@/lib/api";
 import FindingsPanel from "./FindingsPanel";
 import HighlightedDraft from "./HighlightedDraft";
+import ImageAccessibilityPanel from "./ImageAccessibilityPanel";
 
 const DRAFT_BODY_PLACEHOLDER = "Start writing your on-brand content here.";
 
@@ -796,6 +797,12 @@ export default function Editor() {
                   disabled={!canEdit}
                   spellCheck
                   placeholder={DRAFT_BODY_PLACEHOLDER}
+                />
+              )}
+              {document && (
+                <ImageAccessibilityPanel
+                  contentId={document.id}
+                  canEdit={canEdit}
                 />
               )}
               <div className="editor-meta">

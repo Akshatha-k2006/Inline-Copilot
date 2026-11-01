@@ -6,6 +6,7 @@ import type {
   ApiGuideline,
   ContentCommentsResponse,
   Content,
+  ContentImage,
   ContentAuditEvent,
   ContentDraft,
   ContentFindingsResponse,
@@ -236,6 +237,22 @@ export const api = {
     request<Content>("PUT", `/api/content/${id}`, body),
   deleteContent: (id: number) =>
     request<void>("DELETE", `/api/content/${id}`),
+  listContentImages: (id: number, options?: RequestOptions) =>
+    request<ContentImage[]>(
+      "GET",
+      `/api/content/${id}/images`,
+      undefined,
+      options,
+    ),
+  uploadContentImage: (id: number, file: File) => {
+    const body = new FormData();
+    body.append("file", file);
+    return request<ContentImage>("POST", `/api/content/${id}/images`, body);
+  },
+  updateContentImageAltText: (id: number, altText: string) =>
+    request<ContentImage>("PATCH", `/api/content-images/${id}`, {
+      alt_text: altText,
+    }),
 
   reviewContent: (id: number) =>
     request<ReviewResponse>("POST", `/api/content/${id}/review`),

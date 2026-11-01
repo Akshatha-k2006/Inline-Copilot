@@ -75,6 +75,17 @@ name after removing its displayed role suffix.
 - `GET /api/content/{id}/audit` returns audit events for one item.
 - `GET /api/audit` returns the actor's permitted audit events; Creators see
   only events for their own content.
+- `GET /api/content/{id}/images` returns images attached to the content,
+  including `filename`, `mime_type`, `alt_text`, and a `url` for the preview.
+- `POST /api/content/{id}/images` accepts a multipart `file`. Only PNG, JPEG,
+  and WebP files up to 5 MB are accepted. Only the owning Creator can upload
+  images to a draft.
+- `PATCH /api/content-images/{image_id}` accepts `{ "alt_text": "..." }`.
+  Only the owning Creator can update alt text on a draft. Empty alt text is
+  retained so the editor can report the accessibility warning.
+- `GET /api/images/{image_id}/file` serves a stored content image for preview.
+  The demo stores files under the backend's local `uploads/` directory; use
+  object storage or a persistent volume for production deployments.
 
 Content includes `content_type` (for example `marketing_copy`, `blog_post`,
 `social_media`, `email`, or `other`), status, version, `reviewed_version`, and
