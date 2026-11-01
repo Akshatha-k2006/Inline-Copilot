@@ -140,6 +140,19 @@ input returns `422` with
 Database failures return `500` with
 `{ "error": "review_failed", "message": "Unable to save review findings." }`.
 
+Review also evaluates the images attached to the content. Every image whose
+alt text is missing or whitespace-only produces an `accessibility` finding
+with severity `warning` — it does not block self-check. The message names the
+file (for example `Image 'banner.png' is missing alt text.`), the finding has
+no text offsets, its evidence carries `source.type "image"` with the image ID
+and filename, and `suggested_fix` is populated (so
+`requires_manual_review` is `false`) recommending that descriptive alt text
+be added through the image panel. An attached image whose alt text has been
+filled (via `PATCH /api/content-images/{id}`) produces no accessibility
+findings on a re-review. Image uploads
+themselves already reject unsupported formats with `422` (`validation_error`)
+and files larger than 5 MB with `413` (`file_too_large`).
+
 ### Finding actions
 
 `PATCH /api/findings/{id}` accepts an action for an open finding. The frontend
