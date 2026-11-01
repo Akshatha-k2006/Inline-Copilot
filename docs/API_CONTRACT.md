@@ -235,6 +235,50 @@ The standalone mock service in `frontend/mock_kb.mjs` implements these routes an
 persists data to `frontend/mock-kb-data.json` by default. Its integration check
 uses a temporary database and does not alter the developer's saved mock data.
 
+## Accessibility contrast check
+
+`POST /api/accessibility/contrast` accepts opaque hexadecimal colors in `#RGB`
+or `#RRGGBB` form and an optional `text_size` (`normal` by default, or
+`large`). Any valid demo role may call it using `X-Role`. The backend calculates
+the WCAG relative-luminance contrast ratio and checks it against WCAG AA:
+`4.5:1` for normal text and `3:1` for large text. The response includes the
+ratio, threshold, pass result, and whether each input color appears in a
+configured palette asset.
+
+Palette asset descriptions supply the replacement colors (hex colors in
+descriptions are recognized). A failing check includes an accessibility
+finding and, when possible, the closest palette pair that meets the selected
+threshold:
+
+```json
+{
+  "foreground_color": "#F2A93B",
+  "background_color": "#FAF8F3",
+  "text_size": "normal",
+  "contrast_ratio": 1.88,
+  "required_ratio": 4.5,
+  "passes": false,
+  "brand_palette_match": {
+    "foreground": true,
+    "background": true
+  },
+  "finding": {
+    "check": "accessibility",
+    "severity": "warning",
+    "message": "Contrast ratio 1.88:1 does not meet WCAG AA for normal-text (requires 4.5:1).",
+    "suggested_fix": "Use foreground #26323B and background #FAF8F3 (12.35:1 contrast)."
+  },
+  "suggested_replacement": {
+    "foreground_color": "#26323B",
+    "background_color": "#FAF8F3",
+    "contrast_ratio": 12.35
+  }
+}
+```
+
+Missing palettes return `409` with `brand_palette_unavailable`; malformed
+colors or text sizes return `422` with `validation_error`.
+
 ## Content approval workflow
 
 Content status transitions follow this sequence:

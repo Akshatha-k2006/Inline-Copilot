@@ -52,6 +52,14 @@ class AssetResponse(AssetCreate):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ContrastCheckRequest(BaseModel):
+    foreground_color: str = Field(pattern=r"^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$")
+    background_color: str = Field(pattern=r"^#(?:[0-9A-Fa-f]{3}|[0-9A-Fa-f]{6})$")
+    text_size: Literal["normal", "large"] = "normal"
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class ContentStatusResponse(BaseModel):
     content_id: int
     status: str
