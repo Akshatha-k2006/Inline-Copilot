@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.dependencies import get_role, require_writer
 from app.models import Fact
-from app.schemas import FactCreate, FactResponse
+from app.schemas import FactCreate, FactReapproveRequest, FactResponse
 from app.services.audit import record_knowledge_change
 
 router = APIRouter(prefix="/facts", tags=["facts"])
@@ -86,6 +86,40 @@ def update_fact(
     item.review_by = to_datetime(payload.reviewDate)
     record_knowledge_change(
         db, role, "updated", "fact", item.id, item.statement
+    )
+    db.commit()
+    db.refresh(item)
+    return to_response(item)
+
+
+@router.put("/{item_id}/re-approve", response_model=FactResponse)
+def reapprove_fact(
+    item_id: int,
+    payload: FactReapproveRequest,
+    db: DbSession,
+    role: Annotated[str, Depends(require_writer)],
+):
+    item = db.get(Fact, item_id)
+    if item is None:
+        raise HTTPException(status_code=404, detail="Fact not found")
+
+    if payload.reviewDate < datetime.now(timezone.utc).date():
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "error": "validation_error",
+                "message": "Review date must be today or later.",
+            },
+        )
+
+    item.review_by = to_datetime(payload.reviewDate)
+    item.last_reviewed = (
+        to_datetime(payload.lastReviewed)
+        if payload.lastReviewed is not None
+        else to_datetime(datetime.now(timezone.utc).date())
+    )
+    record_knowledge_change(
+        db, role, "reapproved", "fact", item.id, item.statement
     )
     db.commit()
     db.refresh(item)
