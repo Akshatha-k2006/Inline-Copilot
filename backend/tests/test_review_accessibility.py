@@ -9,7 +9,13 @@ from sqlalchemy.pool import StaticPool
 
 from app.db import Base, get_db
 from app.exception_handlers import register_exception_handlers
-from app.models import Asset, Content, ContentImage, Finding
+from app.models import (
+    Asset,
+    Content,
+    ContentImage,
+    Finding,
+    FindingDecisionEvent,
+)
 from app.routers import content as content_router
 from app.routers import review
 
@@ -142,9 +148,24 @@ class ReviewAccessibilityTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "resolved")
         self.assertEqual(response.json()["finding"]["id"], finding["id"])
+        repeated = self.client.post(
+            f"/api/content/{self.content_id}/findings/{finding['id']}/recheck",
+            headers={"X-Role": "creator", "X-User": "Asha (Creator)"},
+        )
+        self.assertEqual(repeated.status_code, 200)
         with Session(self.engine) as db:
             persisted = db.get(Finding, finding["id"])
             self.assertEqual(persisted.status, "resolved")
+            decision_events = (
+                db.query(FindingDecisionEvent)
+                .filter(
+                    FindingDecisionEvent.finding_reference_id == finding["id"]
+                )
+                .all()
+            )
+            self.assertEqual(len(decision_events), 1)
+            self.assertEqual(decision_events[0].decision, "resolved")
+            self.assertIsNotNone(decision_events[0].occurred_at)
 
     def test_review_includes_contrast_finding_when_colors_are_configured(self):
         with Session(self.engine) as db:

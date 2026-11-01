@@ -84,14 +84,22 @@ class EnsureModelSchemaTests(unittest.TestCase):
             "finding_decision_events",
             set(inspect(self.engine).get_table_names()),
         )
+        self.assertIn(
+            "finding_review_events",
+            set(inspect(self.engine).get_table_names()),
+        )
 
     def test_decision_event_table_has_idempotent_event_key(self):
         inspector = inspect(self.engine)
-        constraints = inspector.get_unique_constraints("finding_decision_events")
-        self.assertIn(
-            ["event_key"],
-            [constraint["column_names"] for constraint in constraints],
-        )
+        for table_name in (
+            "finding_decision_events",
+            "finding_review_events",
+        ):
+            constraints = inspector.get_unique_constraints(table_name)
+            self.assertIn(
+                ["event_key"],
+                [constraint["column_names"] for constraint in constraints],
+            )
 
     def test_legacy_knowledge_rows_work_with_the_orm(self):
         with Session(self.engine) as db:

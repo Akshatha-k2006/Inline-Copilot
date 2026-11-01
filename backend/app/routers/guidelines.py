@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
@@ -9,10 +9,26 @@ from app.dependencies import get_role, require_writer
 from app.models import Guideline, Term
 from app.schemas import GuidelineCreate, GuidelineResponse
 from app.services.audit import record_knowledge_change
+from app.services.guideline_metrics import calculate_guideline_metrics
 
 router = APIRouter(prefix="/guidelines", tags=["guidelines"])
 
 DbSession = Annotated[Session, Depends(get_db)]
+
+
+@router.get("/metrics")
+def guideline_metrics(
+    db: DbSession,
+    role: Annotated[str, Depends(get_role)],
+    period_days: int = Query(default=30, ge=1, le=3650),
+    stale_after_days: int = Query(default=90, ge=1, le=3650),
+):
+    return calculate_guideline_metrics(
+        db,
+        period_days=period_days,
+        stale_after_days=stale_after_days,
+    )
+
 
 @router.get("", response_model=list[GuidelineResponse])
 def list_guidelines(db: DbSession, role: Annotated[str, Depends(get_role)]):

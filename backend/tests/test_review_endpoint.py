@@ -16,6 +16,7 @@ from app.models import (
     Content,
     Finding,
     FindingDecisionEvent,
+    FindingReviewEvent,
     Guideline,
     Term,
 )
@@ -273,6 +274,13 @@ class ReviewEndpointTests(unittest.TestCase):
         persisted = self.db.get(Finding, finding["id"])
         self.assertEqual(finding["guideline_id"], guideline.id)
         self.assertEqual(persisted.guideline_id, guideline.id)
+        history = (
+            self.db.query(FindingReviewEvent)
+            .filter(FindingReviewEvent.finding_reference_id == finding["id"])
+            .one()
+        )
+        self.assertEqual(history.guideline_id, guideline.id)
+        self.assertEqual(history.guideline_title, guideline.title)
 
     def test_missing_content_uses_contract_error(self):
         status, payload = self.request("/api/content/999/review")
@@ -390,6 +398,37 @@ class ReviewEndpointTests(unittest.TestCase):
         self.assertTrue(payload["findings"])
         self.assertTrue(
             all(item["status"] == "open" for item in payload["findings"])
+        )
+        history = (
+            self.db.query(FindingReviewEvent)
+            .order_by(FindingReviewEvent.id)
+            .all()
+        )
+        self.assertEqual(len(history), len(payload["findings"]))
+        self.assertTrue(
+            all(item.event_key.startswith("review:") for item in history)
+        )
+
+    def test_rereviews_keep_distinct_finding_occurrence_history(self):
+        with patch("app.services.llm_reviewer.settings.llm_api_key", None):
+            first_status, first = self.request("/api/content/1/review")
+            second_status, second = self.request("/api/content/1/review")
+
+        self.assertEqual(first_status, 200)
+        self.assertEqual(second_status, 200)
+        self.assertEqual(len(first["findings"]), len(second["findings"]))
+        history = (
+            self.db.query(FindingReviewEvent)
+            .order_by(FindingReviewEvent.id)
+            .all()
+        )
+        self.assertEqual(
+            len(history),
+            len(first["findings"]) + len(second["findings"]),
+        )
+        self.assertEqual(
+            len({item.event_key for item in history}),
+            len(history),
         )
 
     def test_rerun_preserves_accepted_and_dismissed_findings(self):

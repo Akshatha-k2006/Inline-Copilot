@@ -23,6 +23,82 @@ Each item returned by the API includes an `id`.
 - `POST /api/{collection}` creates an item and returns it with status `201`.
 - `PUT /api/{collection}/{id}` replaces an item and returns the updated item.
 - `DELETE /api/{collection}/{id}` removes an item and returns status `204`.
+- `GET /api/guidelines/metrics` reports guideline usage, finding decisions, and
+  guidelines that may need review or clarification. It accepts `period_days`
+  (default `30`, range `1`–`3650`) and `stale_after_days` (default `90`,
+  range `1`–`3650`). Any valid demo role may retrieve the report.
+- `violation_count` counts finding occurrences recorded per content review
+  during the selected period, including repeat citations on separate reviews.
+  `citation_count` is the same occurrence count for that guideline, broken
+  down by check in `violations_by_check`. Historical review events are kept
+  even when open findings are replaced by a later review.
+- `dismissal_rate` is `dismissed / (accepted + dismissed + resolved)` in the
+  selected period. `resolved` represents a finding edited to completion; open
+  findings are not in the denominator. The response includes both numerator
+  and denominator counts; a guideline with no recorded decisions has a `null`
+  dismissal rate.
+- `last_reviewed_at` is the latest content review that cited the guideline,
+  across all available history. Guidelines with no citations in the selected
+  period are listed in `guidelines_without_citations`; guidelines never cited
+  have a null last-reviewed date and need attention. Guidelines last cited
+  more than `stale_after_days` ago are also flagged.
+- `suggested_areas_for_clarification` includes uncited or stale guidelines
+  that should be reviewed for applicability and currency. A guideline with
+  at least three decisions and a dismissal rate of 50% or more is also
+  suggested for clarification. Review-event and decision-event unique keys
+  ensure retries or repeated updates to the same event cannot inflate counts.
+
+The report includes the selected window, overall counts and dismissal rate,
+per-guideline violation/citation counts, counts by check, decision counts,
+last-reviewed date, attention reasons, and clarification suggestions.
+
+```json
+{
+  "period": {
+    "start": "2026-10-02T00:00:00+00:00",
+    "end": "2026-11-01T00:00:00+00:00",
+    "days": 30
+  },
+  "stale_after_days": 90,
+  "totals": {
+    "violation_count": 3,
+    "citations_by_guideline": 3,
+    "decision_count": 4,
+    "dismissed_count": 2,
+    "dismissal_rate": 0.5
+  },
+  "guidelines": [
+    {
+      "guideline_id": 1,
+      "title": "Claims policy",
+      "category": "claims",
+      "violation_count": 3,
+      "citation_count": 3,
+      "citations_in_period": true,
+      "violations_by_check": {"unsupported_claim": 3},
+      "decision_count": 4,
+      "dismissed_count": 2,
+      "dismissal_rate": 0.5,
+      "last_reviewed_at": "2026-10-28T10:00:00+00:00",
+      "days_since_review": 4,
+      "needs_attention": true,
+      "attention_reasons": ["high_dismissal_rate"]
+    }
+  ],
+  "guidelines_without_citations": [],
+  "suggested_areas_for_clarification": [
+    {
+      "guideline_id": 1,
+      "title": "Claims policy",
+      "reasons": ["high_dismissal_rate"],
+      "suggestions": [
+        "Clarify the rule's scope, examples, or suggested corrections; at least half of its recorded decisions were dismissed."
+      ]
+    }
+  ]
+}
+```
+
 - `POST /api/seed/load` loads the fictional brand from `seed/brand.json`.
   It adds missing sample records by stable natural keys, does not overwrite or
   delete existing records, and is restricted to Admin and Brand Manager roles.
