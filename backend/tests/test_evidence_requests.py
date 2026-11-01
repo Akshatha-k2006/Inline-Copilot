@@ -25,10 +25,16 @@ RESPONSE_KEYS = {
     "sourceUrl",
     "documentName",
     "documentType",
+    "evidenceDescription",
+    "ownerExplanation",
     "attachedBy",
     "attachedAt",
     "verifiedBy",
     "verifiedAt",
+    "decision",
+    "reviewerFeedback",
+    "decidedBy",
+    "decidedAt",
 }
 
 
@@ -661,6 +667,60 @@ class VerifyEvidenceRequestTests(unittest.TestCase):
         response = self.verify(999999)
         self.assertEqual(response.status_code, 404)
         self.assertEqual(response.json()["error"], "not_found")
+
+    def test_approve_records_decision_and_activity(self):
+        response = self.client.post(
+            f"/api/evidence-requests/{self.attached_id}/approve",
+            headers={"X-Role": "reviewer"},
+            json={"feedback": "The source supports the proposed claim."},
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["status"], "fulfilled")
+        self.assertEqual(body["decision"], "approved")
+        self.assertEqual(body["reviewerFeedback"], "The source supports the proposed claim.")
+        self.assertEqual(body["decidedBy"], "reviewer")
+        activity = self.client.get(
+            f"/api/evidence-requests/{self.attached_id}/activity",
+            headers={"X-Role": "reviewer"},
+        )
+        self.assertEqual(activity.status_code, 200)
+        self.assertEqual(activity.json()[-1]["eventType"], "evidence_request_approved")
+
+    def test_reject_requires_feedback_and_cannot_repeat(self):
+        response = self.client.post(
+            f"/api/evidence-requests/{self.attached_id}/reject",
+            headers={"X-Role": "reviewer"},
+            json={"feedback": "The source does not establish this claim."},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["decision"], "rejected")
+        repeated = self.client.post(
+            f"/api/evidence-requests/{self.attached_id}/reject",
+            headers={"X-Role": "reviewer"},
+            json={"feedback": "A second decision is not allowed."},
+        )
+        self.assertEqual(repeated.status_code, 409)
+
+    def test_decision_is_reviewer_only(self):
+        response = self.client.post(
+            f"/api/evidence-requests/{self.attached_id}/approve",
+            headers={"X-Role": "creator"},
+            json={"feedback": "Not authorised."},
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_attach_as_creator_requires_assigned_owner(self):
+        response = self.client.post(
+            f"/api/evidence-requests/{self.attached_id}/evidence",
+            headers={"X-Role": "creator", "X-User": "Asha (Creator)"},
+            json={
+                "sourceType": "url",
+                "sourceUrl": "https://example.com/source",
+                "evidenceDescription": "A source",
+            },
+        )
+        self.assertEqual(response.status_code, 403)
 
 
 if __name__ == "__main__":

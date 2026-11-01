@@ -12,6 +12,7 @@ import type {
   ContentUpdate,
   ContentStatusResponse,
   EvidenceRequest,
+  EvidenceActivity,
   FindingActionResponse,
   Health,
   ReviewComment,
@@ -312,4 +313,30 @@ export const api = {
     reason: string;
     assignee: string;
   }) => request<EvidenceRequest>("POST", "/api/evidence-requests", body),
+  getEvidenceRequest: (id: number) =>
+    request<EvidenceRequest>("GET", `/api/evidence-requests/${id}`),
+  attachEvidence: (
+    id: number,
+    body: {
+      sourceType: "url" | "document";
+      sourceUrl?: string;
+      documentName?: string;
+      documentType?: string;
+      evidenceDescription: string;
+      ownerExplanation?: string;
+    },
+  ) => request<EvidenceRequest>("POST", `/api/evidence-requests/${id}/evidence`, body),
+  approveEvidenceRequest: (id: number, feedback: string) =>
+    request<EvidenceRequest>("POST", `/api/evidence-requests/${id}/approve`, {
+      feedback,
+    }),
+  rejectEvidenceRequest: (id: number, feedback: string) =>
+    request<EvidenceRequest>("POST", `/api/evidence-requests/${id}/reject`, {
+      feedback,
+    }),
+  getEvidenceActivity: (id: number) =>
+    request<EvidenceActivity[]>(
+      "GET",
+      `/api/evidence-requests/${id}/activity`,
+    ),
 };

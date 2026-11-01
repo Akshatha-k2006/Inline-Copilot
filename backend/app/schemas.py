@@ -225,6 +225,8 @@ class EvidenceRequestAttach(BaseModel):
     sourceUrl: str | None = None
     documentName: str | None = None
     documentType: str | None = None
+    evidenceDescription: str = Field(default="Evidence source", max_length=1000)
+    ownerExplanation: str | None = Field(default=None, max_length=2000)
 
     model_config = ConfigDict(extra="forbid")
 
@@ -237,6 +239,12 @@ class EvidenceRequestAttach(BaseModel):
         self.documentType = (
             self.documentType.strip() if self.documentType else None
         )
+        self.evidenceDescription = self.evidenceDescription.strip()
+        self.ownerExplanation = (
+            self.ownerExplanation.strip() if self.ownerExplanation else None
+        )
+        if not self.evidenceDescription:
+            raise ValueError("evidenceDescription must not be blank.")
         if self.sourceType == "url":
             if not self.sourceUrl:
                 raise ValueError("sourceUrl is required for a url source.")
@@ -282,7 +290,32 @@ class EvidenceRequestResponse(BaseModel):
     sourceUrl: str | None
     documentName: str | None
     documentType: str | None
+    evidenceDescription: str | None
+    ownerExplanation: str | None
     attachedBy: str | None
     attachedAt: datetime | None
     verifiedBy: str | None
     verifiedAt: datetime | None
+    decision: str | None
+    reviewerFeedback: str | None
+    decidedBy: str | None
+    decidedAt: datetime | None
+
+
+class EvidenceDecision(BaseModel):
+    feedback: str = Field(min_length=1, max_length=2000)
+
+    @model_validator(mode="after")
+    def strip_feedback(self) -> "EvidenceDecision":
+        self.feedback = self.feedback.strip()
+        if not self.feedback:
+            raise ValueError("feedback must not be blank.")
+        return self
+
+
+class EvidenceActivityResponse(BaseModel):
+    id: int
+    eventType: str
+    actor: str
+    timestamp: datetime
+    details: dict

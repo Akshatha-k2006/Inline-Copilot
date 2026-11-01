@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -8,9 +8,12 @@ from app.db import get_db
 from app.dependencies import get_role
 from app.models import AuditEvent, EvidenceRequest, Finding
 from app.schemas import (
+    EVIDENCE_REQUEST_ASSIGNEES,
     EVIDENCE_REQUEST_STATUSES,
     EvidenceRequestAttach,
     EvidenceRequestCreate,
+    EvidenceActivityResponse,
+    EvidenceDecision,
     EvidenceRequestResponse,
 )
 
@@ -39,10 +42,16 @@ def to_response(item: EvidenceRequest) -> dict:
         "sourceUrl": item.source_url,
         "documentName": item.document_name,
         "documentType": item.document_type,
+        "evidenceDescription": item.evidence_description,
+        "ownerExplanation": item.owner_explanation,
         "attachedBy": item.attached_by,
         "attachedAt": item.attached_at,
         "verifiedBy": item.verified_by,
         "verifiedAt": item.verified_at,
+        "decision": item.decision,
+        "reviewerFeedback": item.reviewer_feedback,
+        "decidedBy": item.decided_by,
+        "decidedAt": item.decided_at,
     }
 
 
@@ -170,6 +179,7 @@ def attach_evidence(
     payload: EvidenceRequestAttach,
     db: DbSession,
     role: Annotated[str, Depends(get_role)],
+    x_user: Annotated[str | None, Header()] = None,
 ):
     item = db.get(EvidenceRequest, request_id)
     if item is None:
@@ -180,12 +190,17 @@ def attach_evidence(
             "conflict",
             "Evidence can only be attached to an open evidence request.",
         )
+    actor = (x_user or "").strip()
+    if role == "creator" and actor not in {item.assignee, item.assignee.split(" (")[0]}:
+        raise _error(403, "forbidden", "Only the assigned owner can submit evidence.")
 
     item.source_type = payload.sourceType
     item.source_url = payload.sourceUrl
     item.document_name = payload.documentName
     item.document_type = payload.documentType
-    item.attached_by = role
+    item.evidence_description = payload.evidenceDescription
+    item.owner_explanation = payload.ownerExplanation
+    item.attached_by = actor or role
     item.attached_at = func.now()
 
     db.add(
@@ -197,6 +212,124 @@ def attach_evidence(
                 "evidence_request_id": item.id,
                 "source_type": payload.sourceType,
                 "assignee": item.assignee,
+            },
+        )
+    )
+    db.commit()
+    db.refresh(item)
+    return to_response(item)
+
+
+def _reviewer_only(role: str) -> None:
+    if role not in {"reviewer", "admin", "brand_manager"}:
+        raise _error(403, "forbidden", "Only authorised reviewers can decide evidence.")
+
+
+@router.get("/{request_id}", response_model=EvidenceRequestResponse)
+def get_evidence_request(request_id: int, db: DbSession):
+    item = db.get(EvidenceRequest, request_id)
+    if item is None:
+        raise _error(404, "not_found", "Evidence request not found")
+    return to_response(item)
+
+
+@router.get(
+    "/{request_id}/activity",
+    response_model=list[EvidenceActivityResponse],
+)
+def list_evidence_activity(request_id: int, db: DbSession):
+    if db.get(EvidenceRequest, request_id) is None:
+        raise _error(404, "not_found", "Evidence request not found")
+    events = (
+        db.query(AuditEvent)
+        .filter(AuditEvent.details["evidence_request_id"].as_integer() == request_id)
+        .order_by(AuditEvent.created_at.asc(), AuditEvent.id.asc())
+        .all()
+    )
+    return [
+        {
+            "id": event.id,
+            "eventType": event.action,
+            "actor": event.actor,
+            "timestamp": event.created_at,
+            "details": event.details,
+        }
+        for event in events
+    ]
+
+
+@router.post(
+    "/{request_id}/approve",
+    response_model=EvidenceRequestResponse,
+)
+def approve_evidence_request(
+    request_id: int,
+    payload: EvidenceDecision,
+    db: DbSession,
+    role: Annotated[str, Depends(get_role)],
+):
+    _reviewer_only(role)
+    item = db.get(EvidenceRequest, request_id)
+    if item is None:
+        raise _error(404, "not_found", "Evidence request not found")
+    if item.status != "open" or item.decision is not None:
+        raise _error(409, "conflict", "This evidence request already has a final decision.")
+    if item.source_type is None:
+        raise _error(409, "conflict", "Evidence must be submitted before approval.")
+    item.status = "fulfilled"
+    item.decision = "approved"
+    item.reviewer_feedback = payload.feedback
+    item.decided_by = role
+    item.decided_at = func.now()
+    item.verified_by = role
+    item.verified_at = func.now()
+    db.add(
+        AuditEvent(
+            actor=role,
+            action="evidence_request_approved",
+            content_id=None,
+            details={
+                "evidence_request_id": item.id,
+                "feedback": payload.feedback,
+            },
+        )
+    )
+    db.commit()
+    db.refresh(item)
+    return to_response(item)
+
+
+@router.post(
+    "/{request_id}/reject",
+    response_model=EvidenceRequestResponse,
+)
+def reject_evidence_request(
+    request_id: int,
+    payload: EvidenceDecision,
+    db: DbSession,
+    role: Annotated[str, Depends(get_role)],
+):
+    _reviewer_only(role)
+    item = db.get(EvidenceRequest, request_id)
+    if item is None:
+        raise _error(404, "not_found", "Evidence request not found")
+    if item.status != "open" or item.decision is not None:
+        raise _error(409, "conflict", "This evidence request already has a final decision.")
+    if item.source_type is None:
+        raise _error(409, "conflict", "Evidence must be submitted before rejection.")
+    item.status = "dismissed"
+    item.decision = "rejected"
+    item.reviewer_feedback = payload.feedback
+    item.decided_by = role
+    item.decided_at = func.now()
+    db.add(
+        AuditEvent(
+            actor=role,
+            action="evidence_request_rejected",
+            content_id=None,
+            details={
+                "evidence_request_id": item.id,
+                "feedback": payload.feedback,
             },
         )
     )

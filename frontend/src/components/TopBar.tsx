@@ -15,6 +15,7 @@ const NAV = [
     key: "guidelines",
   },
   { href: "/queue", label: "Review Queue", key: "queue" },
+  { href: "/evidence", label: "Evidence Requests", key: "evidence" },
   { href: "/audit", label: "Audit Trail", key: "audit" },
 ];
 
@@ -65,6 +66,8 @@ export default function TopBar() {
                     ? pathname === "/knowledge"
                     : item.key === "queue"
                       ? pathname === "/queue" || pathname.startsWith("/queue/")
+                      : item.key === "evidence"
+                        ? pathname === "/evidence" || pathname.startsWith("/evidence/")
                       : pathname === "/audit" || pathname.startsWith("/audit/");
             return (
               <li key={item.href}>
