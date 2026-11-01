@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useSyncExternalStore } from "react";
-import { api, getRole } from "./api";
+import { ApiError, api, getRole } from "./api";
 import { EMPTY_BRAND_DATA, type BrandData } from "./brand-data";
 import { toDemoFinding, type DemoFinding } from "./findings";
 import { loadBrandData } from "./knowledge";
@@ -87,6 +87,25 @@ function errorMessage(cause: unknown): string {
   return cause instanceof Error
     ? cause.message
     : "The backend data could not be loaded.";
+}
+
+/**
+ * Cold-start handling. Free hosting plans (for example the Render free tier)
+ * sleep the backend after inactivity; the first load after that has to wait
+ * for the service to boot, so failing request is retried before giving up.
+ */
+const COLD_START_RETRY_DELAYS_MS = [20000, 40000];
+
+function isNetworkError(cause: unknown): boolean {
+  return (
+    cause instanceof ApiError &&
+    cause.status === 0 &&
+    cause.code === "network_error"
+  );
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
 }
 
 interface LoadOptions {
@@ -223,39 +242,62 @@ async function loadFromBackend(
   }
 
   try {
-    const [knowledge, documents, audit] = await Promise.all([
-      loadBrandData(),
-      api.listContent(),
-      api.getAudit(),
-    ]);
-    const [findings, comments] = await Promise.all([
-      fetchFindings(documents, knowledge),
-      fetchComments(documents),
-    ]);
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const [knowledge, documents, audit] = await Promise.all([
+          loadBrandData(),
+          api.listContent(),
+          api.getAudit(),
+        ]);
+        const [findings, comments] = await Promise.all([
+          fetchFindings(documents, knowledge),
+          fetchComments(documents),
+        ]);
 
-    workspace = {
-      knowledge,
-      documents,
-      findings,
-      comments,
-      history: audit.map((event) => ({
-        id: event.id,
-        content_id: event.content_id,
-        content_title: currentTitle(event.content_id, documents),
-        at: event.created_at,
-        actor: event.actor,
-        action: event.action,
-        detail: describeAudit(
-          event,
-          currentTitle(event.content_id, documents),
-        ),
-        status_change: auditStatusChange(event),
-      })),
-      isLoaded: true,
-      isLoading: false,
-      error: null,
-    };
-    loadedRole = role;
+        workspace = {
+          knowledge,
+          documents,
+          findings,
+          comments,
+          history: audit.map((event) => ({
+            id: event.id,
+            content_id: event.content_id,
+            content_title: currentTitle(event.content_id, documents),
+            at: event.created_at,
+            actor: event.actor,
+            action: event.action,
+            detail: describeAudit(
+              event,
+              currentTitle(event.content_id, documents),
+            ),
+            status_change: auditStatusChange(event),
+          })),
+          isLoaded: true,
+          isLoading: false,
+          error: null,
+        };
+        loadedRole = role;
+        break;
+      } catch (cause) {
+        // Only a sleeping backend that has to wake up is retried; other
+        // failures (HTTP errors, aborts) surface immediately.
+        if (
+          options.silent ||
+          attempt >= COLD_START_RETRY_DELAYS_MS.length ||
+          !isNetworkError(cause)
+        ) {
+          throw cause;
+        }
+        workspace = {
+          ...workspace,
+          isLoading: true,
+          error:
+            "The backend is starting up after inactivity (this can take about a minute). Retrying…",
+        };
+        notify();
+        await sleep(COLD_START_RETRY_DELAYS_MS[attempt]);
+      }
+    }
   } catch (cause) {
     workspace = {
       ...workspace,
