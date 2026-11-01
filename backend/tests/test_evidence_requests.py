@@ -485,5 +485,127 @@ class AttachEvidenceTests(unittest.TestCase):
         self.assertIsNone(item["sourceUrl"])
 
 
+class VerifyEvidenceRequestTests(unittest.TestCase):
+    def setUp(self):
+        self.engine = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        Base.metadata.create_all(self.engine)
+        self.client = build_client(self.engine)
+        with Session(self.engine) as db:
+            content = Content(
+                title="Landing page",
+                body="Visit our site for a wide audience.",
+                created_by="Asha (Creator)",
+            )
+            db.add(content)
+            db.flush()
+            finding = Finding(
+                content_id=content.id,
+                content_version=1,
+                check_type="unsupported_claim",
+                severity="warning",
+                message="An unsupported claim.",
+                evidence={},
+            )
+            db.add(finding)
+            db.flush()
+            attached = EvidenceRequest(
+                finding_id=finding.id,
+                claim_text="Blocks ads for a wide audience.",
+                reason="Need approval proof before publishing.",
+                assignee="Ravi (Reviewer)",
+                status="open",
+                source_type="url",
+                source_url="https://luminahome.com/report",
+                attached_by="brand_manager",
+            )
+            bare = EvidenceRequest(
+                finding_id=finding.id,
+                claim_text="Claim without proof.",
+                reason="Need approval proof before publishing.",
+                assignee="Ravi (Reviewer)",
+                status="open",
+            )
+            db.add(attached)
+            db.add(bare)
+            db.commit()
+            self.attached_id = attached.id
+            self.bare_id = bare.id
+
+    def tearDown(self):
+        self.engine.dispose()
+
+    def fetch_item(self, request_id):
+        response = self.client.get(
+            "/api/evidence-requests", headers={"X-Role": "reviewer"}
+        )
+        self.assertEqual(response.status_code, 200)
+        items = [i for i in response.json() if i["id"] == request_id]
+        self.assertEqual(len(items), 1)
+        return items[0]
+
+    def verify(self, request_id, role="reviewer"):
+        return self.client.post(
+            f"/api/evidence-requests/{request_id}/verify",
+            headers={"X-Role": role},
+        )
+
+    def test_reviewer_verify_sets_fulfilled(self):
+        response = self.verify(self.attached_id)
+        self.assertEqual(response.status_code, 200)
+        item = self.fetch_item(self.attached_id)
+        self.assertEqual(item["status"], "fulfilled")
+        self.assertEqual(item["verifiedBy"], "reviewer")
+        datetime.fromisoformat(item["verifiedAt"])
+        with Session(self.engine) as db:
+            event = (
+                db.query(AuditEvent)
+                .filter(AuditEvent.action == "evidence_request_verified")
+                .one()
+            )
+            self.assertIsNone(event.content_id)
+            self.assertEqual(event.details["evidence_request_id"], self.attached_id)
+            self.assertEqual(event.details["source_type"], "url")
+
+    def test_verify_non_reviewer_returns_403(self):
+        before = self.fetch_item(self.attached_id)
+        for role in ("admin", "brand_manager", "creator"):
+            with self.subTest(role=role):
+                response = self.verify(self.attached_id, role=role)
+                self.assertEqual(response.status_code, 403)
+                self.assertEqual(response.json()["error"], "forbidden")
+        after = self.fetch_item(self.attached_id)
+        self.assertEqual(after["status"], "open")
+        self.assertIsNone(after["verifiedBy"])
+
+    def test_verify_twice_returns_409(self):
+        first = self.verify(self.attached_id)
+        self.assertEqual(first.status_code, 200)
+        verified_at = self.fetch_item(self.attached_id)["verifiedAt"]
+        second = self.verify(self.attached_id)
+        self.assertEqual(second.status_code, 409)
+        self.assertEqual(second.json()["error"], "conflict")
+        self.assertEqual(
+            self.fetch_item(self.attached_id)["verifiedAt"], verified_at
+        )
+
+    def test_verify_unattached_request_returns_409(self):
+        response = self.verify(self.bare_id)
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(response.json()["error"], "conflict")
+        self.assertIn("evidence", response.json()["message"].lower())
+        item = self.fetch_item(self.bare_id)
+        self.assertEqual(item["status"], "open")
+        self.assertIsNone(item["verifiedBy"])
+
+    def test_verify_unknown_request_returns_404(self):
+        response = self.verify(999999)
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["error"], "not_found")
+
+
 if __name__ == "__main__":
     unittest.main()
