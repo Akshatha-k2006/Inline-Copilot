@@ -14,9 +14,10 @@ import {
   useWorkspace,
 } from "@/lib/workspace-store";
 import type { DemoFinding } from "@/lib/findings";
-import type { Content, FindingStatus } from "@/lib/types";
+import type { Content, EvidenceRequest, FindingStatus } from "@/lib/types";
 import { formatTimestamp } from "@/lib/format";
 import { contentStatusLabel } from "@/lib/workflow";
+import { api } from "@/lib/api";
 import FindingsPanel from "./FindingsPanel";
 import HighlightedDraft from "./HighlightedDraft";
 
@@ -91,6 +92,11 @@ export default function Editor() {
   const [reviewing, setReviewing] = useState(false);
   const [reviewNotice, setReviewNotice] = useState("");
   const [busyFindingIds, setBusyFindingIds] = useState<number[]>([]);
+  const [evidenceRequests, setEvidenceRequests] = useState<EvidenceRequest[]>(
+    [],
+  );
+  const [evidenceLoading, setEvidenceLoading] = useState(false);
+  const [evidenceError, setEvidenceError] = useState("");
   const [showHighlights, setShowHighlights] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const newTitleInputRef = useRef<HTMLInputElement>(null);
@@ -152,6 +158,33 @@ export default function Editor() {
     setReviewNotice("");
     setShowHighlights(false);
   }, [document?.id]);
+
+  useEffect(() => {
+    if (!document || !workspace.isLoaded) return;
+    let active = true;
+    setEvidenceLoading(true);
+    setEvidenceError("");
+    void api
+      .listEvidenceRequests()
+      .then((requests) => {
+        if (active) setEvidenceRequests(requests);
+      })
+      .catch((cause: unknown) => {
+        if (active) {
+          setEvidenceError(
+            cause instanceof Error
+              ? cause.message
+              : "Evidence requests could not be loaded.",
+          );
+        }
+      })
+      .finally(() => {
+        if (active) setEvidenceLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [document?.id, workspace.isLoaded]);
 
   // Success notices are transient: they clear themselves after a few seconds.
   useEffect(() => {
@@ -234,6 +267,23 @@ export default function Editor() {
         ? "Finding dismissed and recorded in the audit trail."
         : "Finding resolved.",
     );
+  }
+
+  function requestEvidence(
+    finding: DemoFinding,
+    reason: string,
+    assignee: string,
+  ): Promise<void> {
+    return api
+      .createEvidenceRequest({
+        claimText: finding.text,
+        findingId: finding.id,
+        reason,
+        assignee,
+      })
+      .then((request) => {
+        setEvidenceRequests((requests) => [...requests, request]);
+      });
   }
 
   function submit(): Promise<void> {
@@ -823,6 +873,10 @@ export default function Editor() {
               onResolve={(finding, status, finalText) =>
                 resolve(finding, status, finalText)
               }
+              evidenceRequests={evidenceRequests}
+              evidenceLoading={evidenceLoading}
+              evidenceError={evidenceError}
+              onRequestEvidence={requestEvidence}
             />
           )}
         </div>

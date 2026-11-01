@@ -170,6 +170,29 @@ class EvidenceRequestEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         self.assertEqual(response.json()["error"], "validation_error")
 
+    def test_create_unknown_assignee_returns_422(self):
+        response = self.client.post(
+            "/api/evidence-requests",
+            headers={"X-Role": "creator"},
+            json=self.create_payload(assignee="Unassigned"),
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["error"], "validation_error")
+
+    def test_create_claim_mismatch_returns_422_when_finding_has_claim_text(self):
+        with Session(self.engine) as db:
+            finding = db.get(Finding, self.claim_finding_id)
+            finding.evidence = {"matched_text": "The stored claim."}
+            db.commit()
+
+        response = self.client.post(
+            "/api/evidence-requests",
+            headers={"X-Role": "creator"},
+            json=self.create_payload(),
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["error"], "validation_error")
+
     def test_create_writes_audit_event(self):
         response = self.client.post(
             "/api/evidence-requests",
@@ -222,6 +245,7 @@ class ListEvidenceRequestTests(unittest.TestCase):
             )
             db.add(finding)
             db.flush()
+            self.finding_id = finding.id
             rows = (
                 EvidenceRequest(
                     finding_id=finding.id,
@@ -295,6 +319,15 @@ class ListEvidenceRequestTests(unittest.TestCase):
             [(item["assignee"], item["claimText"]) for item in body],
             [("Ravi (Reviewer)", "Claim A.")],
         )
+
+    def test_filter_by_finding_id(self):
+        response = self.client.get(
+            "/api/evidence-requests",
+            headers={"X-Role": "reviewer"},
+            params={"findingId": self.finding_id},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()), 3)
 
     def test_filters_combine(self):
         response = self.client.get(

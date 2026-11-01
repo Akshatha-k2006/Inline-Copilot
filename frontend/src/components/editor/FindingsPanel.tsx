@@ -2,6 +2,7 @@
 
 import type { DemoFinding } from "@/lib/findings";
 import type { FindingStatus } from "@/lib/types";
+import type { EvidenceRequest } from "@/lib/types";
 import FindingCard from "./FindingCard";
 
 interface FindingsPanelProps {
@@ -21,6 +22,14 @@ interface FindingsPanelProps {
     finalText: string | null,
     dismissalReason?: string,
   ) => Promise<void>;
+  evidenceRequests?: EvidenceRequest[];
+  evidenceLoading?: boolean;
+  evidenceError?: string;
+  onRequestEvidence?: (
+    finding: DemoFinding,
+    reason: string,
+    assignee: string,
+  ) => Promise<void>;
 }
 
 export default function FindingsPanel({
@@ -35,6 +44,10 @@ export default function FindingsPanel({
   reviewedCustomText,
   onSelect,
   onResolve,
+  evidenceRequests = [],
+  evidenceLoading = false,
+  evidenceError = "",
+  onRequestEvidence,
 }: FindingsPanelProps) {
   const activeFindings =
     findings?.filter((finding) => finding.status === "open") ?? [];
@@ -215,6 +228,12 @@ export default function FindingsPanel({
                 selected={selectedFindingId === finding.id}
                 onSelect={onSelect}
                 onResolve={onResolve}
+                evidenceRequests={evidenceRequests.filter(
+                  (request) => request.findingId === finding.id,
+                )}
+                evidenceLoading={evidenceLoading}
+                evidenceError={evidenceError}
+                onRequestEvidence={onRequestEvidence}
               />
             ))}
           </div>

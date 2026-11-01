@@ -1334,6 +1334,11 @@ a {
   font-size: 0.9rem;
 }
 
+.form-success {
+  color: #21744a;
+  font-size: 0.9rem;
+}
+
 /* Write & Review */
 .editor-page {
   display: flex;
@@ -1633,6 +1638,38 @@ a {
   border-radius: 7px;
   background: #fff;
   font: inherit;
+}
+
+.evidence-request {
+  display: grid;
+  gap: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
+.evidence-request-form {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #d8cffb;
+  border-radius: 9px;
+  background: #faf9ff;
+}
+
+.evidence-request-form select {
+  min-height: 40px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+}
+
+.evidence-request-status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9rem;
 }
 
 .finding-card {

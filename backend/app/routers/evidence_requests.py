@@ -52,6 +52,7 @@ def list_evidence_requests(
     role: Annotated[str, Depends(get_role)],
     status_filter: str | None = Query(default=None, alias="status"),
     assignee: str | None = Query(default=None),
+    finding_id: int | None = Query(default=None, alias="findingId"),
 ):
     if status_filter is not None and status_filter not in EVIDENCE_REQUEST_STATUSES:
         raise _error(422, "validation_error", "Unknown evidence request status.")
@@ -61,6 +62,8 @@ def list_evidence_requests(
         query = query.where(EvidenceRequest.status == status_filter)
     if assignee is not None:
         query = query.where(EvidenceRequest.assignee == assignee)
+    if finding_id is not None:
+        query = query.where(EvidenceRequest.finding_id == finding_id)
 
     items = query.order_by(EvidenceRequest.id).all()
     return [to_response(item) for item in items]
@@ -83,6 +86,17 @@ def create_evidence_request(
             "validation_error",
             "Evidence requests are only supported for unsupported_claim findings.",
         )
+    evidence = finding.evidence if isinstance(finding.evidence, dict) else {}
+    matched_text = evidence.get("matched_text")
+    if isinstance(matched_text, str) and matched_text.strip():
+        if payload.claimText != matched_text.strip():
+            raise _error(
+                422,
+                "validation_error",
+                "Claim text must match the unsupported claim finding.",
+            )
+    if payload.assignee not in EVIDENCE_REQUEST_ASSIGNEES:
+        raise _error(422, "validation_error", "Assigned owner is not valid.")
 
     item = EvidenceRequest(
         finding_id=finding.id,
