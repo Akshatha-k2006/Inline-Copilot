@@ -94,6 +94,23 @@ class ContentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class ContentImageResponse(BaseModel):
+    id: int
+    content_id: int
+    filename: str
+    mime_type: str
+    alt_text: str
+    url: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class ContentImageAltTextRequest(BaseModel):
+    alt_text: str = Field(max_length=1000)
+
+    model_config = ConfigDict(extra="forbid")
+
+
 class AuditEventResponse(BaseModel):
     id: int
     content_id: int | None

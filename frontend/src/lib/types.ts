@@ -34,6 +34,17 @@ export interface Content {
   updated_at: string;
 }
 
+export interface ContentImage {
+  id: number;
+  content_id: number;
+  filename: string;
+  mime_type: string;
+  alt_text: string;
+  url: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface ContentDraft {
   title: string;
   content_type: string;

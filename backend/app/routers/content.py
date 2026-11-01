@@ -1,23 +1,31 @@
 import logging
+import uuid
+from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, UploadFile
+from fastapi.responses import FileResponse
 from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.dependencies import get_role
-from app.models import AuditEvent, Content, Finding
+from app.models import AuditEvent, Content, ContentImage, Finding
 from app.schemas import (
     AuditEventResponse,
     ContentCreateRequest,
     ContentResponse,
     ContentUpdateRequest,
+    ContentImageAltTextRequest,
+    ContentImageResponse,
 )
 
 router = APIRouter(tags=["Content"])
 logger = logging.getLogger(__name__)
+UPLOAD_DIR = Path(__file__).resolve().parents[2] / "uploads"
+MAX_IMAGE_BYTES = 5 * 1024 * 1024
+ALLOWED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/webp"}
 
 
 def _actor_name(value: str) -> str:
@@ -35,6 +43,25 @@ def _error(status: int, code: str, message: str) -> HTTPException:
 def _authorize_content(content: Content, role: str, actor: str) -> None:
     if role == "creator" and content.created_by != _actor_name(actor):
         raise _error(403, "forbidden", "Creators can access only their own content.")
+
+
+def _image_response(image: ContentImage) -> dict:
+    return {
+        "id": image.id,
+        "content_id": image.content_id,
+        "filename": image.filename,
+        "mime_type": image.mime_type,
+        "alt_text": image.alt_text,
+        "url": f"/api/images/{image.id}/file",
+        "created_at": image.created_at,
+        "updated_at": image.updated_at,
+    }
+
+
+def _image_actor_allowed(content: Content, role: str, actor: str) -> None:
+    _authorize_content(content, role, actor)
+    if role != "creator" or content.status != "draft":
+        raise _error(403, "forbidden", "Only the creator can edit images in a draft.")
 
 
 @router.get("/content", response_model=list[ContentResponse])
@@ -221,6 +248,118 @@ def delete_content(
         db.rollback()
         logger.exception("Unable to delete content.")
         raise _error(500, "content_failed", "Unable to delete content.") from exc
+
+
+@router.get("/content/{content_id}/images", response_model=list[ContentImageResponse])
+def list_content_images(
+    content_id: int,
+    x_user: Annotated[str, Header()],
+    role: Annotated[str, Depends(get_role)],
+    db: Session = Depends(get_db),
+):
+    content = db.get(Content, content_id)
+    if content is None:
+        raise _error(404, "not_found", "Content not found.")
+    _authorize_content(content, role, x_user)
+    return [_image_response(item) for item in db.query(ContentImage).filter(
+        ContentImage.content_id == content_id
+    ).order_by(ContentImage.id).all()]
+
+
+@router.post("/content/{content_id}/images", response_model=ContentImageResponse, status_code=201)
+async def upload_content_image(
+    content_id: int,
+    x_user: Annotated[str, Header()],
+    role: Annotated[str, Depends(get_role)],
+    db: Session = Depends(get_db),
+    file: UploadFile = File(...),
+):
+    content = db.get(Content, content_id)
+    if content is None:
+        raise _error(404, "not_found", "Content not found.")
+    actor = _actor_name(x_user)
+    _image_actor_allowed(content, role, actor)
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise _error(422, "validation_error", "Only PNG, JPEG, and WebP images are supported.")
+    data = await file.read(MAX_IMAGE_BYTES + 1)
+    if len(data) > MAX_IMAGE_BYTES:
+        raise _error(413, "file_too_large", "Images must be 5 MB or smaller.")
+    if not data:
+        raise _error(422, "validation_error", "The image file is empty.")
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+    suffix = ".jpg" if file.content_type == "image/jpeg" else f".{file.content_type.split('/')[-1]}"
+    path = UPLOAD_DIR / f"{uuid.uuid4().hex}{suffix}"
+    try:
+        path.write_bytes(data)
+        item = ContentImage(
+            content_id=content_id,
+            filename=file.filename or "image",
+            mime_type=file.content_type,
+            storage_path=str(path),
+            alt_text="",
+        )
+        db.add(item)
+        db.flush()
+        db.add(AuditEvent(
+            content_id=content_id,
+            actor=actor,
+            action="content_image_uploaded",
+            details={"image_id": item.id, "filename": item.filename},
+        ))
+        db.commit()
+        db.refresh(item)
+        return _image_response(item)
+    except OSError as exc:
+        db.rollback()
+        if path.exists():
+            path.unlink()
+        logger.exception("Unable to store content image.")
+        raise _error(500, "image_upload_failed", "Unable to store the image.") from exc
+    except SQLAlchemyError as exc:
+        db.rollback()
+        if path.exists():
+            path.unlink()
+        logger.exception("Unable to persist content image.")
+        raise _error(500, "image_upload_failed", "Unable to save the image.") from exc
+
+
+@router.patch("/content-images/{image_id}", response_model=ContentImageResponse)
+def update_content_image_alt_text(
+    image_id: int,
+    payload: ContentImageAltTextRequest,
+    x_user: Annotated[str, Header()],
+    role: Annotated[str, Depends(get_role)],
+    db: Session = Depends(get_db),
+):
+    image = db.get(ContentImage, image_id)
+    if image is None:
+        raise _error(404, "not_found", "Image not found.")
+    content = db.get(Content, image.content_id)
+    if content is None:
+        raise _error(404, "not_found", "Content not found.")
+    actor = _actor_name(x_user)
+    _image_actor_allowed(content, role, actor)
+    image.alt_text = payload.alt_text.strip()
+    db.add(AuditEvent(
+        content_id=content.id,
+        actor=actor,
+        action="content_image_alt_text_updated",
+        details={"image_id": image.id, "has_alt_text": bool(image.alt_text)},
+    ))
+    db.commit()
+    db.refresh(image)
+    return _image_response(image)
+
+
+@router.get("/images/{image_id}/file")
+def get_content_image_file(image_id: int, db: Session = Depends(get_db)):
+    image = db.get(ContentImage, image_id)
+    if image is None:
+        raise _error(404, "not_found", "Image not found.")
+    path = Path(image.storage_path)
+    if not path.is_file():
+        raise _error(404, "not_found", "Image file is unavailable.")
+    return FileResponse(path, media_type=image.mime_type, filename=image.filename)
 
 
 @router.get("/content/{content_id}/findings")
