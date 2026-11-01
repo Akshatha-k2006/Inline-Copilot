@@ -71,6 +71,9 @@ class ContentCreateRequest(BaseModel):
     content_type: str = Field(min_length=1, max_length=100)
     # A new draft can be empty; the editor supplies its own placeholder text.
     body: str = ""
+    foreground_color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{3}([0-9A-Fa-f]{3})?$")
+    background_color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{3}([0-9A-Fa-f]{3})?$")
+    text_size: Literal["normal", "large"] | None = None
 
     model_config = ConfigDict(extra="forbid")
 
@@ -92,6 +95,9 @@ class ContentResponse(BaseModel):
     title: str
     content_type: str
     body: str
+    foreground_color: str | None
+    background_color: str | None
+    text_size: Literal["normal", "large"] | None
     status: str
     version: int
     reviewed_version: int | None

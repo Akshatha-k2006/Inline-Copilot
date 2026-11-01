@@ -10,6 +10,14 @@ const ACCEPTED_TYPES = ["image/png", "image/jpeg", "image/webp"];
 interface ImageAccessibilityPanelProps {
   contentId: number;
   canEdit: boolean;
+  foregroundColor: string | null;
+  backgroundColor: string | null;
+  textSize: "normal" | "large" | null;
+  onSaveContrast: (
+    foregroundColor: string | null,
+    backgroundColor: string | null,
+    textSize: "normal" | "large" | null,
+  ) => Promise<void>;
 }
 
 function imageUrl(image: ContentImage): string {
@@ -19,6 +27,10 @@ function imageUrl(image: ContentImage): string {
 export default function ImageAccessibilityPanel({
   contentId,
   canEdit,
+  foregroundColor,
+  backgroundColor,
+  textSize,
+  onSaveContrast,
 }: ImageAccessibilityPanelProps) {
   const [images, setImages] = useState<ContentImage[]>([]);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -28,6 +40,11 @@ export default function ImageAccessibilityPanel({
   const [savingId, setSavingId] = useState<number | null>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [contrastForeground, setContrastForeground] = useState(foregroundColor ?? "");
+  const [contrastBackground, setContrastBackground] = useState(backgroundColor ?? "");
+  const [contrastTextSize, setContrastTextSize] = useState<"normal" | "large">(
+    textSize ?? "normal",
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
   const altInputRefs = useRef<Record<number, HTMLInputElement | null>>({});
 
@@ -58,6 +75,12 @@ export default function ImageAccessibilityPanel({
       active = false;
     };
   }, [contentId]);
+
+  useEffect(() => {
+    setContrastForeground(foregroundColor ?? "");
+    setContrastBackground(backgroundColor ?? "");
+    setContrastTextSize(textSize ?? "normal");
+  }, [foregroundColor, backgroundColor, textSize]);
 
   useEffect(
     () => () => {
@@ -252,6 +275,67 @@ export default function ImageAccessibilityPanel({
           })}
         </div>
       )}
+      <div className="contrast-controls">
+        <div>
+          <p className="eyebrow">Color contrast</p>
+          <p className="muted">
+            Optional WCAG AA check for the configured text colors. Enter actual
+            colors to include this check in the next review.
+          </p>
+        </div>
+        <div className="contrast-control-grid">
+          <label className="form-field">
+            Foreground color
+            <input
+              type="text"
+              value={contrastForeground}
+              onChange={(event) => setContrastForeground(event.target.value)}
+              placeholder="#26323B"
+              disabled={!canEdit}
+            />
+          </label>
+          <label className="form-field">
+            Background color
+            <input
+              type="text"
+              value={contrastBackground}
+              onChange={(event) => setContrastBackground(event.target.value)}
+              placeholder="#FAF8F3"
+              disabled={!canEdit}
+            />
+          </label>
+          <label className="form-field">
+            Text size
+            <select
+              value={contrastTextSize}
+              onChange={(event) =>
+                setContrastTextSize(event.target.value as "normal" | "large")
+              }
+              disabled={!canEdit}
+            >
+              <option value="normal">Normal text (4.5:1)</option>
+              <option value="large">Large text (3:1)</option>
+            </select>
+          </label>
+        </div>
+        {canEdit && (
+          <button
+            type="button"
+            className="button"
+            onClick={() =>
+              void onSaveContrast(
+                contrastForeground.trim() || null,
+                contrastBackground.trim() || null,
+                contrastForeground.trim() && contrastBackground.trim()
+                  ? contrastTextSize
+                  : null,
+              )
+            }
+          >
+            Save color settings
+          </button>
+        )}
+      </div>
     </section>
   );
 }
