@@ -1,5 +1,6 @@
 from datetime import date, datetime
 from typing import Literal
+from urllib.parse import urlparse
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -187,6 +188,20 @@ EVIDENCE_REQUEST_ASSIGNEES: tuple[str, ...] = (
     "Admin",
 )
 
+SUPPORTED_DOCUMENT_TYPES: tuple[str, ...] = (
+    "pdf",
+    "doc",
+    "docx",
+    "xls",
+    "xlsx",
+    "ppt",
+    "pptx",
+    "png",
+    "jpg",
+    "jpeg",
+    "webp",
+)
+
 
 class EvidenceRequestCreate(BaseModel):
     claimText: str = Field(min_length=1)
@@ -205,6 +220,55 @@ class EvidenceRequestCreate(BaseModel):
         return self
 
 
+class EvidenceRequestAttach(BaseModel):
+    sourceType: Literal["url", "document"]
+    sourceUrl: str | None = None
+    documentName: str | None = None
+    documentType: str | None = None
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def validate_source(self) -> "EvidenceRequestAttach":
+        self.sourceUrl = self.sourceUrl.strip() if self.sourceUrl else None
+        self.documentName = (
+            self.documentName.strip() if self.documentName else None
+        )
+        self.documentType = (
+            self.documentType.strip() if self.documentType else None
+        )
+        if self.sourceType == "url":
+            if not self.sourceUrl:
+                raise ValueError("sourceUrl is required for a url source.")
+            parsed = urlparse(self.sourceUrl)
+            if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                raise ValueError("sourceUrl must be a valid http(s) URL.")
+            if self.documentName is not None or self.documentType is not None:
+                raise ValueError(
+                    "documentName and documentType are only valid for a "
+                    "document source."
+                )
+        else:
+            if self.sourceUrl is not None:
+                raise ValueError("sourceUrl is only valid for a url source.")
+            if not self.documentName:
+                raise ValueError(
+                    "documentName is required for a document source."
+                )
+            if not self.documentType:
+                raise ValueError(
+                    "documentType is required for a document source."
+                )
+            if self.documentType not in SUPPORTED_DOCUMENT_TYPES:
+                raise ValueError(
+                    "documentType must be one of: "
+                    + ", ".join(SUPPORTED_DOCUMENT_TYPES)
+                    + "."
+                )
+            self.sourceUrl = None
+        return self
+
+
 class EvidenceRequestResponse(BaseModel):
     id: int
     claimText: str
@@ -214,3 +278,11 @@ class EvidenceRequestResponse(BaseModel):
     status: str
     createdAt: datetime
     updatedAt: datetime
+    sourceType: str | None
+    sourceUrl: str | None
+    documentName: str | None
+    documentType: str | None
+    attachedBy: str | None
+    attachedAt: datetime | None
+    verifiedBy: str | None
+    verifiedAt: datetime | None

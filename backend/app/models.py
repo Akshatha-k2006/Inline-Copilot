@@ -174,6 +174,18 @@ class EvidenceRequest(Base):
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     assignee: Mapped[str] = mapped_column(String(150), nullable=False)
     status: Mapped[str] = mapped_column(String(50), default="open")
+    source_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    document_name: Mapped[str | None] = mapped_column(String(250), nullable=True)
+    document_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    attached_by: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    attached_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    verified_by: Mapped[str | None] = mapped_column(String(150), nullable=True)
+    verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
