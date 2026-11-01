@@ -3,9 +3,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.db import Base, engine, migrate_review_schema
+from app.db import Base, engine, ensure_model_schema, migrate_review_schema
 from app import models
-from app.exception_handlers import register_exception_handlers
+from app.exception_handlers import (
+    CatchUnhandledExceptionsMiddleware,
+    register_exception_handlers,
+)
 from app.routers import (
     health,
     seed,
@@ -26,6 +29,7 @@ origins = [
     if origin.strip()
 ]
 
+app.add_middleware(CatchUnhandledExceptionsMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -35,6 +39,7 @@ app.add_middleware(
 )
 
 Base.metadata.create_all(bind=engine)
+ensure_model_schema(engine)
 migrate_review_schema(engine)
 
 app.include_router(health.router, prefix="/api")
