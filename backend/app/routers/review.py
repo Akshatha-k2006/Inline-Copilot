@@ -385,17 +385,35 @@ def update_finding(
             if isinstance(finding.evidence, dict)
             else None
         )
-        if (
-            not isinstance(start, int)
-            or isinstance(start, bool)
-            or not isinstance(end, int)
-            or isinstance(end, bool)
-            or not isinstance(matched_text, str)
-            or start < 0
-            or start >= end
-            or end > len(content.body)
-            or content.body[start:end] != matched_text
-        ):
+        has_int_span = (
+            isinstance(start, int)
+            and not isinstance(start, bool)
+            and isinstance(end, int)
+            and not isinstance(end, bool)
+        )
+        has_span = (
+            has_int_span
+            and isinstance(matched_text, str)
+            and start >= 0
+            and start < end
+            and end <= len(content.body)
+            and content.body[start:end] == matched_text
+        )
+        if not has_int_span and action_request.action == "dismiss":
+            # Span-less findings (image-derived checks such as
+            # accessibility) can be dismissed without a verifiable span;
+            # dismissing changes no text.
+            start = None
+            end = None
+            matched_text = None
+        elif not has_int_span:
+            raise _action_error(
+                409,
+                "finding_not_textual",
+                "Only findings attached to content text can be accepted or "
+                "edited; dismiss this finding instead.",
+            )
+        elif not has_span:
             raise _action_error(
                 409,
                 "stale_finding",

@@ -151,5 +151,97 @@ class ReviewAccessibilityTests(unittest.TestCase):
         self.assertEqual(response.json()["error"], "validation_error")
 
 
+class AccessibilityFindingActionTests(unittest.TestCase):
+    def setUp(self):
+        self.engine = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        Base.metadata.create_all(self.engine)
+        llm_patch = patch(
+            "app.services.llm_reviewer.settings.llm_api_key", None
+        )
+        llm_patch.start()
+        self.addCleanup(llm_patch.stop)
+        with Session(self.engine) as db:
+            content = Content(
+                title="Landing page",
+                body="Visit our site for a wide audience.",
+                created_by="Asha",
+            )
+            db.add(content)
+            db.flush()
+            self.content_id = content.id
+            finding = Finding(
+                content_id=content.id,
+                content_version=1,
+                check_type="accessibility",
+                severity="warning",
+                message="Image 'banner.png' is missing alt text.",
+                evidence={
+                    "matched_text": "banner.png",
+                    "source": {"type": "image", "id": 1, "text": "banner.png"},
+                    "requires_manual_review": False,
+                },
+                suggested_fix=(
+                    "Add descriptive alt text for 'banner.png' so screen "
+                    "readers can describe it."
+                ),
+                start_offset=None,
+                end_offset=None,
+                status="open",
+            )
+            db.add(finding)
+            db.commit()
+            self.finding_id = finding.id
+
+        app = FastAPI()
+        register_exception_handlers(app)
+        app.include_router(review.router, prefix="/api")
+        app.include_router(content_router.router, prefix="/api")
+
+        def override_get_db():
+            with Session(self.engine) as db:
+                yield db
+
+        app.dependency_overrides[get_db] = override_get_db
+        self.client = TestClient(app, raise_server_exceptions=False)
+
+    def tearDown(self):
+        self.engine.dispose()
+
+    def act(self, action_body):
+        return self.client.patch(
+            f"/api/findings/{self.finding_id}",
+            headers={"X-Role": "creator", "X-User": "Asha (Creator)"},
+            json=action_body,
+        )
+
+    def test_dismiss_spanless_accessibility_finding(self):
+        response = self.act({"action": "dismiss"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["finding"]["status"], "dismissed")
+        with Session(self.engine) as db:
+            finding = db.get(Finding, self.finding_id)
+            self.assertEqual(finding.status, "dismissed")
+            self.assertIsNone(finding.start_offset)
+
+    def test_accept_and_edit_spanless_return_finding_not_textual(self):
+        for action_body in (
+            {"action": "accept"},
+            {"action": "edit", "replacement": "added description"},
+        ):
+            with self.subTest(action=action_body["action"]):
+                response = self.act(action_body)
+                self.assertEqual(response.status_code, 409)
+                self.assertEqual(
+                    response.json()["error"], "finding_not_textual"
+                )
+        with Session(self.engine) as db:
+            finding = db.get(Finding, self.finding_id)
+            self.assertEqual(finding.status, "open")
+
+
 if __name__ == "__main__":
     unittest.main()
