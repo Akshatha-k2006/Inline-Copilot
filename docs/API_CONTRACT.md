@@ -346,6 +346,47 @@ missing `X-User` returns `422`. Database failures return `500` with
 Comments attached to a `request_changes` decision are included in this
 collection and use the same authorization rules.
 
+## Evidence requests
+
+Evidence requests track work to find proof for claims that the review flagged
+as `unsupported_claim`. Any valid demo role (`admin`, `brand_manager`,
+`creator`, `reviewer`) may create and retrieve them through the standard
+`X-Role` header.
+
+- `POST /api/evidence-requests` accepts `claimText` (the claim text from the
+  finding), `findingId` (integer ID of an existing finding whose `check_type`
+  is `unsupported_claim`), `reason`, and `assignee` (a free-text owner, for
+  example a demo actor name). Leading and trailing whitespace is trimmed;
+  blank required fields are rejected. It returns `201` with the created
+  request:
+
+```json
+{
+  "id": 1,
+  "claimText": "Blocks ads for a wide audience.",
+  "findingId": 12,
+  "reason": "Need approval proof from the brand team before publishing.",
+  "assignee": "Ravi (Reviewer)",
+  "status": "open",
+  "createdAt": "2026-11-01T12:00:00",
+  "updatedAt": "2026-11-01T12:00:00"
+}
+```
+
+- `GET /api/evidence-requests` returns all requests ordered by ascending ID.
+  Optional query filters: `status` (one of `open`, `fulfilled`, `dismissed`)
+  and `assignee` (exact match). The filters combine.
+
+Error cases: an unknown `findingId` returns `404` with
+`{ "error": "not_found", "message": "Finding not found." }`; a finding whose
+`check_type` is not `unsupported_claim` returns `422` naming the check;
+missing or blank fields return `422` with
+`{ "error": "validation_error", "message": "..." }`; a `status` filter outside
+the enum returns `422`. Each successful create records an audit event with
+action `evidence_request_created` in the same transaction; its details include
+the finding ID, assignee, actor role, and the new request ID. Updating a
+request's status is not part of this API.
+
 ## Frontend integration and demo role context
 
 The Write & Review editor, review queue, and audit trail call these backend
