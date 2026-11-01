@@ -16,16 +16,25 @@ export type CheckType =
   | "tone"
   | "messaging"
   | "unsupported_claim"
-  | "outdated_info";
+  | "outdated_info"
+  | "accessibility";
 
 export type Severity = "high" | "medium" | "low";
-export type FindingStatus = "open" | "accepted" | "edited" | "dismissed";
+export type FindingStatus =
+  | "open"
+  | "accepted"
+  | "edited"
+  | "dismissed"
+  | "resolved";
 
 export interface Content {
   id: number;
   title: string;
   content_type: string;
   body: string;
+  foreground_color: string | null;
+  background_color: string | null;
+  text_size: "normal" | "large" | null;
   status: ContentStatus;
   version: number;
   reviewed_version: number | null;
@@ -49,6 +58,9 @@ export interface ContentDraft {
   title: string;
   content_type: string;
   body: string;
+  foreground_color?: string | null;
+  background_color?: string | null;
+  text_size?: "normal" | "large" | null;
 }
 
 export interface ContentUpdate extends ContentDraft {
@@ -215,7 +227,7 @@ export interface EvidenceActivity {
 }
 
 export interface FindingSource {
-  type: "term" | "guideline" | "fact";
+  type: "term" | "guideline" | "fact" | "accessibility";
   id: number;
   label: string;
 }
@@ -233,6 +245,15 @@ export interface Finding {
   suggestion?: string | null;
   status: FindingStatus;
   final_text?: string | null;
+  accessibility?: {
+    image_id?: number;
+    image_filename?: string;
+    foreground_color?: string;
+    background_color?: string;
+    contrast_ratio?: number;
+    required_ratio?: number;
+    text_size?: string;
+  };
 }
 
 export interface Health {

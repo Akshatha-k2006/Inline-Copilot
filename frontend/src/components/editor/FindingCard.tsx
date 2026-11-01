@@ -28,6 +28,8 @@ interface FindingCardProps {
     reason: string,
     assignee: string,
   ) => Promise<void>;
+  onRecheck?: (finding: DemoFinding) => Promise<void>;
+  onEditAccessibility?: (finding: DemoFinding) => void;
 }
 
 const SEVERITY_LABELS: Record<Severity, string> = {
@@ -48,6 +50,8 @@ export default function FindingCard({
   evidenceLoading = false,
   evidenceError = "",
   onRequestEvidence,
+  onRecheck,
+  onEditAccessibility,
 }: FindingCardProps) {
   const [editing, setEditing] = useState(false);
   const [suggestion, setSuggestion] = useState(finding.suggestion ?? "");
@@ -99,7 +103,13 @@ export default function FindingCard({
   const severity = finding.severity;
   const severityLabel = SEVERITY_LABELS[severity] ?? "Unspecified";
   const resolved = finding.status !== "open";
-  const checkLabel = String(finding.check ?? "Unknown").replaceAll("_", " ");
+  const isAccessibility = finding.check === "accessibility";
+  const checkLabel =
+    finding.check === "accessibility"
+      ? finding.accessibility?.image_filename
+        ? "Missing alt text"
+        : "Color contrast"
+      : String(finding.check ?? "Unknown").replaceAll("_", " ");
   const knowledgeSource = finding.knowledge_source;
   const knowledgeHref =
     knowledgeSource.type === "guideline"
@@ -179,7 +189,7 @@ export default function FindingCard({
           <span className={`severity-badge severity-badge-${severity}`}>
             {severityLabel} · {severity} severity
           </span>
-          <h3>{checkLabel}</h3>
+          <h3>{isAccessibility ? `Accessibility · ${checkLabel}` : checkLabel}</h3>
         </div>
         <span
           className={`finding-status status-${finding.status ?? "unknown"}`}
@@ -211,6 +221,33 @@ export default function FindingCard({
           )}
         </section>
       </div>
+      {isAccessibility && finding.accessibility?.image_filename && (
+        <p className="finding-source">
+          <strong>Affected image:</strong> {finding.accessibility.image_filename}
+        </p>
+      )}
+      {isAccessibility && finding.accessibility?.contrast_ratio !== undefined && (
+        <dl className="finding-fact-details accessibility-contrast-details">
+          <div>
+            <dt>Affected text</dt>
+            <dd>{finding.text}</dd>
+          </div>
+          <div>
+            <dt>Colors</dt>
+            <dd>
+              {finding.accessibility.foreground_color} on{" "}
+              {finding.accessibility.background_color}
+            </dd>
+          </div>
+          <div>
+            <dt>Contrast</dt>
+            <dd>
+              {finding.accessibility.contrast_ratio.toFixed(2)}:1 required{" "}
+              {finding.accessibility.required_ratio?.toFixed(1)}:1
+            </dd>
+          </div>
+        </dl>
+      )}
       {finding.explanation && (
         <p className="finding-explanation">{finding.explanation}</p>
       )}
@@ -291,6 +328,27 @@ export default function FindingCard({
         <p className="form-error" role="alert">
           {actionError}
         </p>
+      )}
+      {isAccessibility && !readOnly && onRecheck && (
+        <div className="finding-actions">
+          {finding.accessibility?.image_id && onEditAccessibility && (
+            <button
+              type="button"
+              className="button"
+              onClick={() => onEditAccessibility(finding)}
+            >
+              Edit alt text
+            </button>
+          )}
+          <button
+            type="button"
+            className="button button-primary"
+            onClick={() => void onRecheck(finding)}
+            disabled={busy}
+          >
+            {busy ? "Rechecking..." : "Recheck"}
+          </button>
+        </div>
       )}
       {canRequestEvidence && (
         <div className="evidence-request">
