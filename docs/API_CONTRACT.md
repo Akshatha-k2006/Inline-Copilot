@@ -47,11 +47,16 @@ name after removing its displayed role suffix.
 - `POST /api/content` accepts `title`, `content_type`, and `body`, creates a
   separate draft with version `1`, and returns `201` with its database `id`,
   initial status, version, owner, and timestamps. Only Creators may create.
+  `body` may be empty for a new draft; the editor shows its own placeholder
+  until text is entered.
 - `GET /api/content/{id}` returns the persisted content record.
 - `PUT /api/content/{id}` accepts `title`, `content_type`, `body`, and the
   expected `version`. Only the owning Creator may update a draft. A successful
   change increments the version, clears the reviewed-version marker, and
   writes an audit event. A stale expected version returns `409`.
+- `DELETE /api/content/{id}` removes a draft. Only the owning Creator may
+  delete a draft; other statuses return `403`. It returns status `204` and
+  writes an audit event that survives the deletion.
 - `GET /api/content/{id}/findings` returns persisted findings and content and
   reviewed versions.
 - `GET /api/content/{id}/audit` returns audit events for one item.

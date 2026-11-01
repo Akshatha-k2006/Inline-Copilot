@@ -31,7 +31,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <div className="demo-mode-banner" role="status">
               <strong>Demo Mode</strong>
               <span>Using sample data</span>
-              <span>Authentication disabled</span>
               <BackendStatus />
             </div>
             {children}

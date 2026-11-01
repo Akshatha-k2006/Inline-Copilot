@@ -112,11 +112,11 @@ async function request<T>(
   const option = optionFor(getRole());
   const headers: Record<string, string> = {
     Accept: "application/json",
+    // The demo backend authorizes by role/actor headers, so they must be sent
+    // in every build, not only during development.
+    "X-Role": option.role,
+    "X-User": asciiHeader(option.user),
   };
-  if (process.env.NODE_ENV === "development") {
-    headers["X-Role"] = option.role;
-    headers["X-User"] = asciiHeader(option.user);
-  }
 
   let payload: BodyInit | undefined;
   if (typeof FormData !== "undefined" && body instanceof FormData) {
@@ -232,6 +232,8 @@ export const api = {
     request<Content>("GET", `/api/content/${id}`, undefined, options),
   updateContent: (id: number, body: ContentUpdate) =>
     request<Content>("PUT", `/api/content/${id}`, body),
+  deleteContent: (id: number) =>
+    request<void>("DELETE", `/api/content/${id}`),
 
   reviewContent: (id: number) =>
     request<ReviewResponse>("POST", `/api/content/${id}/review`),

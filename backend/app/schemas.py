@@ -55,7 +55,8 @@ class ContentStatusResponse(BaseModel):
 class ContentCreateRequest(BaseModel):
     title: str = Field(min_length=1, max_length=250)
     content_type: str = Field(min_length=1, max_length=100)
-    body: str = Field(min_length=1)
+    # A new draft can be empty; the editor supplies its own placeholder text.
+    body: str = ""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -63,8 +64,8 @@ class ContentCreateRequest(BaseModel):
     def validate_content(self) -> "ContentCreateRequest":
         self.title = self.title.strip()
         self.content_type = self.content_type.strip()
-        if not self.title or not self.content_type or not self.body.strip():
-            raise ValueError("Title, content type, and body are required.")
+        if not self.title or not self.content_type:
+            raise ValueError("Title and content type are required.")
         return self
 
 

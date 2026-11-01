@@ -1,6 +1,6 @@
 "use client";
 
-import type { DemoFinding } from "@/lib/mock-findings";
+import type { DemoFinding } from "@/lib/findings";
 import type { Severity } from "@/lib/types";
 
 interface HighlightedDraftProps {

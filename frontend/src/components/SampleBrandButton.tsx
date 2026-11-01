@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRole } from "@/lib/role";
 import { canManageKnowledge } from "@/lib/workflow";
-import { resetDemoWorkspace } from "@/lib/mock-data";
+import { seedSampleBrand } from "@/lib/workspace-store";
 
 interface SampleBrandButtonProps {
   onLoaded?: () => void;
@@ -21,7 +21,7 @@ export default function SampleBrandButton({
   async function loadSampleBrand() {
     if (
       !window.confirm(
-        "This resets the fictional demo workspace in this browser. Continue?",
+        "Load the fictional sample brand into the backend? Existing records are kept and matching sample records are updated.",
       )
     ) {
       return;
@@ -31,9 +31,9 @@ export default function SampleBrandButton({
     setMessage("");
     setError("");
     try {
-      resetDemoWorkspace(role);
+      await seedSampleBrand(role);
       onLoaded?.();
-      setMessage("Sample workspace restored.");
+      setMessage("Sample brand loaded into the backend.");
     } catch (cause) {
       setError(
         cause instanceof Error
