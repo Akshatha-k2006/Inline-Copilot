@@ -11,7 +11,14 @@ from sqlalchemy.pool import StaticPool
 
 from app.db import Base, get_db, migrate_review_schema
 from app.exception_handlers import register_exception_handlers
-from app.models import AuditEvent, Content, Finding, Term
+from app.models import (
+    AuditEvent,
+    Content,
+    Finding,
+    FindingDecisionEvent,
+    Guideline,
+    Term,
+)
 from app.routers.review import review_content
 
 
@@ -191,6 +198,7 @@ class ReviewEndpointTests(unittest.TestCase):
                 {
                     "id",
                     "check",
+                    "guideline_id",
                     "severity",
                     "message",
                     "evidence",
@@ -241,6 +249,30 @@ class ReviewEndpointTests(unittest.TestCase):
             [finding.id for finding in persisted],
             [finding["id"] for finding in payload["findings"]],
         )
+        self.assertTrue(all(finding.guideline_id is None for finding in persisted))
+
+    def test_findings_retain_associated_guideline_ids(self):
+        guideline = Guideline(
+            title="Tone of voice",
+            description="Keep the tone warm.",
+            category="tone",
+        )
+        self.db.add(guideline)
+        self.db.flush()
+        term = self.db.query(Term).filter(Term.id == 1).one()
+        term.guideline_id = guideline.id
+        self.db.commit()
+
+        with patch("app.services.llm_reviewer.settings.llm_api_key", None):
+            status, payload = self.request("/api/content/1/review")
+
+        self.assertEqual(status, 200)
+        finding = next(
+            item for item in payload["findings"] if item["check"] == "terminology"
+        )
+        persisted = self.db.get(Finding, finding["id"])
+        self.assertEqual(finding["guideline_id"], guideline.id)
+        self.assertEqual(persisted.guideline_id, guideline.id)
 
     def test_missing_content_uses_contract_error(self):
         status, payload = self.request("/api/content/999/review")
@@ -533,6 +565,7 @@ class ReviewEndpointTests(unittest.TestCase):
             {
                 "id",
                 "check",
+                "guideline_id",
                 "severity",
                 "message",
                 "evidence",
@@ -568,6 +601,13 @@ class ReviewEndpointTests(unittest.TestCase):
             event.details["changes"],
             {"field": "text", "previous": "old", "next": "new"},
         )
+        decision_event = self.db.query(FindingDecisionEvent).one()
+        self.assertEqual(decision_event.finding_id, target.id)
+        self.assertEqual(decision_event.finding_reference_id, target.id)
+        self.assertEqual(decision_event.decision, "accepted")
+        self.assertEqual(decision_event.actor, "test-user")
+        self.assertIsNotNone(decision_event.occurred_at)
+        self.assertEqual(decision_event.details["new_version"], 4)
 
     def test_edit_replaces_only_target_span_and_shifts_later_findings(self):
         content = self.db.get(Content, 1)
@@ -626,6 +666,9 @@ class ReviewEndpointTests(unittest.TestCase):
             event.details["changes"],
             {"field": "text", "previous": "old", "next": "longer"},
         )
+        decision_event = self.db.query(FindingDecisionEvent).one()
+        self.assertEqual(decision_event.decision, "resolved")
+        self.assertEqual(decision_event.finding_reference_id, target.id)
 
     def test_edit_to_identical_text_does_not_increment_content_version(self):
         finding = self.add_finding(matched_text="best")
@@ -899,6 +942,65 @@ class ReviewEndpointTests(unittest.TestCase):
         )
         self.assertEqual(finding.status, "open")
         self.assertEqual(self.db.query(AuditEvent).count(), 0)
+
+    def test_decision_history_is_retained_and_duplicate_updates_are_not_counted(self):
+        finding = self.add_finding()
+        guideline = Guideline(
+            title="Tone of voice",
+            description="Keep the tone warm.",
+            category="tone",
+        )
+        self.db.add(guideline)
+        self.db.flush()
+        finding.guideline_id = guideline.id
+        self.db.commit()
+
+        status, _ = self.request(
+            f"/api/findings/{finding.id}",
+            method="PATCH",
+            body={"action": "dismiss"},
+        )
+
+        self.assertEqual(status, 200)
+        event = self.db.query(FindingDecisionEvent).one()
+        self.assertEqual(event.decision, "dismissed")
+        self.assertEqual(event.finding_reference_id, finding.id)
+        self.assertEqual(event.actor, "test-user")
+        self.assertEqual(event.guideline_id, guideline.id)
+        self.assertEqual(event.guideline_title, guideline.title)
+        self.assertIsNotNone(event.occurred_at)
+        self.assertEqual(event.event_key, f"finding:{finding.id}:dismissed")
+
+        second_finding = self.add_finding(
+            check_type="messaging",
+            start_offset=5,
+            end_offset=8,
+            matched_text="bad",
+        )
+        second_status, _ = self.request(
+            f"/api/findings/{second_finding.id}",
+            method="PATCH",
+            body={"action": "dismiss"},
+        )
+        self.assertEqual(second_status, 200)
+
+        repeated_status, _ = self.request(
+            f"/api/findings/{finding.id}",
+            method="PATCH",
+            body={"action": "dismiss"},
+        )
+
+        self.assertEqual(repeated_status, 409)
+        history = (
+            self.db.query(FindingDecisionEvent)
+            .order_by(FindingDecisionEvent.id)
+            .all()
+        )
+        self.assertEqual(len(history), 2)
+        self.assertEqual(
+            [item.finding_reference_id for item in history],
+            [finding.id, second_finding.id],
+        )
 
     def test_accept_without_suggested_fix_fails_without_changes(self):
         finding = self.add_finding()

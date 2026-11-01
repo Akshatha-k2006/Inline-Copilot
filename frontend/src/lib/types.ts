@@ -131,6 +131,7 @@ export interface ApiAsset {
 export interface BackendFinding {
   id: number;
   check: string;
+  guideline_id: number | null;
   severity: string;
   message: string;
   evidence: {

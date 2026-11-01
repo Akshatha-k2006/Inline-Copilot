@@ -27,6 +27,13 @@ LEGACY_SCHEMA = {
     "statement TEXT NOT NULL, "
     "created_at TIMESTAMP"
     ")",
+    "findings": "CREATE TABLE findings ("
+    "id INTEGER PRIMARY KEY, "
+    "content_id INTEGER NOT NULL, "
+    "check_type VARCHAR(100) NOT NULL, "
+    "message TEXT NOT NULL, "
+    "created_at TIMESTAMP"
+    ")",
     "assets": "CREATE TABLE assets ("
     "id INTEGER PRIMARY KEY, "
     "name VARCHAR(200) NOT NULL, "
@@ -63,6 +70,7 @@ class EnsureModelSchemaTests(unittest.TestCase):
             "guidelines": {"description", "updated_at"},
             "terms": {"replacement", "definition", "guideline_id"},
             "facts": {"source", "owner", "last_reviewed", "review_by"},
+            "findings": {"content_version", "guideline_id"},
             "assets": {"description", "asset_type", "url", "metadata_json"},
         }
         inspector = inspect(self.engine)
@@ -72,6 +80,18 @@ class EnsureModelSchemaTests(unittest.TestCase):
             }
             for name in missing_columns:
                 self.assertIn(name, columns)
+        self.assertIn(
+            "finding_decision_events",
+            set(inspect(self.engine).get_table_names()),
+        )
+
+    def test_decision_event_table_has_idempotent_event_key(self):
+        inspector = inspect(self.engine)
+        constraints = inspector.get_unique_constraints("finding_decision_events")
+        self.assertIn(
+            ["event_key"],
+            [constraint["column_names"] for constraint in constraints],
+        )
 
     def test_legacy_knowledge_rows_work_with_the_orm(self):
         with Session(self.engine) as db:

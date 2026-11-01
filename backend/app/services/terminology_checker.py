@@ -39,6 +39,7 @@ def check_terminology(text: str, db: Session) -> list[dict]:
                     "start_offset": match.start(),
                     "end_offset": match.end(),
                     "suggested_fix": term.replacement or None,
+                    "guideline_id": term.guideline_id,
                     "source": {
                         "type": "glossary",
                         "id": term.id,

@@ -2,7 +2,7 @@ import re
 
 from sqlalchemy.orm import Session
 
-from app.models import Asset, Content, ContentImage
+from app.models import Asset, Content, ContentImage, Guideline
 
 SUGGESTED_FIX_TEMPLATE = (
     "Add descriptive alt text for '{filename}' so screen readers can describe it."
@@ -190,9 +190,23 @@ def check_accessibility(db: Session, content: Content) -> list[dict]:
         .all()
     )
     findings = []
+    accessibility_guideline = None
+    accessibility_guideline_checked = False
     for image in images:
         if image.alt_text and image.alt_text.strip():
             continue
+        if not accessibility_guideline_checked:
+            accessibility_guideline = (
+                db.query(Guideline)
+                .filter(
+                    (Guideline.category.ilike("accessibility"))
+                    | (Guideline.title.ilike("%accessibility%"))
+                    | (Guideline.title.ilike("%alt text%"))
+                )
+                .order_by(Guideline.id)
+                .first()
+            )
+            accessibility_guideline_checked = True
         findings.append(
             {
                 "check": "accessibility",
@@ -203,6 +217,11 @@ def check_accessibility(db: Session, content: Content) -> list[dict]:
                 "end_offset": None,
                 "suggested_fix": SUGGESTED_FIX_TEMPLATE.format(
                     filename=image.filename
+                ),
+                "guideline_id": (
+                    accessibility_guideline.id
+                    if accessibility_guideline
+                    else None
                 ),
                 "evidence": {},
                 "source": {

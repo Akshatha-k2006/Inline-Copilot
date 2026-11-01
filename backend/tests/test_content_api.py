@@ -12,7 +12,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db import Base, get_db
 from app.exception_handlers import register_exception_handlers
-from app.models import AuditEvent, Comment, Content, Finding
+from app.models import AuditEvent, Comment, Content, Finding, Guideline
 from app.routers.content import router as content_router
 from app.routers.content_workflow import router as workflow_router
 from app.routers.health import router as health_router
@@ -154,6 +154,34 @@ class ContentApiTests(unittest.TestCase):
             patch("app.routers.review.review_with_llm", return_value=[]),
         ):
             return self.request(f"/api/content/{content_id}/review", method="POST")
+
+    def test_findings_response_includes_guideline_association(self):
+        created = self.create(body="A simple content body.")
+        self.assertEqual(created[0], 201)
+        content_id = created[1]["id"]
+        guideline = Guideline(
+            title="Tone of voice",
+            description="Keep the tone warm.",
+            category="tone",
+        )
+        self.db.add(guideline)
+        self.db.flush()
+        self.db.add(
+            Finding(
+                content_id=content_id,
+                content_version=1,
+                guideline_id=guideline.id,
+                check_type="tone",
+                message="Tone needs review.",
+                evidence={"matched_text": "simple"},
+            )
+        )
+        self.db.commit()
+
+        status, response = self.request(f"/api/content/{content_id}/findings")
+
+        self.assertEqual(status, 200)
+        self.assertEqual(response["findings"][0]["guideline_id"], guideline.id)
 
     def submit(self, content_id):
         review_status, _ = self.run_review(content_id)

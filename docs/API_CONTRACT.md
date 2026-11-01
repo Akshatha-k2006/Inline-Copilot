@@ -108,9 +108,11 @@ and engine statuses. The record's `reviewed_version` and `reviewed_at` are
 updated atomically with findings and a `content_reviewed` audit event, even if
 the review produces no findings. A content edit or finding correction clears
 the review marker for the new version. Each finding contains an integer
-`id`, string `check`, `severity`, `message`, and `status`, an `evidence`
-object, a nullable string `suggested_fix`, and nullable integer `start_offset`
-and `end_offset`. The evidence object contains string `matched_text`, object
+`id`, string `check`, nullable integer `guideline_id`, `severity`, `message`,
+and `status`, an `evidence` object, a nullable string `suggested_fix`, and
+nullable integer `start_offset` and `end_offset`. `guideline_id` links a
+finding to its source guideline when one is available. The evidence object
+contains string `matched_text`, object
 `source`, boolean `requires_manual_review`, and an optional object
 `suggestion_source`. Findings are returned in ascending text-position order.
 Each persisted finding is associated with the requested content ID and the
@@ -124,6 +126,7 @@ content version reviewed.
     {
       "id": 1,
       "check": "terminology",
+      "guideline_id": 1,
       "severity": "warning",
       "message": "Prohibited term detected: example",
       "evidence": {
@@ -203,6 +206,7 @@ Dismiss does not change the content or its version. Successful actions return
   "finding": {
     "id": 1,
     "check": "terminology",
+    "guideline_id": 1,
     "severity": "warning",
     "message": "Prohibited term detected: example",
     "evidence": {
@@ -223,6 +227,15 @@ Each successful action records an `AuditEvent` with action `finding_accepted`,
 `finding_edited`, or `finding_dismissed`; its details include the finding ID and
 previous/new content versions. Text changes additionally include previous and
 replacement text.
+
+The same transaction also appends an immutable `FindingDecisionEvent` for
+usage reporting. It records the finding and content references, associated
+guideline ID and title snapshot, actor, decision (`accepted`, `dismissed`, or
+`resolved` for an edit), and UTC occurrence time. Events survive deletion of
+their finding or content. The event key is unique per finding decision, so a
+repeated update cannot create a second count for the same decision. Use these
+decision events as the source for finding-usage metrics; the general audit
+events remain a separate audit trail.
 
 Missing findings return `404` with
 `{ "error": "not_found", "message": "Finding not found." }`. Invalid action or
