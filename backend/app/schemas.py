@@ -177,3 +177,34 @@ class FindingActionResponse(BaseModel):
     content_id: int
     content_version: int
     finding: FindingActionFindingResponse
+
+
+EVIDENCE_REQUEST_STATUSES: tuple[str, ...] = ("open", "fulfilled", "dismissed")
+
+
+class EvidenceRequestCreate(BaseModel):
+    claimText: str = Field(min_length=1)
+    findingId: int
+    reason: str = Field(min_length=1)
+    assignee: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def strip_fields(self) -> "EvidenceRequestCreate":
+        self.claimText = self.claimText.strip()
+        self.reason = self.reason.strip()
+        self.assignee = self.assignee.strip()
+        for field in ("claimText", "reason", "assignee"):
+            if not getattr(self, field):
+                raise ValueError(f"{field} must not be blank.")
+        return self
+
+
+class EvidenceRequestResponse(BaseModel):
+    id: int
+    claimText: str
+    findingId: int
+    reason: str
+    assignee: str
+    status: str
+    createdAt: datetime
+    updatedAt: datetime
