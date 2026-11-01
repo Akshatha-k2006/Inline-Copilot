@@ -825,7 +825,10 @@ a {
   color: var(--text);
   cursor: pointer;
   text-decoration: none;
-  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+  transition:
+    background-color 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
 }
 
 .button:hover:not(:disabled) {
@@ -1353,7 +1356,10 @@ a {
 
 .editor-layout {
   display: grid;
-  grid-template-columns: minmax(200px, 220px) minmax(0, 2fr) minmax(320px, 380px);
+  grid-template-columns: minmax(200px, 220px) minmax(0, 2fr) minmax(
+      320px,
+      380px
+    );
   align-items: start;
   gap: 18px;
 }
@@ -1981,7 +1987,9 @@ a {
 }
 
 .finding-card.selected {
-  box-shadow: 0 0 0 2px #6941e8, 0 4px 16px rgb(32 41 74 / 8%);
+  box-shadow:
+    0 0 0 2px #6941e8,
+    0 4px 16px rgb(32 41 74 / 8%);
 }
 
 .finding-card.severity-high {
