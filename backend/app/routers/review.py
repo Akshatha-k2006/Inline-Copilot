@@ -11,7 +11,13 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.dependencies import get_role
-from app.models import AuditEvent, Content, Finding
+from app.models import (
+    AuditEvent,
+    Content,
+    Finding,
+    FindingDecisionEvent,
+    Guideline,
+)
 from app.schemas import FindingActionRequest, FindingActionResponse
 from app.services.terminology_checker import check_terminology
 from app.services.fact_checker import check_claims
@@ -56,6 +62,7 @@ def _finding_action_response(
         "finding": {
             "id": finding.id,
             "check": finding.check_type,
+            "guideline_id": finding.guideline_id,
             "severity": finding.severity,
             "message": finding.message,
             "evidence": finding.evidence,
@@ -236,9 +243,23 @@ def review_content(
             if item.get("suggestion_source"):
                 evidence["suggestion_source"] = item["suggestion_source"]
 
+            source = item.get("source")
+            guideline_id = item.get("guideline_id")
+            if guideline_id is None and isinstance(source, dict):
+                guideline_id = source.get("guideline_id")
+                if guideline_id is None and source.get("type") == "guideline":
+                    guideline_id = source.get("id")
+            if (
+                not isinstance(guideline_id, int)
+                or isinstance(guideline_id, bool)
+                or db.get(Guideline, guideline_id) is None
+            ):
+                guideline_id = None
+
             finding = Finding(
                 content_id=content.id,
                 content_version=content.version,
+                guideline_id=guideline_id,
                 check_type=item["check"],
                 severity=item["severity"],
                 message=item["message"],
@@ -288,6 +309,7 @@ def review_content(
             {
                 "id": finding.id,
                 "check": finding.check_type,
+                "guideline_id": finding.guideline_id,
                 "severity": finding.severity,
                 "message": finding.message,
                 "evidence": finding.evidence,
@@ -557,6 +579,45 @@ def update_finding(
             finding.status = "accepted" if action == "accept" else "edited"
         else:
             finding.status = "dismissed"
+
+        decision = {
+            "accept": "accepted",
+            "edit": "resolved",
+            "dismiss": "dismissed",
+        }[action]
+        event_key = f"finding:{finding.id}:{decision}"
+        if (
+            db.query(FindingDecisionEvent.id)
+            .filter(FindingDecisionEvent.event_key == event_key)
+            .first()
+            is None
+        ):
+            guideline = (
+                db.get(Guideline, finding.guideline_id)
+                if finding.guideline_id is not None
+                else None
+            )
+            db.add(
+                FindingDecisionEvent(
+                    event_key=event_key,
+                    finding_id=finding.id,
+                    finding_reference_id=finding.id,
+                    content_id=content.id,
+                    guideline_id=finding.guideline_id,
+                    guideline_title=guideline.title if guideline else None,
+                    decision=decision,
+                    actor=actor,
+                    occurred_at=datetime.now(timezone.utc),
+                    details={
+                        "check": finding.check_type,
+                        "severity": finding.severity,
+                        "previous_status": "open",
+                        "new_status": finding.status,
+                        "previous_version": old_version,
+                        "new_version": new_version,
+                    },
+                )
+            )
 
         action_name = {
             "accept": "finding_accepted",

@@ -386,6 +386,7 @@ def get_content_findings(
             {
                 "id": item.id,
                 "check": item.check_type,
+                "guideline_id": item.guideline_id,
                 "severity": item.severity,
                 "message": item.message,
                 "evidence": item.evidence,

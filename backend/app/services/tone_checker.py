@@ -50,6 +50,7 @@ def check_tone(text: str, db: Session) -> list[dict]:
                 "start_offset": match.start(),
                 "end_offset": match.end(),
                 "suggested_fix": None,
+                "guideline_id": guideline.id,
                 "source": {
                     "type": "guideline",
                     "id": guideline.id,

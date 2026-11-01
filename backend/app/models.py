@@ -3,10 +3,12 @@ from sqlalchemy import (
     Boolean,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     JSON,
     String,
     Text,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import relationship, Mapped, mapped_column
@@ -141,6 +143,11 @@ class Finding(Base):
     content_version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default="1"
     )
+    guideline_id: Mapped[int | None] = mapped_column(
+        ForeignKey("guidelines.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     check_type: Mapped[str] = mapped_column(String(100), nullable=False)
     severity: Mapped[str] = mapped_column(String(50), default="warning")
     message: Mapped[str] = mapped_column(Text, nullable=False)
@@ -154,6 +161,43 @@ class Finding(Base):
     )
 
     content = relationship("Content", back_populates="findings")
+
+
+class FindingDecisionEvent(Base):
+    __tablename__ = "finding_decision_events"
+    __table_args__ = (
+        UniqueConstraint("event_key", name="uq_finding_decision_event_key"),
+        Index(
+            "ix_finding_decision_events_guideline_decision",
+            "guideline_id",
+            "decision",
+        ),
+        Index("ix_finding_decision_events_occurred_at", "occurred_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    event_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    finding_id: Mapped[int | None] = mapped_column(
+        ForeignKey("findings.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    finding_reference_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_id: Mapped[int | None] = mapped_column(
+        ForeignKey("content.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    guideline_id: Mapped[int | None] = mapped_column(
+        ForeignKey("guidelines.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    guideline_title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    decision: Mapped[str] = mapped_column(String(20), nullable=False)
+    actor: Mapped[str] = mapped_column(String(150), nullable=False)
+    details: Mapped[dict] = mapped_column(JSON, default=dict)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
 
 
 class Comment(Base):

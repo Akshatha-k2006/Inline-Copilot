@@ -339,6 +339,7 @@ def _validated_findings(
                 "severity": "warning" if severity == "warning" else severity,
                 "message": explanation.strip(),
                 "matched_text": matched_text,
+                "guideline_id": guideline.id,
                 "start_offset": start,
                 "end_offset": end,
                 "suggested_fix": suggested_fix,

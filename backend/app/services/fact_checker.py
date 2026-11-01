@@ -88,6 +88,9 @@ def check_claims(text: str, db: Session) -> list[dict]:
                 "start_offset": start,
                 "end_offset": end,
                 "suggested_fix": None,
+                "guideline_id": (
+                    claims_guideline.id if claims_guideline else None
+                ),
                 "source": {
                     "type": source_type,
                     "id": source_id,

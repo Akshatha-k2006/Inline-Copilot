@@ -195,6 +195,7 @@ class FindingActionRequest(BaseModel):
 class FindingActionFindingResponse(BaseModel):
     id: int
     check: str
+    guideline_id: int | None
     severity: str
     message: str
     evidence: dict
