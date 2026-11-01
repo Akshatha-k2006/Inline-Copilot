@@ -11,7 +11,10 @@ export default function BackendStatus() {
 
   const check = useCallback(() => {
     const controller = new AbortController();
-    const timeout = window.setTimeout(() => controller.abort(), 5000);
+    // Free hosting plans can take a while to start the service after
+    // inactivity, so give the health probe enough time for a cold boot.
+    const timeoutMs = 30000;
+    const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
     setStatus("checking");
     setMessage("");
 
@@ -20,7 +23,9 @@ export default function BackendStatus() {
       .then(() => setStatus("available"))
       .catch((cause: unknown) => {
         if (cause instanceof DOMException && cause.name === "AbortError") {
-          setMessage("The service did not respond within 5 seconds.");
+          setMessage(
+            `The service did not respond within ${timeoutMs / 1000} seconds. It may be starting up after inactivity; try again shortly.`,
+          );
         } else if (cause instanceof ApiError) {
           setMessage(cause.message);
         } else {

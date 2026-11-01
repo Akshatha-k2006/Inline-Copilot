@@ -143,7 +143,7 @@ async function request<T>(
     throw new ApiError(
       0,
       "network_error",
-      `Cannot connect to the backend at ${API_URL}. Check that it is running, that the URL is correct, and that its CORS settings allow this frontend.`,
+      `Cannot reach the backend at ${API_URL}. On a free hosting plan the service sleeps after inactivity and can take about a minute to start; wait a moment and retry. Also check that the URL is correct and that its CORS settings allow this frontend.`,
     );
   }
 
