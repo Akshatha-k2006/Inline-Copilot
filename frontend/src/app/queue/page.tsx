@@ -4,19 +4,19 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import EmptyState from "@/components/EmptyState";
 import { useRole } from "@/lib/role";
+import { formatTimestamp } from "@/lib/format";
 import {
-  addDemoReviewComment,
-  formatMockTimestamp,
+  addReviewComment,
+  decideContentReview,
   getDocumentFindings,
   getQueuedDocuments,
-  transitionDemoDocument,
-  useDemoWorkspace,
-} from "@/lib/mock-data";
+  useWorkspace,
+} from "@/lib/workspace-store";
 import { canViewReviewQueue, contentStatusLabel } from "@/lib/workflow";
 
 export default function ReviewQueuePage() {
-  const { role, user } = useRole();
-  const workspace = useDemoWorkspace();
+  const { role } = useRole();
+  const workspace = useWorkspace();
   const [feedback, setFeedback] = useState<Record<number, string>>({});
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
   const [busy, setBusy] = useState<number | null>(null);
@@ -45,7 +45,7 @@ export default function ReviewQueuePage() {
     setFeedback((current) => ({ ...current, [id]: value }));
   }
 
-  function runAction(
+  async function runAction(
     id: number,
     action: "comment" | "request_changes" | "approve",
   ) {
@@ -67,7 +67,7 @@ export default function ReviewQueuePage() {
     if (
       action === "approve" &&
       !window.confirm(
-        "Approve this draft? It will be marked ready to publish in the demo workflow.",
+        "Approve this draft? The status becomes approved; a brand manager can then mark it ready to publish.",
       )
     )
       return;
@@ -76,21 +76,24 @@ export default function ReviewQueuePage() {
     setMessage(null);
     try {
       if (action === "comment") {
-        addDemoReviewComment(id, role, user, text);
+        await addReviewComment(id, text, role);
         setFeedback((current) => ({ ...current, [id]: "" }));
         setMessage({
           kind: "success",
           text: "Note saved to the review history.",
         });
       } else {
-        transitionDemoDocument(id, action, role, user, text);
+        const title =
+          workspace.documents.find((document) => document.id === id)?.title ??
+          "this draft";
+        await decideContentReview(id, action, text, role);
         setFeedback((current) => ({ ...current, [id]: "" }));
         setMessage({
           kind: "success",
           text:
             action === "approve"
-              ? "Draft approved and marked ready to publish. No external publication was performed."
-              : "Changes requested. The creator can update and resubmit this draft.",
+              ? "Draft approved. No external publication was performed."
+              : `Changes requested on "${title}". The creator can update and resubmit this draft.`,
         });
       }
     } catch (cause) {
@@ -159,7 +162,7 @@ export default function ReviewQueuePage() {
                   <div className="review-queue-card-heading">
                     <div>
                       <p className="eyebrow">
-                        Submitted {formatMockTimestamp(document.updated_at)}
+                        Submitted {formatTimestamp(document.updated_at)}
                       </p>
                       <h2>{document.title || "Untitled document"}</h2>
                     </div>
@@ -219,7 +222,7 @@ export default function ReviewQueuePage() {
                           <p key={comment.id}>
                             <strong>{comment.author}</strong>
                             <span>{comment.text}</span>
-                            <small>{formatMockTimestamp(comment.at)}</small>
+                            <small>{formatTimestamp(comment.at)}</small>
                           </p>
                         ))}
                       </div>
@@ -244,7 +247,7 @@ export default function ReviewQueuePage() {
                         className="button"
                         type="button"
                         disabled={isBusy}
-                        onClick={() => runAction(document.id, "comment")}
+                        onClick={() => void runAction(document.id, "comment")}
                       >
                         {isBusy ? "Saving..." : "Save note"}
                       </button>
@@ -253,7 +256,7 @@ export default function ReviewQueuePage() {
                         type="button"
                         disabled={isBusy}
                         onClick={() =>
-                          runAction(document.id, "request_changes")
+                          void runAction(document.id, "request_changes")
                         }
                       >
                         Request changes
@@ -262,9 +265,9 @@ export default function ReviewQueuePage() {
                         className="button button-primary"
                         type="button"
                         disabled={isBusy}
-                        onClick={() => runAction(document.id, "approve")}
+                        onClick={() => void runAction(document.id, "approve")}
                       >
-                        {isBusy ? "Processing..." : "Approve & publish"}
+                        {isBusy ? "Processing..." : "Approve draft"}
                       </button>
                     </div>
                   </div>
