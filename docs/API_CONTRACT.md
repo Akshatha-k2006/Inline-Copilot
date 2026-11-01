@@ -384,8 +384,50 @@ missing or blank fields return `422` with
 `{ "error": "validation_error", "message": "..." }`; a `status` filter outside
 the enum returns `422`. Each successful create records an audit event with
 action `evidence_request_created` in the same transaction; its details include
-the finding ID, assignee, actor role, and the new request ID. Updating a
-request's status is not part of this API.
+the finding ID, assignee, actor role, and the new request ID.
+
+### Attaching evidence
+
+Any valid demo role attaches the owner's proof with
+`POST /api/evidence-requests/{id}/evidence`. The body has `sourceType`
+(`"url"` or `"document"`) plus the fields that belong to that source kind:
+
+```json
+{ "sourceType": "url", "sourceUrl": "https://luminahome.com/report" }
+```
+
+```json
+{ "sourceType": "document", "documentName": "Brand-safety-guidelines",
+  "documentType": "pdf" }
+```
+
+`sourceUrl` must be a valid `http(s)` URL; `documentType` must be one of
+`pdf`, `doc`, `docx`, `xls`, `xlsx`, `ppt`, `pptx`, `png`, `jpg`, `jpeg`,
+`webp`; `documentName` is required for a document source. Fields of the other
+source kind must be absent: a URL source attached alongside `documentName` or
+`documentType`, or a document source attached alongside `sourceUrl`, returns
+`422`. Blank or malformed values return `422` with
+`{ "error": "validation_error" }`; an unknown request returns `404` with
+`{ "error": "not_found", "message": "Evidence request not found" }`.
+
+Attaching does not close the request: `status` remains `open`. Re-attaching
+overwrites the single evidence slot; every attach overwrites the response
+fields `sourceType`, `sourceUrl`, `documentName`, `documentType`, `attachedBy`
+(role), and `attachedAt`, and records an `evidence_request_attached` audit
+event in the same transaction. The response itself contains all evidence and
+verification fields.
+
+### Reviewer verification
+
+`POST /api/evidence-requests/{id}/verify` is restricted to the `reviewer`
+role; other roles receive `403` with `{ "error": "forbidden" }`. A verify on
+an open request that has attached evidence sets the request `status` to
+`fulfilled` and stamps `verifiedBy` (the role) and `verifiedAt`, returning the
+updated request. Verify attempts return `409` with
+`{ "error": "conflict" }` when the request is not open (already fulfilled or
+dismissed) or has no attached evidence yet. Verification records an
+`evidence_request_verified` audit event with the request ID and source type in
+the same transaction. No other status transitions exist through this API.
 
 ## Frontend integration and demo role context
 
