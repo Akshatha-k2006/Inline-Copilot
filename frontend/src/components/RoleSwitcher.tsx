@@ -1,10 +1,12 @@
 "use client";
 
+import { useRouter } from "next/navigation";
 import { useRole } from "@/lib/role";
 import { isRole, ROLE_OPTIONS } from "@/lib/roles";
 
 export default function RoleSwitcher() {
   const { role, setRole } = useRole();
+  const router = useRouter();
 
   return (
     <label className="role-switcher">
@@ -13,7 +15,11 @@ export default function RoleSwitcher() {
         className="role-select"
         value={role}
         onChange={(event) => {
-          if (isRole(event.target.value)) setRole(event.target.value);
+          const next = event.target.value;
+          if (isRole(next)) {
+            setRole(next);
+            router.push("/");
+          }
         }}
         aria-label="Choose demo role"
       >
