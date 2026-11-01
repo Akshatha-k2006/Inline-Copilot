@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { DemoFinding } from "@/lib/findings";
 import { isReplacementSuggestion } from "@/lib/findings";
-import type { FindingStatus, Severity } from "@/lib/types";
+import { ROLE_OPTIONS } from "@/lib/roles";
+import type { EvidenceRequest, FindingStatus, Severity } from "@/lib/types";
 
 interface FindingCardProps {
   id: string;
@@ -18,6 +19,14 @@ interface FindingCardProps {
     status: Exclude<FindingStatus, "open">,
     finalText: string | null,
     dismissalReason?: string,
+  ) => Promise<void>;
+  evidenceRequests?: EvidenceRequest[];
+  evidenceLoading?: boolean;
+  evidenceError?: string;
+  onRequestEvidence?: (
+    finding: DemoFinding,
+    reason: string,
+    assignee: string,
   ) => Promise<void>;
 }
 
@@ -35,12 +44,22 @@ export default function FindingCard({
   selected,
   onSelect,
   onResolve,
+  evidenceRequests = [],
+  evidenceLoading = false,
+  evidenceError = "",
+  onRequestEvidence,
 }: FindingCardProps) {
   const [editing, setEditing] = useState(false);
   const [suggestion, setSuggestion] = useState(finding.suggestion ?? "");
   const [dismissalReason, setDismissalReason] = useState("");
   const [showDismissal, setShowDismissal] = useState(false);
   const [actionError, setActionError] = useState("");
+  const [showEvidenceForm, setShowEvidenceForm] = useState(false);
+  const [evidenceReason, setEvidenceReason] = useState("");
+  const [evidenceAssignee, setEvidenceAssignee] = useState("");
+  const [evidenceSubmitting, setEvidenceSubmitting] = useState(false);
+  const [evidenceFormError, setEvidenceFormError] = useState("");
+  const [evidenceSuccess, setEvidenceSuccess] = useState("");
   const hasSuggestedReplacement = isReplacementSuggestion(finding.suggestion);
 
   useEffect(() => {
@@ -94,6 +113,45 @@ export default function FindingCard({
       : knowledgeSource.type === "term"
         ? "View glossary term"
         : "View fact";
+  const canRequestEvidence =
+    finding.check === "unsupported_claim" && Boolean(onRequestEvidence);
+  const hasOpenEvidenceRequest = evidenceRequests.some(
+    (request) => request.status === "open",
+  );
+
+  async function requestEvidence() {
+    const reason = evidenceReason.trim();
+    if (!finding.id || !finding.text.trim()) {
+      setEvidenceFormError("This finding does not have a valid claim reference.");
+      return;
+    }
+    if (!reason) {
+      setEvidenceFormError("Enter a reason for requesting evidence.");
+      return;
+    }
+    if (!evidenceAssignee) {
+      setEvidenceFormError("Choose an owner for this request.");
+      return;
+    }
+    if (!onRequestEvidence) return;
+    setEvidenceFormError("");
+    setEvidenceSubmitting(true);
+    try {
+      await onRequestEvidence(finding, reason, evidenceAssignee);
+      setEvidenceReason("");
+      setEvidenceAssignee("");
+      setShowEvidenceForm(false);
+      setEvidenceSuccess("Evidence request created successfully.");
+    } catch (error) {
+      setEvidenceFormError(
+        error instanceof Error
+          ? error.message
+          : "Could not create the evidence request. Please try again.",
+      );
+    } finally {
+      setEvidenceSubmitting(false);
+    }
+  }
 
   return (
     <article
@@ -233,6 +291,111 @@ export default function FindingCard({
         <p className="form-error" role="alert">
           {actionError}
         </p>
+      )}
+      {canRequestEvidence && (
+        <div className="evidence-request">
+          {evidenceLoading ? (
+            <p className="muted" role="status">Loading evidence requests...</p>
+          ) : evidenceError ? (
+            <p className="form-error" role="alert">{evidenceError}</p>
+          ) : evidenceRequests.length > 0 ? (
+            <div className="evidence-request-list" aria-label="Evidence requests">
+              {evidenceRequests.map((request) => (
+                <p key={request.id} className="evidence-request-status">
+                  Evidence request: <strong>{request.status}</strong> · Owner:{" "}
+                  <strong>{request.assignee}</strong>
+                </p>
+              ))}
+            </div>
+          ) : (
+            <p className="muted">No evidence requests yet.</p>
+          )}
+          {evidenceSuccess && (
+            <p className="form-success" role="status">
+              {evidenceSuccess}
+            </p>
+          )}
+          {!showEvidenceForm ? (
+            <button
+              type="button"
+              className="button"
+              onClick={() => {
+                setEvidenceFormError("");
+                setEvidenceSuccess("");
+                setShowEvidenceForm(true);
+              }}
+              disabled={
+                evidenceSubmitting || evidenceLoading || hasOpenEvidenceRequest
+              }
+            >
+              {hasOpenEvidenceRequest ? "Evidence Requested" : "Request Evidence"}
+            </button>
+          ) : (
+            <div className="evidence-request-form">
+              <div className="form-field">
+                <label htmlFor={`evidence-claim-${finding.id}`}>Claim text</label>
+                <input
+                  id={`evidence-claim-${finding.id}`}
+                  value={finding.text}
+                  readOnly
+                />
+              </div>
+              <div className="form-field">
+                <label htmlFor={`evidence-reason-${finding.id}`}>Reason</label>
+                <textarea
+                  id={`evidence-reason-${finding.id}`}
+                  value={evidenceReason}
+                  onChange={(event) => setEvidenceReason(event.target.value)}
+                  rows={3}
+                  aria-describedby={
+                    evidenceFormError ? `evidence-error-${finding.id}` : undefined
+                  }
+                />
+              </div>
+              <div className="form-field">
+                <label htmlFor={`evidence-owner-${finding.id}`}>Assigned owner</label>
+                <select
+                  id={`evidence-owner-${finding.id}`}
+                  value={evidenceAssignee}
+                  onChange={(event) => setEvidenceAssignee(event.target.value)}
+                >
+                  <option value="">Choose an owner</option>
+                  {ROLE_OPTIONS.map((option) => (
+                    <option key={option.user} value={option.user}>
+                      {option.user}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {evidenceFormError && (
+                <p id={`evidence-error-${finding.id}`} className="form-error" role="alert">
+                  {evidenceFormError}
+                </p>
+              )}
+              <div className="finding-actions">
+                <button
+                  type="button"
+                  className="button button-primary"
+                  onClick={() => void requestEvidence()}
+                  disabled={evidenceSubmitting}
+                >
+                  {evidenceSubmitting ? "Submitting..." : "Submit request"}
+                </button>
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() => {
+                    setShowEvidenceForm(false);
+                    setEvidenceFormError("");
+                  }}
+                  disabled={evidenceSubmitting}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       )}
       {finding.range_valid === false && finding.status === "open" && (
         <p className="form-error" role="alert">

@@ -11,6 +11,7 @@ import type {
   ContentFindingsResponse,
   ContentUpdate,
   ContentStatusResponse,
+  EvidenceRequest,
   FindingActionResponse,
   Health,
   ReviewComment,
@@ -284,4 +285,31 @@ export const api = {
       undefined,
       options,
     ),
+  listEvidenceRequests: (
+    filters: {
+      status?: string;
+      assignee?: string;
+      findingId?: number;
+    } = {},
+    options?: RequestOptions,
+  ) => {
+    const params = new URLSearchParams();
+    if (filters.status) params.set("status", filters.status);
+    if (filters.assignee) params.set("assignee", filters.assignee);
+    if (filters.findingId !== undefined)
+      params.set("findingId", String(filters.findingId));
+    const query = params.toString();
+    return request<EvidenceRequest[]>(
+      "GET",
+      `/api/evidence-requests${query ? `?${query}` : ""}`,
+      undefined,
+      options,
+    );
+  },
+  createEvidenceRequest: (body: {
+    claimText: string;
+    findingId: number;
+    reason: string;
+    assignee: string;
+  }) => request<EvidenceRequest>("POST", "/api/evidence-requests", body),
 };

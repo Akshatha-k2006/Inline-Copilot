@@ -355,9 +355,11 @@ as `unsupported_claim`. Any valid demo role (`admin`, `brand_manager`,
 
 - `POST /api/evidence-requests` accepts `claimText` (the claim text from the
   finding), `findingId` (integer ID of an existing finding whose `check_type`
-  is `unsupported_claim`), `reason`, and `assignee` (a free-text owner, for
-  example a demo actor name). Leading and trailing whitespace is trimmed;
-  blank required fields are rejected. It returns `201` with the created
+  is `unsupported_claim`), `reason`, and `assignee` (one of the configured
+  demo owners: `Asha (Creator)`, `Ravi (Reviewer)`, `Bhavana (Brand Manager)`,
+  or `Admin`). When a finding includes matched claim text, `claimText` must
+  match it. Leading and trailing whitespace is trimmed; blank required fields
+  are rejected. It returns `201` with the created
   request:
 
 ```json
@@ -374,8 +376,8 @@ as `unsupported_claim`. Any valid demo role (`admin`, `brand_manager`,
 ```
 
 - `GET /api/evidence-requests` returns all requests ordered by ascending ID.
-  Optional query filters: `status` (one of `open`, `fulfilled`, `dismissed`)
-  and `assignee` (exact match). The filters combine.
+  Optional query filters: `status` (one of `open`, `fulfilled`, `dismissed`),
+  `assignee` (exact match), and `findingId`. The filters combine.
 
 Error cases: an unknown `findingId` returns `404` with
 `{ "error": "not_found", "message": "Finding not found." }`; a finding whose
