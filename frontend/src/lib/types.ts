@@ -128,6 +128,56 @@ export interface ApiAsset {
   assetType: string;
 }
 
+export interface BrandManagerDashboard {
+  period: { days: number; start: string; end: string };
+  overview: {
+    active_guidelines: number;
+    findings: number;
+    guidelines_triggered: number;
+    reviews: number;
+    previous_reviews: number;
+    review_change: number;
+    dismissed_findings: number;
+    guidelines_needing_review: number;
+  };
+  findings_per_rule: {
+    guideline_id: number | null;
+    guideline_name: string;
+    finding_count: number;
+    categories: Record<string, number>;
+    last_cited_at: string | null;
+  }[];
+  frequently_dismissed: {
+    guideline_id: number | null;
+    guideline_name: string;
+    dismissal_count: number;
+    decision_count: number;
+    dismissal_rate: number | null;
+    dismissal_reasons: string[];
+  }[];
+  not_recently_cited: {
+    guideline_id: number;
+    guideline_name: string;
+    last_citation_at: string | null;
+    last_reviewed_at: string | null;
+    reason: string;
+  }[];
+  not_recently_reviewed: {
+    guideline_id: number;
+    guideline_name: string;
+    last_reviewed_at: string | null;
+    reason: string;
+  }[];
+  clarifications: {
+    guideline_id: number | null;
+    guideline_name: string;
+    suggestion: string;
+    reason: string;
+    dismissal_count: number;
+    status: string;
+  }[];
+}
+
 export interface BackendFinding {
   id: number;
   check: string;

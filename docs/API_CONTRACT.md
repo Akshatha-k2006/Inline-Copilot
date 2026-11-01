@@ -448,6 +448,20 @@ missing `X-User` returns `422`. Database failures return `500` with
 Comments attached to a `request_changes` decision are included in this
 collection and use the same authorization rules.
 
+## Brand Manager dashboard
+
+`GET /api/brand-manager/dashboard?days=30` returns backend-derived analytics
+for Brand Manager and Admin roles. The simulated role must be sent in the
+existing `X-Role` header. `days` accepts 1 through 365 and defaults to 30.
+The response includes overview counts, findings grouped by rule, dismissal
+rates from `FindingDecisionEvent`, guidelines without recent citations, review
+timestamp gaps, and clarification suggestions derived from recorded
+dismissals. No metric is generated from frontend-only state.
+
+Non-Brand Manager roles receive `403`. Empty periods return empty ranked lists
+and zero overview counts. The dashboard is read-only; use the existing
+`/knowledge` guideline endpoints to edit rules.
+
 ## Evidence requests
 
 Evidence requests track work to find proof for claims that the review flagged

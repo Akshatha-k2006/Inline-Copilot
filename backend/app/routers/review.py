@@ -14,6 +14,7 @@ from app.dependencies import get_role
 from app.models import (
     AuditEvent,
     Content,
+    ContentImage,
     Finding,
     FindingDecisionEvent,
     Guideline,

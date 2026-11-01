@@ -1,5 +1,6 @@
 import type {
   ApiAsset,
+  BrandManagerDashboard,
   ApiFact,
   ApiFactInput,
   ApiGlossaryTerm,
@@ -221,6 +222,13 @@ export const api = {
 
   listAssets: (options?: RequestOptions) =>
     request<ApiAsset[]>("GET", "/api/assets", undefined, options),
+  getBrandManagerDashboard: (days = 30, options?: RequestOptions) =>
+    request<BrandManagerDashboard>(
+      "GET",
+      `/api/brand-manager/dashboard?days=${days}`,
+      undefined,
+      options,
+    ),
   createAsset: (body: Omit<ApiAsset, "id">) =>
     request<ApiAsset>("POST", "/api/assets", body),
   updateAsset: (id: number, body: Omit<ApiAsset, "id">) =>

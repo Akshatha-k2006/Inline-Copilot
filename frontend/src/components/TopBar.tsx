@@ -17,6 +17,7 @@ const NAV = [
   { href: "/queue", label: "Review Queue", key: "queue" },
   { href: "/evidence", label: "Evidence Requests", key: "evidence" },
   { href: "/audit", label: "Audit Trail", key: "audit" },
+  { href: "/brand-manager", label: "Brand Dashboard", key: "brand-manager" },
 ];
 
 export default function TopBar() {
@@ -26,6 +27,8 @@ export default function TopBar() {
   const visibleNav = NAV.filter((item) => {
     if (item.key === "queue") return role !== "creator";
     if (item.key === "audit") return role === "admin" || role === "brand_manager";
+    if (item.key === "brand-manager")
+      return role === "admin" || role === "brand_manager";
     return true;
   });
 
@@ -37,6 +40,12 @@ export default function TopBar() {
       role !== "admin" &&
       role !== "brand_manager" &&
       pathname === "/audit"
+    ) {
+      router.replace("/");
+    } else if (
+      role !== "admin" &&
+      role !== "brand_manager" &&
+      pathname === "/brand-manager"
     ) {
       router.replace("/");
     }
@@ -68,6 +77,8 @@ export default function TopBar() {
                       ? pathname === "/queue" || pathname.startsWith("/queue/")
                       : item.key === "evidence"
                         ? pathname === "/evidence" || pathname.startsWith("/evidence/")
+                      : item.key === "brand-manager"
+                        ? pathname === "/brand-manager"
                       : pathname === "/audit" || pathname.startsWith("/audit/");
             return (
               <li key={item.href}>
