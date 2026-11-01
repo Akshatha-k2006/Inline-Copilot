@@ -168,6 +168,19 @@ export interface ContentCommentsResponse {
   comments: ReviewComment[];
 }
 
+export type EvidenceRequestStatus = "open" | "fulfilled" | "dismissed";
+
+export interface EvidenceRequest {
+  id: number;
+  claimText: string;
+  findingId: number;
+  reason: string;
+  assignee: string;
+  status: EvidenceRequestStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface FindingSource {
   type: "term" | "guideline" | "fact";
   id: number;
