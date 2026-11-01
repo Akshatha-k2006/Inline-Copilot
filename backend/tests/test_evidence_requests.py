@@ -9,7 +9,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.db import Base, get_db
 from app.exception_handlers import register_exception_handlers
-from app.models import AuditEvent, Content, Finding
+from app.models import AuditEvent, Content, EvidenceRequest, Finding
 from app.routers import evidence_requests
 
 RESPONSE_KEYS = {
@@ -176,6 +176,130 @@ class EvidenceRequestEndpointTests(unittest.TestCase):
                 event.details.get("evidence_request_id"),
                 request_id,
             )
+
+
+class ListEvidenceRequestTests(unittest.TestCase):
+    def setUp(self):
+        self.engine = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        Base.metadata.create_all(self.engine)
+        self.client = build_client(self.engine)
+        with Session(self.engine) as db:
+            content = Content(
+                title="Landing page",
+                body="Visit our site for a wide audience.",
+                created_by="Asha (Creator)",
+            )
+            db.add(content)
+            db.flush()
+            finding = Finding(
+                content_id=content.id,
+                content_version=1,
+                check_type="unsupported_claim",
+                severity="warning",
+                message="An unsupported claim.",
+                evidence={},
+            )
+            db.add(finding)
+            db.flush()
+            rows = (
+                EvidenceRequest(
+                    finding_id=finding.id,
+                    claim_text="Claim A.",
+                    reason="Reason A.",
+                    assignee="Ravi (Reviewer)",
+                    status="open",
+                ),
+                EvidenceRequest(
+                    finding_id=finding.id,
+                    claim_text="Claim B.",
+                    reason="Reason B.",
+                    assignee="Bhavana (Brand Manager)",
+                    status="dismissed",
+                ),
+                EvidenceRequest(
+                    finding_id=finding.id,
+                    claim_text="Claim C.",
+                    reason="Reason C.",
+                    assignee="Bhavana (Brand Manager)",
+                    status="open",
+                ),
+            )
+            for row in rows:
+                db.add(row)
+            db.commit()
+
+    def tearDown(self):
+        self.engine.dispose()
+
+    def request_ids(self, body):
+        return [item["id"] for item in body]
+
+    def test_list_requests_are_ordered_and_unfiltered(self):
+        response = self.client.get(
+            "/api/evidence-requests", headers={"X-Role": "reviewer"}
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(len(body), 3)
+        ids = self.request_ids(body)
+        self.assertEqual(ids, sorted(ids))
+        for item in body:
+            self.assertEqual(set(item.keys()), RESPONSE_KEYS)
+        self.assertEqual(body[0]["claimText"], "Claim A.")
+        self.assertEqual(body[1]["claimText"], "Claim B.")
+        self.assertEqual(body[2]["claimText"], "Claim C.")
+
+    def test_filter_by_status(self):
+        response = self.client.get(
+            "/api/evidence-requests",
+            headers={"X-Role": "reviewer"},
+            params={"status": "dismissed"},
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(
+            [(item["status"], item["claimText"]) for item in body],
+            [("dismissed", "Claim B.")],
+        )
+
+    def test_filter_by_assignee(self):
+        response = self.client.get(
+            "/api/evidence-requests",
+            headers={"X-Role": "reviewer"},
+            params={"assignee": "Ravi (Reviewer)"},
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(
+            [(item["assignee"], item["claimText"]) for item in body],
+            [("Ravi (Reviewer)", "Claim A.")],
+        )
+
+    def test_filters_combine(self):
+        response = self.client.get(
+            "/api/evidence-requests",
+            headers={"X-Role": "reviewer"},
+            params={"status": "open", "assignee": "Bhavana (Brand Manager)"},
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(
+            [(item["status"], item["assignee"]) for item in body],
+            [("open", "Bhavana (Brand Manager)")],
+        )
+
+    def test_filter_unknown_status_returns_422(self):
+        response = self.client.get(
+            "/api/evidence-requests",
+            headers={"X-Role": "reviewer"},
+            params={"status": "wat"},
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["error"], "validation_error")
 
 
 if __name__ == "__main__":

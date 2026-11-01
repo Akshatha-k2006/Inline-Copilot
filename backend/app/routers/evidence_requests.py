@@ -1,12 +1,16 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.dependencies import get_role
 from app.models import AuditEvent, EvidenceRequest, Finding
-from app.schemas import EvidenceRequestCreate, EvidenceRequestResponse
+from app.schemas import (
+    EVIDENCE_REQUEST_STATUSES,
+    EvidenceRequestCreate,
+    EvidenceRequestResponse,
+)
 
 router = APIRouter(prefix="/evidence-requests", tags=["Evidence requests"])
 
@@ -30,6 +34,26 @@ def to_response(item: EvidenceRequest) -> dict:
         "createdAt": item.created_at,
         "updatedAt": item.updated_at,
     }
+
+
+@router.get("", response_model=list[EvidenceRequestResponse])
+def list_evidence_requests(
+    db: DbSession,
+    role: Annotated[str, Depends(get_role)],
+    status_filter: str | None = Query(default=None, alias="status"),
+    assignee: str | None = Query(default=None),
+):
+    if status_filter is not None and status_filter not in EVIDENCE_REQUEST_STATUSES:
+        raise _error(422, "validation_error", "Unknown evidence request status.")
+
+    query = db.query(EvidenceRequest)
+    if status_filter is not None:
+        query = query.where(EvidenceRequest.status == status_filter)
+    if assignee is not None:
+        query = query.where(EvidenceRequest.assignee == assignee)
+
+    items = query.order_by(EvidenceRequest.id).all()
+    return [to_response(item) for item in items]
 
 
 @router.post(
