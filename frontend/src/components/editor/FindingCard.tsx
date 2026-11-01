@@ -102,7 +102,7 @@ export default function FindingCard({
       aria-label={`${severityLabel} severity finding: ${checkLabel}`}
       tabIndex={0}
       onClick={(event) => {
-        if ((event.target as HTMLElement).closest("button, a, textarea"))
+        if ((event.target as HTMLElement).closest("button, a, textarea, summary"))
           return;
         onSelect(finding);
       }}
@@ -161,53 +161,60 @@ export default function FindingCard({
           <strong>Source:</strong> {finding.source.label}
         </p>
       )}
-      <div className="finding-knowledge-source">
-        {knowledgeSource.type === "guideline" && (
-          <p>{knowledgeSource.record.description}</p>
-        )}
-        {knowledgeSource.type === "term" && (
-          <>
-            <p>{knowledgeSource.record.definition}</p>
-            <p>
-              Status:{" "}
-              <strong>{knowledgeSource.record.status ?? "unspecified"}</strong>
-              {knowledgeSource.record.preferredTerm
-                ? ` · Preferred wording: ${knowledgeSource.record.preferredTerm}`
-                : ""}
-            </p>
-          </>
-        )}
-        {knowledgeSource.type === "fact" && (
-          <p>Current mock fact: {knowledgeSource.record.claim}</p>
-        )}
-        <Link href={knowledgeHref} className="finding-source-link">
-          {knowledgeLabel}
-        </Link>
-      </div>
-      {finding.fact_details && (
-        <dl className="finding-fact-details">
-          {finding.fact_details.source && (
-            <div>
-              <dt>Mock source reference</dt>
-              <dd>{finding.fact_details.source}</dd>
-            </div>
-          )}
-          <div>
-            <dt>Fact owner</dt>
-            <dd>{finding.fact_details.owner}</dd>
+      <details className="finding-details">
+        <summary>Knowledge details</summary>
+        <div className="finding-context">
+          <div className="finding-knowledge-source">
+            {knowledgeSource.type === "guideline" && (
+              <p>{knowledgeSource.record.description}</p>
+            )}
+            {knowledgeSource.type === "term" && (
+              <>
+                <p>{knowledgeSource.record.definition}</p>
+                <p>
+                  Status:{" "}
+                  <strong>
+                    {knowledgeSource.record.status ?? "unspecified"}
+                  </strong>
+                  {knowledgeSource.record.preferredTerm
+                    ? ` · Preferred wording: ${knowledgeSource.record.preferredTerm}`
+                    : ""}
+                </p>
+              </>
+            )}
+            {knowledgeSource.type === "fact" && (
+              <p>Current mock fact: {knowledgeSource.record.claim}</p>
+            )}
+            <Link href={knowledgeHref} className="finding-source-link">
+              {knowledgeLabel}
+            </Link>
           </div>
-          {finding.fact_details.last_reviewed && (
-            <div>
-              <dt>Last reviewed</dt>
-              <dd>{finding.fact_details.last_reviewed}</dd>
-            </div>
+          {finding.fact_details && (
+            <dl className="finding-fact-details">
+              {finding.fact_details.source && (
+                <div>
+                  <dt>Mock source reference</dt>
+                  <dd>{finding.fact_details.source}</dd>
+                </div>
+              )}
+              <div>
+                <dt>Fact owner</dt>
+                <dd>{finding.fact_details.owner}</dd>
+              </div>
+              {finding.fact_details.last_reviewed && (
+                <div>
+                  <dt>Last reviewed</dt>
+                  <dd>{finding.fact_details.last_reviewed}</dd>
+                </div>
+              )}
+              <div>
+                <dt>Review by</dt>
+                <dd>{finding.fact_details.review_date}</dd>
+              </div>
+            </dl>
           )}
-          <div>
-            <dt>Review by</dt>
-            <dd>{finding.fact_details.review_date}</dd>
-          </div>
-        </dl>
-      )}
+        </div>
+      </details>
 
       {editing && (
         <div className="finding-suggestion">
