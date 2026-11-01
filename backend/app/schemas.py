@@ -186,7 +186,7 @@ class EvidenceRequestCreate(BaseModel):
     claimText: str = Field(min_length=1)
     findingId: int
     reason: str = Field(min_length=1)
-    assignee: str = Field(min_length=1)
+    assignee: str = Field(min_length=1, max_length=150)
 
     @model_validator(mode="after")
     def strip_fields(self) -> "EvidenceRequestCreate":

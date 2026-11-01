@@ -153,6 +153,15 @@ class EvidenceRequestEndpointTests(unittest.TestCase):
         self.assertEqual(response.status_code, 422)
         self.assertEqual(response.json()["error"], "validation_error")
 
+    def test_create_over_length_assignee_returns_422(self):
+        response = self.client.post(
+            "/api/evidence-requests",
+            headers={"X-Role": "creator"},
+            json=self.create_payload(assignee="R" * 151),
+        )
+        self.assertEqual(response.status_code, 422)
+        self.assertEqual(response.json()["error"], "validation_error")
+
     def test_create_writes_audit_event(self):
         response = self.client.post(
             "/api/evidence-requests",
