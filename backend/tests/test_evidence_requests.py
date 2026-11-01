@@ -21,6 +21,14 @@ RESPONSE_KEYS = {
     "status",
     "createdAt",
     "updatedAt",
+    "sourceType",
+    "sourceUrl",
+    "documentName",
+    "documentType",
+    "attachedBy",
+    "attachedAt",
+    "verifiedBy",
+    "verifiedAt",
 }
 
 
@@ -309,6 +317,172 @@ class ListEvidenceRequestTests(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 422)
         self.assertEqual(response.json()["error"], "validation_error")
+
+
+class AttachEvidenceTests(unittest.TestCase):
+    def setUp(self):
+        self.engine = create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+        Base.metadata.create_all(self.engine)
+        self.client = build_client(self.engine)
+        with Session(self.engine) as db:
+            content = Content(
+                title="Landing page",
+                body="Visit our site for a wide audience.",
+                created_by="Asha (Creator)",
+            )
+            db.add(content)
+            db.flush()
+            finding = Finding(
+                content_id=content.id,
+                content_version=1,
+                check_type="unsupported_claim",
+                severity="warning",
+                message="An unsupported claim.",
+                evidence={},
+            )
+            db.add(finding)
+            db.flush()
+            request = EvidenceRequest(
+                finding_id=finding.id,
+                claim_text="Blocks ads for a wide audience.",
+                reason="Need approval proof before publishing.",
+                assignee="Ravi (Reviewer)",
+                status="open",
+            )
+            db.add(request)
+            db.commit()
+            self.request_id = request.id
+
+    def tearDown(self):
+        self.engine.dispose()
+
+    def fetch_item(self):
+        response = self.client.get(
+            "/api/evidence-requests", headers={"X-Role": "reviewer"}
+        )
+        self.assertEqual(response.status_code, 200)
+        items = [i for i in response.json() if i["id"] == self.request_id]
+        self.assertEqual(len(items), 1)
+        return items[0]
+
+    def attach(self, payload, request_id=None):
+        return self.client.post(
+            f"/api/evidence-requests/{request_id or self.request_id}/evidence",
+            headers={"X-Role": "brand_manager"},
+            json=payload,
+        )
+
+    def test_attach_url_source_happy_path(self):
+        response = self.attach(
+            {
+                "sourceType": "url",
+                "sourceUrl": " https://luminahome.com/report ",
+            }
+        )
+        self.assertEqual(response.status_code, 200)
+        item = self.fetch_item()
+        self.assertEqual(item["sourceType"], "url")
+        self.assertEqual(item["sourceUrl"], "https://luminahome.com/report")
+        self.assertIsNone(item["documentName"])
+        self.assertIsNone(item["documentType"])
+        self.assertEqual(item["attachedBy"], "brand_manager")
+        datetime.fromisoformat(item["attachedAt"])
+        self.assertEqual(item["status"], "open")
+        self.assertIsNone(item["verifiedBy"])
+        self.assertIsNone(item["verifiedAt"])
+
+    def test_attach_document_source_happy_path(self):
+        response = self.attach(
+            {
+                "sourceType": "document",
+                "documentName": "Brand-safety-guidelines",
+                "documentType": "pdf",
+            }
+        )
+        self.assertEqual(response.status_code, 200)
+        item = self.fetch_item()
+        self.assertEqual(item["sourceType"], "document")
+        self.assertEqual(item["documentName"], "Brand-safety-guidelines")
+        self.assertEqual(item["documentType"], "pdf")
+        self.assertIsNone(item["sourceUrl"])
+        self.assertEqual(item["status"], "open")
+
+    def test_attach_url_requires_valid_url(self):
+        for source_url in ("", "not a url", "ftp://example.com/file"):
+            with self.subTest(sourceUrl=source_url):
+                response = self.attach(
+                    {"sourceType": "url", "sourceUrl": source_url}
+                )
+                self.assertEqual(response.status_code, 422)
+                self.assertEqual(response.json()["error"], "validation_error")
+        self.assertIsNone(self.fetch_item()["sourceType"])
+
+    def test_attach_document_shape_is_validated(self):
+        cases = (
+            {"sourceType": "document", "documentName": "Guidelines"},
+            {
+                "sourceType": "document",
+                "documentName": "Guidelines",
+                "documentType": "exe",
+            },
+            {
+                "sourceType": "url",
+                "sourceUrl": "https://example.com/page",
+                "documentName": "Guidelines",
+            },
+        )
+        for payload in cases:
+            with self.subTest(payload=payload):
+                response = self.attach(payload)
+                self.assertEqual(response.status_code, 422)
+                self.assertEqual(response.json()["error"], "validation_error")
+        self.assertIsNone(self.fetch_item()["sourceType"])
+
+    def test_attach_unknown_request_returns_404(self):
+        response = self.attach(
+            {"sourceType": "url", "sourceUrl": "https://example.com/page"},
+            request_id=999999,
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.json()["error"], "not_found")
+
+    def test_attach_keeps_request_open_and_audits(self):
+        response = self.attach(
+            {"sourceType": "url", "sourceUrl": "https://example.com/page"}
+        )
+        self.assertEqual(response.status_code, 200)
+        with Session(self.engine) as db:
+            event = (
+                db.query(AuditEvent)
+                .filter(AuditEvent.action == "evidence_request_attached")
+                .one()
+            )
+            self.assertEqual(event.details["evidence_request_id"], self.request_id)
+            self.assertEqual(event.details["source_type"], "url")
+        self.assertEqual(self.fetch_item()["status"], "open")
+
+    def test_reattach_overwrites_single_slot(self):
+        first = self.attach(
+            {"sourceType": "url", "sourceUrl": "https://example.com/page"}
+        )
+        self.assertEqual(first.status_code, 200)
+        second = self.attach(
+            {
+                "sourceType": "document",
+                "documentName": "Guidelines",
+                "documentType": "docx",
+            }
+        )
+        self.assertEqual(second.status_code, 200)
+        item = self.fetch_item()
+        self.assertEqual(item["sourceType"], "document")
+        self.assertEqual(item["documentName"], "Guidelines")
+        self.assertEqual(item["documentType"], "docx")
+        self.assertIsNone(item["sourceUrl"])
 
 
 if __name__ == "__main__":
