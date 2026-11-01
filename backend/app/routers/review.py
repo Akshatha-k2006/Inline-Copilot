@@ -16,6 +16,7 @@ from app.schemas import FindingActionRequest, FindingActionResponse
 from app.services.terminology_checker import check_terminology
 from app.services.fact_checker import check_claims
 from app.services.tone_checker import check_tone
+from app.services.accessibility_checker import check_accessibility
 from app.config import settings
 from app.services.llm_reviewer import (
     LLMProviderError,
@@ -34,6 +35,7 @@ REVIEW_CHECKS = (
     "messaging",
     "unsupported_claim",
     "outdated_info",
+    "accessibility",
 )
 
 
@@ -170,6 +172,7 @@ def review_content(
         terminology_findings = check_terminology(content.body, db)
         claim_findings = check_claims(content.body, db)
         tone_findings = check_tone(content.body, db)
+        accessibility_findings = check_accessibility(db, content)
 
         llm_status = "ok"
         try:
@@ -202,8 +205,13 @@ def review_content(
             logger.warning("Hosted LLM review failed: category=unexpected")
 
         saved_findings = []
-        rule_findings = terminology_findings + claim_findings + tone_findings
-        all_findings = rule_findings.copy()
+        # Accessibility findings carry their own text-free suggested fix and
+        # have no content spans, so they bypass the suggestion generator,
+        # which nulls fixes for findings without a verifiable span.
+        text_rule_findings = (
+            terminology_findings + claim_findings + tone_findings
+        )
+        all_findings = text_rule_findings.copy()
         for llm_finding in llm_findings:
             duplicate = any(
                 _is_duplicate(existing, llm_finding)
@@ -213,6 +221,7 @@ def review_content(
                 all_findings.append(llm_finding)
 
         all_findings = generate_suggestions(content.body, all_findings)
+        all_findings = all_findings + accessibility_findings
         all_findings.sort(key=_finding_sort_key)
 
         for item in all_findings:
