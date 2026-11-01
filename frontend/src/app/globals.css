@@ -1672,6 +1672,65 @@ a {
   font-size: 0.9rem;
 }
 
+.evidence-request-page-list {
+  display: grid;
+  gap: 18px;
+}
+
+.evidence-detail-card {
+  display: grid;
+  gap: 16px;
+}
+
+.evidence-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.evidence-detail-grid dt {
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.evidence-detail-grid dd {
+  margin: 2px 0 0;
+}
+
+.evidence-submission,
+.evidence-decision {
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border: 1px solid #d8cffb;
+  border-radius: 9px;
+  background: #faf9ff;
+}
+
+.evidence-submission h3,
+.evidence-decision h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.evidence-submission p,
+.evidence-decision p {
+  margin: 0;
+}
+
+.evidence-activity {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.evidence-activity p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
 .finding-card {
   gap: 9px;
   padding: 13px;

@@ -431,6 +431,27 @@ dismissed) or has no attached evidence yet. Verification records an
 `evidence_request_verified` audit event with the request ID and source type in
 the same transaction. No other status transitions exist through this API.
 
+### Evidence review decisions and activity
+
+`GET /api/evidence-requests/{id}` returns the request, submitted evidence,
+owner explanation, and any final reviewer decision. Evidence submission also
+accepts `evidenceDescription` and optional `ownerExplanation`; a creator may
+submit only when `X-User` identifies the assigned owner. Reviewer, brand
+manager, and admin roles may inspect submissions.
+
+- `POST /api/evidence-requests/{id}/approve` accepts `{ "feedback": "..." }`
+  and is restricted to authorised reviewer roles. It stores reviewer feedback
+  and a decision timestamp, sets `decision` to `approved`, and changes the
+  request status to `fulfilled`.
+- `POST /api/evidence-requests/{id}/reject` has the same body and permissions,
+  but requires feedback explaining the rejection. It stores `decision` as
+  `rejected` and changes the request status to `dismissed`.
+- A final decision cannot be overwritten. Both endpoints require submitted
+  evidence and return `409` for invalid transitions.
+- `GET /api/evidence-requests/{id}/activity` returns chronological activity
+  entries for creation, evidence submission, verification, approval, and
+  rejection. Entries are backed by the existing `audit_events` table.
+
 ## Frontend integration and demo role context
 
 The Write & Review editor, review queue, and audit trail call these backend

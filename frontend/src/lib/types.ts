@@ -179,6 +179,28 @@ export interface EvidenceRequest {
   status: EvidenceRequestStatus;
   createdAt: string;
   updatedAt: string;
+  sourceType: "url" | "document" | null;
+  sourceUrl: string | null;
+  documentName: string | null;
+  documentType: string | null;
+  evidenceDescription: string | null;
+  ownerExplanation: string | null;
+  attachedBy: string | null;
+  attachedAt: string | null;
+  verifiedBy: string | null;
+  verifiedAt: string | null;
+  decision: "approved" | "rejected" | null;
+  reviewerFeedback: string | null;
+  decidedBy: string | null;
+  decidedAt: string | null;
+}
+
+export interface EvidenceActivity {
+  id: number;
+  eventType: string;
+  actor: string;
+  timestamp: string;
+  details: Record<string, unknown>;
 }
 
 export interface FindingSource {
