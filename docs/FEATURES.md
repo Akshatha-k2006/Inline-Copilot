@@ -148,11 +148,6 @@ sends `X-Role` and `X-User` headers (demo only, not authentication).
   target environment is local demonstration and testing.
 - **Facts and claim checks** use review dates and approved-fact matching but
   no evidence attachments or re-approval workflow yet.
-- **Schema migrations** are applied at startup as ad-hoc schema updates; there
-  is no versioned migration framework.
-- **Deployment** is local only: FastAPI + SQLite/PostgreSQL via
-  environment configuration, Next.js frontend with `NEXT_PUBLIC_API_BASE_URL`.
-  No production environment or manifests exist.
 
 ## Planned
 
