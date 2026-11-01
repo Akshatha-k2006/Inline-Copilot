@@ -31,6 +31,11 @@ class FactCreate(BaseModel):
     source: str = ""
     lastReviewed: date | None = None
 
+
+class FactReapproveRequest(BaseModel):
+    reviewDate: date
+    lastReviewed: date | None = None
+
 class FactResponse(FactCreate):
     reviewDate: date | None
     id: int

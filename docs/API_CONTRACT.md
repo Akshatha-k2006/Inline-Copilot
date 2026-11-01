@@ -26,6 +26,19 @@ Each item returned by the API includes an `id`.
 - `POST /api/seed/load` loads the fictional brand from `seed/brand.json`.
   It adds missing sample records by stable natural keys, does not overwrite or
   delete existing records, and is restricted to Admin and Brand Manager roles.
+- `PUT /api/facts/{id}/re-approve` is the dedicated evidence-renewal action
+  (restricted to Admin and Brand Manager; Creator and Reviewer roles receive
+  `403`). The body is `{ "reviewDate": "YYYY-MM-DD", "lastReviewed":
+  "YYYY-MM-DD"? }`; `reviewDate` is required and must be today's date or later
+  — a past date is a caller mistake and returns `422` without changing the
+  fact. When `lastReviewed` is omitted it defaults to today. The response is
+  the fact record with its updated dates: an expired fact (`outdated: true`)
+  stops being flagged and starts presenting current evidence the moment the
+  new expiry wraps it. Unknown facts return `404` with
+  `{ "error": "not_found", "message": "Fact not found." }`. Re-approval
+  records a `knowledge_fact_reapproved` audit event in the same transaction,
+  distinct from the `knowledge_fact_updated` event an ordinary wording edit
+  produces on `PUT /api/facts/{id}`.
 - `GET /api/health` returns `{ "status": "ok" }`.
 
 These collection and seed routes query or modify SQLAlchemy records in the
