@@ -203,6 +203,46 @@ class FindingDecisionEvent(Base):
     )
 
 
+class FindingReviewEvent(Base):
+    __tablename__ = "finding_review_events"
+    __table_args__ = (
+        UniqueConstraint("event_key", name="uq_finding_review_event_key"),
+        Index(
+            "ix_finding_review_events_guideline_occurred",
+            "guideline_id",
+            "occurred_at",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    event_key: Mapped[str] = mapped_column(String(200), nullable=False)
+    review_event_id: Mapped[int | None] = mapped_column(
+        ForeignKey("audit_events.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    finding_id: Mapped[int | None] = mapped_column(
+        ForeignKey("findings.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    finding_reference_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    content_id: Mapped[int | None] = mapped_column(
+        ForeignKey("content.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    content_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    guideline_id: Mapped[int | None] = mapped_column(
+        ForeignKey("guidelines.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    guideline_title: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    check_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    severity: Mapped[str] = mapped_column(String(50), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class Comment(Base):
     __tablename__ = "comments"
 

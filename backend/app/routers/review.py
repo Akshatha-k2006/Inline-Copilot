@@ -17,6 +17,7 @@ from app.models import (
     ContentImage,
     Finding,
     FindingDecisionEvent,
+    FindingReviewEvent,
     Guideline,
 )
 from app.schemas import FindingActionRequest, FindingActionResponse
@@ -291,12 +292,19 @@ def review_content(
                 guideline_id = source.get("guideline_id")
                 if guideline_id is None and source.get("type") == "guideline":
                     guideline_id = source.get("id")
+            guideline = (
+                db.get(Guideline, guideline_id)
+                if isinstance(guideline_id, int)
+                and not isinstance(guideline_id, bool)
+                else None
+            )
             if (
                 not isinstance(guideline_id, int)
                 or isinstance(guideline_id, bool)
-                or db.get(Guideline, guideline_id) is None
+                or guideline is None
             ):
                 guideline_id = None
+                guideline = None
 
             finding = Finding(
                 content_id=content.id,
@@ -314,21 +322,45 @@ def review_content(
             db.add(finding)
             saved_findings.append(finding)
 
+        review_at = datetime.now(timezone.utc)
         content.reviewed_version = content.version
-        content.reviewed_at = datetime.now(timezone.utc)
-        db.add(
-            AuditEvent(
-                content_id=content.id,
-                actor=x_user.strip(),
-                action="content_reviewed",
-                details={
-                    "actor_role": role,
-                    "content_version": content.version,
-                    "finding_count": len(saved_findings),
-                    "engine": {"rules": "ok", "llm": llm_status},
-                },
-            )
+        content.reviewed_at = review_at
+        review_event = AuditEvent(
+            content_id=content.id,
+            actor=x_user.strip(),
+            action="content_reviewed",
+            details={
+                "actor_role": role,
+                "content_version": content.version,
+                "finding_count": len(saved_findings),
+                "engine": {"rules": "ok", "llm": llm_status},
+            },
         )
+        db.add(review_event)
+        db.flush()
+        review_history = []
+        for finding in saved_findings:
+            guideline = (
+                db.get(Guideline, finding.guideline_id)
+                if finding.guideline_id is not None
+                else None
+            )
+            review_history.append(
+                FindingReviewEvent(
+                    event_key=f"review:{review_event.id}:finding:{finding.id}",
+                    review_event_id=review_event.id,
+                    finding_id=finding.id,
+                    finding_reference_id=finding.id,
+                    content_id=content.id,
+                    content_version=content.version,
+                    guideline_id=finding.guideline_id,
+                    guideline_title=guideline.title if guideline else None,
+                    check_type=finding.check_type,
+                    severity=finding.severity,
+                    occurred_at=review_at,
+                )
+            )
+        db.add_all(review_history)
         db.commit()
     except SQLAlchemyError as exc:
         db.rollback()
@@ -408,6 +440,7 @@ def recheck_accessibility_finding(
     if finding.content_version != content.version and finding.check_type != "accessibility":
         raise _action_error(409, "stale_finding", "The finding belongs to an older content version.")
 
+    previous_finding_status = finding.status
     evidence = finding.evidence if isinstance(finding.evidence, dict) else {}
     source = evidence.get("source") if isinstance(evidence.get("source"), dict) else {}
     result_status = "open"
@@ -472,6 +505,38 @@ def recheck_accessibility_finding(
     finding.message = result_message
     finding.suggested_fix = result_suggestion
     finding.evidence = evidence
+    if result_status == "resolved" and previous_finding_status == "open":
+        event_key = f"finding:{finding.id}:resolved"
+        if (
+            db.query(FindingDecisionEvent.id)
+            .filter(FindingDecisionEvent.event_key == event_key)
+            .first()
+            is None
+        ):
+            guideline = (
+                db.get(Guideline, finding.guideline_id)
+                if finding.guideline_id is not None
+                else None
+            )
+            db.add(
+                FindingDecisionEvent(
+                    event_key=event_key,
+                    finding_id=finding.id,
+                    finding_reference_id=finding.id,
+                    content_id=content.id,
+                    guideline_id=finding.guideline_id,
+                    guideline_title=guideline.title if guideline else None,
+                    decision="resolved",
+                    actor=actor,
+                    occurred_at=datetime.now(timezone.utc),
+                    details={
+                        "check": finding.check_type,
+                        "previous_status": previous_finding_status,
+                        "new_status": result_status,
+                        "source": source.get("type"),
+                    },
+                )
+            )
     db.add(
         AuditEvent(
             content_id=content.id,

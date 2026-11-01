@@ -1,6 +1,8 @@
 import asyncio
 import json
 import unittest
+from datetime import datetime, timedelta, timezone
+from urllib.parse import urlsplit
 
 from fastapi import FastAPI
 from sqlalchemy import create_engine
@@ -9,7 +11,16 @@ from sqlalchemy.pool import StaticPool
 
 from app.db import Base, get_db
 from app.exception_handlers import register_exception_handlers
-from app.models import Asset, AuditEvent, Content, Fact, Guideline, Term
+from app.models import (
+    Asset,
+    AuditEvent,
+    Content,
+    Fact,
+    FindingDecisionEvent,
+    FindingReviewEvent,
+    Guideline,
+    Term,
+)
 from app.routers import assets, facts, glossary, guidelines, seed
 
 
@@ -45,6 +56,7 @@ class KnowledgeEndpointTests(unittest.TestCase):
 
     def request(self, method, path, *, role="brand_manager", body=None):
         async def dispatch():
+            parsed_path = urlsplit(path)
             sent = []
             received = False
             request_body = b"" if body is None else json.dumps(body).encode()
@@ -73,9 +85,9 @@ class KnowledgeEndpointTests(unittest.TestCase):
                     "http_version": "1.1",
                     "method": method,
                     "scheme": "http",
-                    "path": path,
-                    "raw_path": path.encode("ascii"),
-                    "query_string": b"",
+                    "path": parsed_path.path,
+                    "raw_path": parsed_path.path.encode("ascii"),
+                    "query_string": parsed_path.query.encode("ascii"),
                     "headers": headers,
                     "client": ("127.0.0.1", 123),
                     "server": ("testserver", 80),
@@ -312,6 +324,130 @@ class KnowledgeEndpointTests(unittest.TestCase):
         status, terms = self.request("GET", "/api/glossary")
         self.assertEqual(status, 200)
         self.assertIsNone(next(item for item in terms if item["id"] == term["id"])["guidelineId"])
+
+    def test_guideline_metrics_use_review_history_and_explicit_dismissal_denominator(self):
+        cited = Guideline(
+            title="Claims policy",
+            description="Claims need evidence.",
+            category="claims",
+        )
+        stale = Guideline(
+            title="Old tone rule",
+            description="Use clear language.",
+            category="tone",
+        )
+        never_cited = Guideline(
+            title="Unused rule",
+            description="A rule with no usage.",
+            category="other",
+        )
+        self.db.add_all([cited, stale, never_cited])
+        self.db.flush()
+        now = datetime.now(timezone.utc)
+        recent = now - timedelta(days=5)
+        old = now - timedelta(days=120)
+        self.db.add_all(
+            [
+                FindingReviewEvent(
+                    event_key="review:1:finding:1",
+                    finding_reference_id=1,
+                    content_version=1,
+                    guideline_id=cited.id,
+                    guideline_title=cited.title,
+                    check_type="unsupported_claim",
+                    severity="warning",
+                    occurred_at=recent,
+                ),
+                FindingReviewEvent(
+                    event_key="review:1:finding:2",
+                    finding_reference_id=2,
+                    content_version=1,
+                    guideline_id=cited.id,
+                    guideline_title=cited.title,
+                    check_type="unsupported_claim",
+                    severity="high",
+                    occurred_at=recent,
+                ),
+                FindingReviewEvent(
+                    event_key="review:2:finding:3",
+                    finding_reference_id=3,
+                    content_version=1,
+                    guideline_id=stale.id,
+                    guideline_title=stale.title,
+                    check_type="tone",
+                    severity="warning",
+                    occurred_at=old,
+                ),
+            ]
+        )
+        decisions = ("dismissed", "dismissed", "accepted", "resolved")
+        self.db.add_all(
+            [
+                FindingDecisionEvent(
+                    event_key=f"finding:{index}:{decision}",
+                    finding_reference_id=index,
+                    guideline_id=cited.id,
+                    guideline_title=cited.title,
+                    decision=decision,
+                    actor="reviewer",
+                    occurred_at=recent,
+                )
+                for index, decision in enumerate(decisions, start=1)
+            ]
+        )
+        self.db.commit()
+
+        status, response = self.request(
+            "GET",
+            "/api/guidelines/metrics?period_days=30&stale_after_days=90",
+        )
+
+        self.assertEqual(status, 200)
+        self.assertEqual(response["period"]["days"], 30)
+        self.assertEqual(response["stale_after_days"], 90)
+        self.assertEqual(response["totals"]["violation_count"], 2)
+        self.assertEqual(response["totals"]["decision_count"], 4)
+        self.assertEqual(response["totals"]["dismissed_count"], 2)
+        self.assertEqual(response["totals"]["dismissal_rate"], 0.5)
+
+        by_id = {item["guideline_id"]: item for item in response["guidelines"]}
+        cited_metrics = by_id[cited.id]
+        self.assertEqual(cited_metrics["violation_count"], 2)
+        self.assertEqual(cited_metrics["citation_count"], 2)
+        self.assertEqual(
+            cited_metrics["violations_by_check"],
+            {"unsupported_claim": 2},
+        )
+        self.assertEqual(cited_metrics["dismissal_rate"], 0.5)
+        self.assertEqual(cited_metrics["last_reviewed_at"], recent.isoformat())
+        self.assertIn("high_dismissal_rate", cited_metrics["attention_reasons"])
+
+        stale_metrics = by_id[stale.id]
+        self.assertEqual(stale_metrics["citation_count"], 0)
+        self.assertEqual(stale_metrics["last_reviewed_at"], old.isoformat())
+        self.assertIn("no_citations_in_period", stale_metrics["attention_reasons"])
+        self.assertIn("not_reviewed_recently", stale_metrics["attention_reasons"])
+        self.assertIsNone(by_id[never_cited.id]["last_reviewed_at"])
+        self.assertEqual(
+            set(response["guidelines_without_citations"]),
+            {stale.id, never_cited.id},
+        )
+
+        suggested = {
+            item["guideline_id"]: item
+            for item in response["suggested_areas_for_clarification"]
+        }
+        self.assertIn(cited.id, suggested)
+        self.assertIn(stale.id, suggested)
+        self.assertIn("high_dismissal_rate", suggested[cited.id]["reasons"])
+
+    def test_guideline_metrics_validate_period_parameters(self):
+        status, response = self.request(
+            "GET",
+            "/api/guidelines/metrics?period_days=0",
+        )
+        self.assertEqual(status, 422)
+        self.assertEqual(response["error"], "validation_error")
 
 
 if __name__ == "__main__":
