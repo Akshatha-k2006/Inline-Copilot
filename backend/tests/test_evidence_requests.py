@@ -484,6 +484,29 @@ class AttachEvidenceTests(unittest.TestCase):
         self.assertEqual(item["documentType"], "docx")
         self.assertIsNone(item["sourceUrl"])
 
+    def test_attach_after_close_returns_409(self):
+        first = self.attach(
+            {"sourceType": "url", "sourceUrl": "https://example.com/page"}
+        )
+        self.assertEqual(first.status_code, 200)
+        response = self.client.post(
+            f"/api/evidence-requests/{self.request_id}/verify",
+            headers={"X-Role": "reviewer"},
+        )
+        self.assertEqual(response.status_code, 200)
+        reattach = self.attach(
+            {
+                "sourceType": "document",
+                "documentName": "Late-proof",
+                "documentType": "pdf",
+            }
+        )
+        self.assertEqual(reattach.status_code, 409)
+        self.assertEqual(reattach.json()["error"], "conflict")
+        item = self.fetch_item()
+        self.assertEqual(item["sourceType"], "url")
+        self.assertIsNone(item["documentName"])
+
 
 class VerifyEvidenceRequestTests(unittest.TestCase):
     def setUp(self):

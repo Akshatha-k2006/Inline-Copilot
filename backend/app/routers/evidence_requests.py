@@ -160,6 +160,12 @@ def attach_evidence(
     item = db.get(EvidenceRequest, request_id)
     if item is None:
         raise _error(404, "not_found", "Evidence request not found")
+    if item.status != "open":
+        raise _error(
+            409,
+            "conflict",
+            "Evidence can only be attached to an open evidence request.",
+        )
 
     item.source_type = payload.sourceType
     item.source_url = payload.sourceUrl
