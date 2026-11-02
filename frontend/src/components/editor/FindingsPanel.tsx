@@ -55,6 +55,7 @@ export default function FindingsPanel({
 }: FindingsPanelProps) {
   const activeFindings =
     findings?.filter((finding) => finding.status === "open") ?? [];
+  const totalFindings = findings?.length ?? 0;
   const resolvedFindings =
     findings?.filter((finding) => finding.status !== "open") ?? [];
   const highCount = activeFindings.filter(
@@ -72,6 +73,30 @@ export default function FindingsPanel({
   const hasAccessibilityFindings = findings?.some(
     (finding) => finding.check === "accessibility",
   );
+  const findingGroups = [
+    {
+      label: "Guideline Violations",
+      findings: activeFindings.filter((finding) =>
+        ["tone", "messaging", "outdated_info"].includes(finding.check),
+      ),
+    },
+    {
+      label: "Terminology",
+      findings: activeFindings.filter((finding) => finding.check === "terminology"),
+    },
+    {
+      label: "Unsupported Claims",
+      findings: activeFindings.filter(
+        (finding) => finding.check === "unsupported_claim",
+      ),
+    },
+    {
+      label: "Accessibility",
+      findings: activeFindings.filter(
+        (finding) => finding.check === "accessibility",
+      ),
+    },
+  ].filter((group) => group.findings.length > 0);
 
   return (
     <section
@@ -80,15 +105,11 @@ export default function FindingsPanel({
     >
       <div className="panel-heading">
         <div>
-          <p className="eyebrow">Review results</p>
-          <h2 id="findings-heading">
-            {reviewing
-              ? "Reviewing..."
-              : findings === null
-                ? "Findings"
-                : `${activeFindings.length} open ${activeFindings.length === 1 ? "finding" : "findings"}`}
-          </h2>
+          <h2 id="findings-heading">Findings</h2>
         </div>
+        <span className="findings-count">
+          {reviewing ? "Reviewing..." : `${totalFindings} findings`}
+        </span>
         {activeFindings.length > 0 && !reviewing && (
           <div className="finding-summary" aria-label="Open findings by severity">
             <span
@@ -143,27 +164,32 @@ export default function FindingsPanel({
         <div className="findings-scroll">
           <div className="editor-empty-state">
             <span className="empty-state-mark" aria-hidden="true">
-              ✓
+              <svg viewBox="0 0 32 32" focusable="false">
+                <path d="M8 3.5h11l6 6V25H8z" />
+                <path d="M19 3.5V10h6M12 14h9M12 18h6" />
+                <circle cx="21.5" cy="21.5" r="5" />
+                <path d="m25 25 3.5 3.5" />
+              </svg>
             </span>
             <h3>
               {reviewState === "stale"
                 ? "Review this version again"
-                : "Review not run yet"}
+                : "No findings yet"}
             </h3>
             <p>
               {reviewState === "stale"
                 ? "The draft changed after its last review, so those results are out of date. Review this version again."
                 : readOnly
                   ? "No backend review is recorded for this content yet."
-                  : "Review the draft to check its configured guidelines, terminology, and facts."}
+                  : "Run a full review to check this draft against approved guidelines, terminology, claims, and accessibility requirements."}
             </p>
             {canRunReview && onRunReview && (
               <button
                 type="button"
-                className="button button-primary"
+                className="button button-primary button-run-review"
                 onClick={onRunReview}
               >
-                Review content
+                Run full review
               </button>
             )}
           </div>
@@ -224,26 +250,41 @@ export default function FindingsPanel({
         </div>
       ) : (
         <div className="findings-scroll">
-          <div className="finding-list">
-            {activeFindings.map((finding) => (
-              <FindingCard
-                key={finding.id}
-                id={`finding-card-${finding.id}`}
-                finding={finding}
-                busy={busyFindingIds.includes(finding.id)}
-                readOnly={readOnly}
-                selected={selectedFindingId === finding.id}
-                onSelect={onSelect}
-                onResolve={onResolve}
-                evidenceRequests={evidenceRequests.filter(
-                  (request) => request.findingId === finding.id,
-                )}
-                evidenceLoading={evidenceLoading}
-                evidenceError={evidenceError}
-                onRequestEvidence={onRequestEvidence}
-                onRecheck={onRecheck}
-                onEditAccessibility={onEditAccessibility}
-              />
+          <h3 className="findings-groups-heading">
+            Findings ({activeFindings.length})
+          </h3>
+          <div className="finding-categories">
+            {findingGroups.map((group) => (
+              <details className="finding-category" key={group.label}>
+                <summary>
+                  <span>{group.label}</span>
+                  <span className="finding-category-count">
+                    {group.findings.length}
+                  </span>
+                </summary>
+                <div className="finding-list">
+                  {group.findings.map((finding) => (
+                    <FindingCard
+                      key={finding.id}
+                      id={`finding-card-${finding.id}`}
+                      finding={finding}
+                      busy={busyFindingIds.includes(finding.id)}
+                      readOnly={readOnly}
+                      selected={selectedFindingId === finding.id}
+                      onSelect={onSelect}
+                      onResolve={onResolve}
+                      evidenceRequests={evidenceRequests.filter(
+                        (request) => request.findingId === finding.id,
+                      )}
+                      evidenceLoading={evidenceLoading}
+                      evidenceError={evidenceError}
+                      onRequestEvidence={onRequestEvidence}
+                      onRecheck={onRecheck}
+                      onEditAccessibility={onEditAccessibility}
+                    />
+                  ))}
+                </div>
+              </details>
             ))}
           </div>
           {resolvedFindings.length > 0 && (
