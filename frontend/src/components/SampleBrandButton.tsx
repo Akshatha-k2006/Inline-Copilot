@@ -3,7 +3,10 @@
 import { useState } from "react";
 import { useRole } from "@/lib/role";
 import { canManageKnowledge } from "@/lib/workflow";
-import { seedSampleBrand } from "@/lib/workspace-store";
+import {
+  SAMPLE_BRAND_SEED_CONFIRMATION,
+  seedSampleBrand,
+} from "@/lib/workspace-store";
 
 interface SampleBrandButtonProps {
   onLoaded?: () => void;
@@ -19,11 +22,7 @@ export default function SampleBrandButton({
   if (!canManageKnowledge(role)) return null;
 
   async function loadSampleBrand() {
-    if (
-      !window.confirm(
-        "Load the fictional sample brand into the backend? Existing records are kept and matching sample records are updated.",
-      )
-    ) {
+    if (!window.confirm(SAMPLE_BRAND_SEED_CONFIRMATION)) {
       return;
     }
 
@@ -31,14 +30,16 @@ export default function SampleBrandButton({
     setMessage("");
     setError("");
     try {
-      await seedSampleBrand(role);
+      const result = await seedSampleBrand(role);
       onLoaded?.();
-      setMessage("Sample brand loaded into the backend.");
+      setMessage(
+        `Sample brand loaded. Removed ${result.counts.removed_content} other document(s).`,
+      );
     } catch (cause) {
       setError(
         cause instanceof Error
-            ? cause.message
-            : "Could not load sample brand data.",
+          ? cause.message
+          : "Could not load sample brand data.",
       );
     } finally {
       setLoading(false);

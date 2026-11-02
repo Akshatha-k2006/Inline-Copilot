@@ -102,7 +102,7 @@ inline-copilot/
 
 ## Data flow for the main path
 
-1. **Load sample brand:** `POST /api/seed/load` → `services/seed_loader.py` fills the tables and creates the sample draft.
+1. **Load sample brand:** `POST /api/seed/load` fills the brand tables, keeps the sample draft and its image, removes other content with related review data, and clears the legacy pre-seeded evidence request.
 2. **Run review:** `POST /api/content/{id}/review` → `engine.run_review()` runs terminology, claims and tone, stores findings for the current content version, returns them sorted by position.
 3. **Resolve a finding:** `PATCH /api/findings/{id}` → body text is updated, version increases, an audit event is written.
 4. **Submit and decide:** `submit` → `decision` → `ready` go through `services/workflow.py`, which rejects invalid transitions with `409` and writes an audit event for each.

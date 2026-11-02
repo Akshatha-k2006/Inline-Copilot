@@ -6,6 +6,7 @@ import {
   BACKEND_DATA_NOTICE,
   removeKnowledgeItem,
   saveKnowledgeItem,
+  SAMPLE_BRAND_SEED_CONFIRMATION,
   seedSampleBrand,
   useWorkspace,
 } from "@/lib/workspace-store";
@@ -118,16 +119,18 @@ export default function KnowledgeBasePage() {
     if (busy) return;
     if (
       !globalThis.confirm(
-        "Load the sample brand into the backend? Existing records are kept and matching sample records are updated.",
+        SAMPLE_BRAND_SEED_CONFIRMATION,
       )
     ) {
       return;
     }
     setBusy(true);
     try {
-      await seedSampleBrand(role);
+      const result = await seedSampleBrand(role);
       setFormError("");
-      setNotice("Sample brand loaded into the backend.");
+      setNotice(
+        `Sample brand loaded. Removed ${result.counts.removed_content} other document(s).`,
+      );
     } catch (cause) {
       setFormError(
         cause instanceof Error

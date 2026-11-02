@@ -100,8 +100,16 @@ last-reviewed date, attention reasons, and clarification suggestions.
 ```
 
 - `POST /api/seed/load` loads the fictional brand from `seed/brand.json`.
-  It adds missing sample records by stable natural keys, does not overwrite or
-  delete existing records, and is restricted to Admin and Brand Manager roles.
+  It adds missing brand records by stable natural keys, removes all content
+  documents except the single sample draft, and is restricted to Admin and
+  Brand Manager roles. Deleting other documents also removes their comments,
+  findings, images, and evidence requests; a content-deletion audit event is
+  retained. The sample includes a brand palette, foreground/background colors,
+  and an image attached to the draft. It does not create review findings or
+  evidence requests; run a review to generate findings, then use an
+  unsupported-claim finding to create an editable evidence request. The
+  response counts include `images`, `evidence_requests` (zero for seeding),
+  and `removed_content`.
 - `PUT /api/facts/{id}/re-approve` is the dedicated evidence-renewal action
   (restricted to Admin and Brand Manager; Creator and Reviewer roles receive
   `403`). The body is `{ "reviewDate": "YYYY-MM-DD", "lastReviewed":
@@ -342,10 +350,12 @@ the WCAG relative-luminance contrast ratio and checks it against WCAG AA:
 ratio, threshold, pass result, and whether each input color appears in a
 configured palette asset.
 
-Palette asset descriptions supply the replacement colors (hex colors in
+Palette asset descriptions supply replacement colors (hex colors in
 descriptions are recognized). A failing check includes an accessibility
 finding and, when possible, the closest palette pair that meets the selected
-threshold:
+threshold. The contrast calculation still runs if no palette has been
+configured; in that case, palette matches are false and palette-based
+replacement suggestions are unavailable:
 
 ```json
 {
@@ -373,8 +383,7 @@ threshold:
 }
 ```
 
-Missing palettes return `409` with `brand_palette_unavailable`; malformed
-colors or text sizes return `422` with `validation_error`.
+Malformed colors or text sizes return `422` with `validation_error`.
 
 ## Content approval workflow
 

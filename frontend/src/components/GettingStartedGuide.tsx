@@ -86,6 +86,7 @@ export default function GettingStartedGuide() {
             <strong>Click Load sample brand.</strong>
             <p>
               Load fictional guidelines, terminology, facts and assets to explore the demo.
+              This also deletes all other saved content documents and related review data.
               {!mayLoadSampleBrand &&
                 " This action is available to the Brand Manager and Admin demo roles."}
             </p>
