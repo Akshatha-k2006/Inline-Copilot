@@ -253,7 +253,7 @@ export default function Editor() {
         background_color: backgroundColor,
         text_size: textSize,
       });
-    }, "Color settings saved. Run review to check contrast.");
+    }, "Color settings saved.");
   }
 
   async function recheckAccessibility(finding: DemoFinding): Promise<void> {

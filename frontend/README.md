@@ -19,8 +19,11 @@ npm run dev          # http://localhost:3000
   content. It does not replace failed API requests with fixture data.
 - On the first backend startup, the sample brand is loaded and other saved
   content documents are removed once, leaving the sample document as a draft.
-  The sample's previous review status is reset once; later startups do not
-  reset content or undo a user's submission.
+  Existing unreviewed version-1 sample content is synchronized once to the
+  checked-in sample text and image. Later startups do not reset content or undo
+  a user's submission. The sample image is bundled with the backend; user
+  uploads need persistent storage configured by the deployment for restart
+  persistence.
 - Write & Review creates and updates persisted content and uses backend review,
   findings, comments, audit, and workflow endpoints.
 - The role switcher selects a prototype role; these headers are not
