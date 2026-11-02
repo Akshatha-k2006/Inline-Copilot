@@ -84,5 +84,5 @@ def initialize_sample_workspace(db: Session) -> bool:
         db.commit()
         if sample and previous_status != "draft":
             logger.info("Reset the demo sample document to draft status.")
-
+    return initialized_now
     return initialized_now

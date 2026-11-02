@@ -95,6 +95,18 @@ export default function ImageAccessibilityPanel({
     setContrastTextSize(textSize ?? "normal");
   }, [foregroundColor, backgroundColor, textSize]);
 
+  useEffect(() => {
+    if (!message) return;
+    const timer = window.setTimeout(() => setMessage(""), 3000);
+    return () => window.clearTimeout(timer);
+  }, [message]);
+
+  useEffect(() => {
+    if (!contrastResult?.passes) return;
+    const timer = window.setTimeout(() => setContrastResult(null), 3000);
+    return () => window.clearTimeout(timer);
+  }, [contrastResult]);
+
   useEffect(
     () => () => {
       if (selectedPreview) URL.revokeObjectURL(selectedPreview);
