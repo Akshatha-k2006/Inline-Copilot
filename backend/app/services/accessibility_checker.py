@@ -129,8 +129,6 @@ def check_contrast(
     required_ratio = CONTRAST_THRESHOLDS[text_size]
     ratio = contrast_ratio(normalized_foreground, normalized_background)
     palette = get_brand_palette(db)
-    if not palette:
-        raise ValueError("No colors are configured in the brand palette.")
 
     palette_set = set(palette)
     is_compliant = ratio >= required_ratio
@@ -152,6 +150,10 @@ def check_contrast(
             )
         else:
             suggested_fix = (
+                "No brand palette colors are configured, so a palette-based "
+                "replacement cannot be suggested."
+                if not palette
+                else
                 "No foreground/background combination in the configured brand "
                 f"palette meets the {required_ratio:.1f}:1 requirement."
             )

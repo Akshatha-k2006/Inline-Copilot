@@ -342,10 +342,12 @@ the WCAG relative-luminance contrast ratio and checks it against WCAG AA:
 ratio, threshold, pass result, and whether each input color appears in a
 configured palette asset.
 
-Palette asset descriptions supply the replacement colors (hex colors in
+Palette asset descriptions supply replacement colors (hex colors in
 descriptions are recognized). A failing check includes an accessibility
 finding and, when possible, the closest palette pair that meets the selected
-threshold:
+threshold. The contrast calculation still runs if no palette has been
+configured; in that case, palette matches are false and palette-based
+replacement suggestions are unavailable:
 
 ```json
 {
@@ -373,8 +375,7 @@ threshold:
 }
 ```
 
-Missing palettes return `409` with `brand_palette_unavailable`; malformed
-colors or text sizes return `422` with `validation_error`.
+Malformed colors or text sizes return `422` with `validation_error`.
 
 ## Content approval workflow
 

@@ -115,12 +115,34 @@ class ContrastEndpointTests(unittest.TestCase):
             {"foreground": False, "background": False},
         )
 
-    def test_missing_brand_palette_returns_explicit_error(self):
+    def test_missing_brand_palette_still_checks_input_colors(self):
         self.db.query(Asset).delete()
         self.db.commit()
         response = self.check("#000", "#FFF")
-        self.assertEqual(response.status_code, 409)
-        self.assertEqual(response.json()["error"], "brand_palette_unavailable")
+        self.assertEqual(response.status_code, 200)
+        result = response.json()
+        self.assertTrue(result["passes"])
+        self.assertEqual(result["contrast_ratio"], 21)
+        self.assertEqual(
+            result["brand_palette_match"],
+            {"foreground": False, "background": False},
+        )
+        self.assertIsNone(result["finding"])
+        self.assertIsNone(result["suggested_replacement"])
+
+    def test_missing_palette_explains_unavailable_replacement(self):
+        self.db.query(Asset).delete()
+        self.db.commit()
+        response = self.check("#F2A93B", "#FAF8F3")
+        self.assertEqual(response.status_code, 200)
+        result = response.json()
+        self.assertFalse(result["passes"])
+        self.assertEqual(result["contrast_ratio"], 1.88)
+        self.assertIsNone(result["suggested_replacement"])
+        self.assertIn(
+            "No brand palette colors are configured",
+            result["finding"]["suggested_fix"],
+        )
 
     def test_invalid_color_is_rejected(self):
         response = self.check("red", "#FFFFFF")
