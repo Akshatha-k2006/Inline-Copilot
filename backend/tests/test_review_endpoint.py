@@ -331,24 +331,33 @@ class ReviewEndpointTests(unittest.TestCase):
         )
         self.assertEqual(first_status, 200)
         self.assertEqual(first_result["content_version"], 4)
-        self.assertEqual(content.body, "good word then badword")
-
-        shifted_second = self.db.get(Finding, second["id"])
-        self.assertEqual(shifted_second.start_offset, 15)
-        self.assertEqual(shifted_second.content_version, 4)
-        second_status, second_result = self.request(
-            f"/api/findings/{second['id']}",
-            method="PATCH",
-            body={"action": "accept"},
-        )
-        self.assertEqual(second_status, 200)
-        self.assertEqual(second_result["content_version"], 5)
         self.assertEqual(content.body, "good word then good word")
+        self.assertEqual(content.reviewed_version, content.version)
+        self.assertEqual(
+            first_result["finding"]["status"],
+            "accepted",
+        )
+        self.assertEqual(
+            first_result["finding"]["start_offset"],
+            0,
+        )
+        self.assertEqual(
+            first_result["finding"]["end_offset"],
+            len("good word"),
+        )
+        accepted_second = self.db.get(Finding, second["id"])
+        self.assertEqual(accepted_second.status, "accepted")
+        self.assertEqual(accepted_second.start_offset, len("good word then "))
+        self.assertEqual(accepted_second.content_version, 4)
+        self.assertEqual(
+            accepted_second.evidence["matched_text"],
+            "good word",
+        )
 
         rerun_status, rerun = self.request("/api/content/1/review")
 
         self.assertEqual(rerun_status, 200)
-        self.assertEqual(rerun["content_version"], 5)
+        self.assertEqual(rerun["content_version"], 4)
         accepted = (
             self.db.query(Finding)
             .filter(Finding.status == "accepted")
@@ -356,8 +365,8 @@ class ReviewEndpointTests(unittest.TestCase):
             .all()
         )
         self.assertEqual([item.id for item in accepted], [first["id"], second["id"]])
-        self.assertTrue(all(item.content_version == 5 for item in accepted))
-        self.assertEqual(self.db.query(AuditEvent).count(), 4)
+        self.assertTrue(all(item.content_version == 4 for item in accepted))
+        self.assertEqual(self.db.query(AuditEvent).count(), 3)
         self.assertEqual(
             [
                 (
@@ -370,10 +379,10 @@ class ReviewEndpointTests(unittest.TestCase):
             [
                 ("content_reviewed", None, None),
                 ("finding_accepted", 3, 4),
-                ("finding_accepted", 4, 5),
                 ("content_reviewed", None, None),
             ],
         )
+        self.assertEqual(self.db.query(FindingDecisionEvent).count(), 2)
 
     def test_rerun_replaces_outdated_open_findings_for_current_version(self):
         old = self.add_finding(

@@ -701,20 +701,67 @@ def update_finding(
             replacement_action and replacement != matched_text
         )
         new_version = old_version
+        auto_accepted_findings: list[Finding] = []
         if changes_content:
             replacement = replacement or ""
-            delta = len(replacement) - (end - start)
+            original_body = content.body
+            replacement_targets = [finding]
+            if action == "accept" and finding.check_type == "terminology":
+                matching_findings = (
+                    db.query(Finding)
+                    .filter(
+                        Finding.content_id == content.id,
+                        Finding.content_version == old_version,
+                        Finding.check_type == "terminology",
+                        Finding.status == "open",
+                        Finding.suggested_fix == replacement,
+                    )
+                    .with_for_update()
+                    .all()
+                )
+                replacement_targets = [
+                    item
+                    for item in matching_findings
+                    if isinstance(item.evidence, dict)
+                    and isinstance(item.evidence.get("matched_text"), str)
+                    and item.evidence["matched_text"].casefold()
+                    == matched_text.casefold()
+                    and isinstance(item.start_offset, int)
+                    and not isinstance(item.start_offset, bool)
+                    and isinstance(item.end_offset, int)
+                    and not isinstance(item.end_offset, bool)
+                    and 0 <= item.start_offset < item.end_offset
+                    and item.end_offset <= len(original_body)
+                    and original_body[item.start_offset:item.end_offset]
+                    == item.evidence["matched_text"]
+                ]
+                if finding not in replacement_targets:
+                    replacement_targets.append(finding)
+                replacement_targets.sort(key=lambda item: item.start_offset)
+
+            target_ids = {item.id for item in replacement_targets}
+            target_spans = [
+                (item.start_offset, item.end_offset, item)
+                for item in replacement_targets
+            ]
+            for previous, current in zip(target_spans, target_spans[1:]):
+                if current[0] < previous[1]:
+                    raise _action_error(
+                        409,
+                        "overlapping_finding",
+                        "Matching terminology findings overlap; review the text before accepting this term.",
+                    )
+
             affected_findings = (
                 db.query(Finding)
                 .filter(
                     Finding.content_id == content.id,
                     Finding.content_version == old_version,
-                    Finding.id != finding.id,
+                    Finding.id.notin_(target_ids),
                 )
                 .with_for_update()
                 .all()
             )
-            original_body = content.body
             for other in affected_findings:
                 other_start = other.start_offset
                 other_end = other.end_offset
@@ -730,7 +777,10 @@ def update_finding(
                     or other_end > len(original_body)
                 ):
                     continue
-                if other_start < end and other_end > start:
+                if any(
+                    other_start < target_end and other_end > target_start
+                    for target_start, target_end, _ in target_spans
+                ):
                     raise _action_error(
                         409,
                         "overlapping_finding",
@@ -747,10 +797,34 @@ def update_finding(
                 ):
                     continue
 
-            updated_body = (
-                original_body[:start] + replacement + original_body[end:]
-            )
+            updated_parts: list[str] = []
+            updated_cursor = 0
+            updated_length = 0
+            replacement_offsets: dict[int, tuple[int, int]] = {}
+            for target_start, target_end, target in target_spans:
+                unchanged_text = original_body[updated_cursor:target_start]
+                updated_parts.append(unchanged_text)
+                updated_length += len(unchanged_text)
+                updated_start = updated_length
+                updated_parts.append(replacement)
+                updated_length += len(replacement)
+                replacement_offsets[target.id] = (
+                    updated_start,
+                    updated_length,
+                )
+                updated_cursor = target_end
+            updated_parts.append(original_body[updated_cursor:])
+            updated_body = "".join(updated_parts)
             updated_version = old_version + 1
+            reviewed_version = (
+                updated_version
+                if (
+                    action == "accept"
+                    and finding.check_type == "terminology"
+                    and content.reviewed_version == old_version
+                )
+                else None
+            )
             update_result = db.execute(
                 update(Content)
                 .where(
@@ -760,8 +834,12 @@ def update_finding(
                 .values(
                     body=updated_body,
                     version=updated_version,
-                    reviewed_version=None,
-                    reviewed_at=None,
+                    reviewed_version=reviewed_version,
+                    reviewed_at=(
+                        content.reviewed_at
+                        if reviewed_version is not None
+                        else None
+                    ),
                 )
             )
             if update_result.rowcount != 1:
@@ -772,6 +850,20 @@ def update_finding(
                 )
             db.refresh(content)
             new_version = content.version
+
+            if action == "accept" and finding.check_type == "terminology":
+                for target in replacement_targets:
+                    target.start_offset, target.end_offset = replacement_offsets[
+                        target.id
+                    ]
+                    target.content_version = new_version
+                    target.evidence = {
+                        **target.evidence,
+                        "matched_text": replacement,
+                    }
+                    target.status = "accepted"
+                    if target.id != finding.id:
+                        auto_accepted_findings.append(target)
 
             for other in affected_findings:
                 other_start = other.start_offset
@@ -797,17 +889,25 @@ def update_finding(
                 ):
                     continue
 
-                updated_start = (
-                    other_start + delta if other_start >= end else other_start
+                offset_delta = sum(
+                    len(replacement) - (target_end - target_start)
+                    for target_start, target_end, _ in target_spans
+                    if target_end <= other_start
                 )
-                updated_end = other_end + delta if other_start >= end else other_end
+                updated_start = other_start + offset_delta
+                updated_end = other_end + offset_delta
                 if updated_body[updated_start:updated_end] != other_text:
                     continue
                 other.start_offset = updated_start
                 other.end_offset = updated_end
                 other.content_version = new_version
 
-            finding.end_offset = start + len(replacement)
+            finding.end_offset = (
+                replacement_offsets[finding.id][1]
+                if action == "accept"
+                and finding.check_type == "terminology"
+                else start + len(replacement)
+            )
             finding.content_version = new_version
             finding.evidence = {
                 **finding.evidence,
@@ -824,34 +924,37 @@ def update_finding(
             "edit": "resolved",
             "dismiss": "dismissed",
         }[action]
-        event_key = f"finding:{finding.id}:{decision}"
-        if (
-            db.query(FindingDecisionEvent.id)
-            .filter(FindingDecisionEvent.event_key == event_key)
-            .first()
-            is None
-        ):
+        decision_findings = [finding, *auto_accepted_findings]
+        for decision_finding in decision_findings:
+            event_key = f"finding:{decision_finding.id}:{decision}"
+            if (
+                db.query(FindingDecisionEvent.id)
+                .filter(FindingDecisionEvent.event_key == event_key)
+                .first()
+                is not None
+            ):
+                continue
             guideline = (
-                db.get(Guideline, finding.guideline_id)
-                if finding.guideline_id is not None
+                db.get(Guideline, decision_finding.guideline_id)
+                if decision_finding.guideline_id is not None
                 else None
             )
             db.add(
                 FindingDecisionEvent(
                     event_key=event_key,
-                    finding_id=finding.id,
-                    finding_reference_id=finding.id,
+                    finding_id=decision_finding.id,
+                    finding_reference_id=decision_finding.id,
                     content_id=content.id,
-                    guideline_id=finding.guideline_id,
+                    guideline_id=decision_finding.guideline_id,
                     guideline_title=guideline.title if guideline else None,
                     decision=decision,
                     actor=actor,
                     occurred_at=datetime.now(timezone.utc),
                     details={
-                        "check": finding.check_type,
-                        "severity": finding.severity,
+                        "check": decision_finding.check_type,
+                        "severity": decision_finding.severity,
                         "previous_status": "open",
-                        "new_status": finding.status,
+                        "new_status": decision_finding.status,
                         "previous_version": old_version,
                         "new_version": new_version,
                     },
@@ -877,6 +980,10 @@ def update_finding(
                 "previous": previous_text,
                 "next": replacement,
             }
+        if auto_accepted_findings:
+            details["also_accepted_finding_ids"] = [
+                item.id for item in auto_accepted_findings
+            ]
         db.add(
             AuditEvent(
                 content_id=content.id,
