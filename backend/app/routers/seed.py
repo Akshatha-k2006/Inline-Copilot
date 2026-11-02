@@ -141,6 +141,9 @@ def load_seed_data(
             db.add(sample_content)
             db.flush()
         else:
+            sample_content.status = "draft"
+            sample_content.reviewed_version = None
+            sample_content.reviewed_at = None
             if sample_content.foreground_color is None:
                 sample_content.foreground_color = draft.get("foreground_color")
             if sample_content.background_color is None:
