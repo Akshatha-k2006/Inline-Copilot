@@ -131,7 +131,15 @@
   ],
   "sample_draft": {
     "title": "Spring launch post (sample)",
-    "body": "Meet LuminaBulbs, the #1 best smart bulbs on the planet! They will definitely cut your energy bill by 90%, and they are guaranteed to last forever. Our revolutionary app is cheap and super easy to set up, lol. Over 2 million happy customers since 2019 can't be wrong. Get yours today!"
+    "body": "Meet LuminaBulbs, the #1 best smart bulbs on the planet! They will definitely cut your energy bill by 90%, and they are guaranteed to last forever. Our revolutionary app is cheap and super easy to set up, lol. Over 2 million happy customers since 2019 can't be wrong. Get yours today!",
+    "foreground_color": "#26323B",
+    "background_color": "#FAF8F3",
+    "text_size": "normal"
+  },
+  "demo_image": {
+    "filename": "lumina-sample-product.png",
+    "source_file": "lumina-sample-product.png",
+    "alt_text": "Lumina smart bulb with a warm amber glow"
   },
   "expected_findings": [
     {

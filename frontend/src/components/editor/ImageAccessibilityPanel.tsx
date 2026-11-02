@@ -269,7 +269,7 @@ export default function ImageAccessibilityPanel({
         {images.length > 0 && (
           <details
             className="uploaded-images"
-            open={images.some((image) => !(altText[image.id] ?? "").trim())}
+            open={images.length > 0}
           >
             <summary>
               Uploaded images <span>({images.length})</span>

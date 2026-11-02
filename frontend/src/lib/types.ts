@@ -109,6 +109,9 @@ export interface SeedResponse {
     facts: number;
     assets: number;
     content: number;
+    images: number;
+    evidence_requests: number;
+    removed_content: number;
   };
   expired_fact_id: number;
   sample_content_id: number;

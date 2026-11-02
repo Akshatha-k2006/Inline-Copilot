@@ -13,6 +13,7 @@ import type {
   FindingStatus,
   ReviewResponse,
   Role,
+  SeedResponse,
 } from "./types";
 import { canManageKnowledge } from "./workflow";
 
@@ -52,6 +53,15 @@ export interface WorkspaceState {
   isLoaded: boolean;
   isLoading: boolean;
   error: string | null;
+}
+
+const SAMPLE_DOCUMENT_TITLE = "Spring launch post (sample)";
+
+export function getDefaultDocument(documents: Content[]): Content | undefined {
+  return (
+    documents.find((document) => document.title === SAMPLE_DOCUMENT_TITLE) ??
+    documents[0]
+  );
 }
 
 const EMPTY_STATE: WorkspaceState = {
@@ -620,10 +630,14 @@ export async function removeKnowledgeItem(
   await refreshWorkspace();
 }
 
-export async function seedSampleBrand(role: Role): Promise<void> {
+export const SAMPLE_BRAND_SEED_CONFIRMATION =
+  "Loading the sample brand will permanently delete all other content documents and their comments, findings, images, and evidence requests. It also removes the old pre-seeded demo evidence request and finding. Brand knowledge records are kept. Continue?";
+
+export async function seedSampleBrand(role: Role): Promise<SeedResponse> {
   if (!canManageKnowledge(role)) {
     throw new Error("Only a Brand Manager or Admin can load the sample brand.");
   }
-  await api.seedSample();
+  const result = await api.seedSample();
   await refreshWorkspace();
+  return result;
 }

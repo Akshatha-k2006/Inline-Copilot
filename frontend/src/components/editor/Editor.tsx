@@ -6,6 +6,7 @@ import { useRole } from "@/lib/role";
 import {
   createDocument as createBackendDocument,
   deleteDocument as deleteBackendDocument,
+  getDefaultDocument,
   getDocumentFindings,
   resolveFinding,
   runContentReview,
@@ -101,7 +102,6 @@ export default function Editor() {
   );
   const [evidenceLoading, setEvidenceLoading] = useState(false);
   const [evidenceError, setEvidenceError] = useState("");
-  const [showHighlights, setShowHighlights] = useState(false);
   const filteredDocuments = visibleDocuments.filter((item) =>
     item.title.toLowerCase().includes(documentSearch.trim().toLowerCase()),
   );
@@ -151,8 +151,9 @@ export default function Editor() {
       : undefined;
     if (requestedDocument) {
       setSelectedDocumentId(requestedDocument.id);
-    } else if (workspace.documents[0]) {
-      setSelectedDocumentId(workspace.documents[0].id);
+    } else {
+      const defaultDocument = getDefaultDocument(workspace.documents);
+      if (defaultDocument) setSelectedDocumentId(defaultDocument.id);
     }
   }, [selectedDocumentId, workspace.documents]);
 
@@ -164,7 +165,6 @@ export default function Editor() {
   useEffect(() => {
     setReviewNotice("");
     setReviewError(false);
-    setShowHighlights(false);
   }, [document?.id]);
 
   useEffect(() => {
@@ -291,7 +291,7 @@ export default function Editor() {
         if (title !== document.title || body !== document.body) {
           current = await saveDraft(document.id, title, body, role);
         }
-        const response = await runContentReview(current.id, role);
+        await runContentReview(current.id, role);
         setSelectedId(null);
       } catch (cause) {
         setReviewError(true);
@@ -379,9 +379,6 @@ export default function Editor() {
 
   const onSelect = (finding: DemoFinding) => {
     setSelectedId(finding.id);
-    if (canEdit && openCount > 0 && reviewState === "current") {
-      setShowHighlights(true);
-    }
     window.setTimeout(() => {
       globalThis.document
         .getElementById(`draft-highlight-${finding.id}`)
@@ -647,14 +644,10 @@ export default function Editor() {
       </section>
     );
 
-  // Resolved findings stay in the findings list, but they must not keep the
-  // creator locked in the read-only highlighted view. Editors can also switch
-  // to highlights on demand instead of losing the ability to type.
+  // Keep the reviewed draft editable and show only findings whose text still matches.
   const showHighlighted =
     openCount > 0 &&
-    reviewState === "current" &&
-    body === document.body &&
-    (showHighlights || !canEdit);
+    document.reviewed_version === document.version;
 
   return (
     <section className="page editor-page">
@@ -762,7 +755,7 @@ export default function Editor() {
             <span className="visually-hidden">Search documents</span>
             <input
               type="search"
-              placeholder="Search documents"
+              placeholder="    Search documents"
               value={documentSearch}
               onChange={(event) => setDocumentSearch(event.target.value)}
             />
@@ -816,8 +809,8 @@ export default function Editor() {
               {documentSearch.trim()
                 ? "No documents match your search."
                 : role === "creator"
-                ? "No documents yet."
-                : "No submitted documents."}
+                  ? "No documents yet."
+                  : "No submitted documents."}
             </p>
           )}
           <div className="document-list-footer">
@@ -839,7 +832,9 @@ export default function Editor() {
         <section className="editor-main card">
           <div className="writing-heading">
             <h2>Writing Content</h2>
-            <span className={`status-pill status-${creating ? "draft" : document.status}`}>
+            <span
+              className={`status-pill status-${creating ? "draft" : document.status}`}
+            >
               {creating ? "Draft" : contentStatusLabel(document.status)}
             </span>
           </div>
@@ -886,7 +881,7 @@ export default function Editor() {
                         setBody(document.body);
                       } else {
                         setSelectedDocumentId(
-                          workspace.documents[0]?.id ?? null,
+                          getDefaultDocument(workspace.documents)?.id ?? null,
                         );
                       }
                     }}
@@ -914,6 +909,8 @@ export default function Editor() {
                   body={body}
                   findings={findings}
                   selectedFindingId={selectedId}
+                  readOnly={!canEdit}
+                  onChange={setBody}
                   onSelect={onSelect}
                 />
               ) : (
@@ -970,19 +967,6 @@ export default function Editor() {
                     {reviewing ? "Reviewing..." : "Run full review"}
                   </button>
                 )}
-                {canEdit &&
-                  openCount > 0 &&
-                  reviewState === "current" &&
-                  body === document.body && (
-                    <button
-                      className="button"
-                      type="button"
-                      disabled={busy}
-                      onClick={() => setShowHighlights((current) => !current)}
-                    >
-                      {showHighlighted ? "Edit text" : "Show highlights"}
-                    </button>
-                  )}
                 {canSubmit && (
                   <button
                     className="button button-success"

@@ -219,7 +219,6 @@ class FindingActionResponse(BaseModel):
 
 EVIDENCE_REQUEST_STATUSES: tuple[str, ...] = ("open", "fulfilled", "dismissed")
 EVIDENCE_REQUEST_ASSIGNEES: tuple[str, ...] = (
-    "Asha (Creator)",
     "Ravi (Reviewer)",
     "Bhavana (Brand Manager)",
     "Admin",

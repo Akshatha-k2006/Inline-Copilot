@@ -1,5 +1,6 @@
 "use client";
 
+import { useLayoutEffect, useRef } from "react";
 import type { DemoFinding } from "@/lib/findings";
 import type { Severity } from "@/lib/types";
 
@@ -7,6 +8,8 @@ interface HighlightedDraftProps {
   body: string;
   findings: DemoFinding[];
   selectedFindingId: number | null;
+  readOnly: boolean;
+  onChange: (body: string) => void;
   onSelect: (finding: DemoFinding) => void;
 }
 
@@ -51,8 +54,14 @@ export default function HighlightedDraft({
   body,
   findings,
   selectedFindingId,
+  readOnly,
+  onChange,
   onSelect,
 }: HighlightedDraftProps) {
+  const editorRef = useRef<HTMLDivElement>(null);
+  const pendingSelection = useRef<{ anchor: number; focus: number } | null>(
+    null,
+  );
   const segments = getSegments(body, findings);
   let cursor = 0;
   const content = segments.map(({ finding, start, end }) => {
@@ -61,33 +70,116 @@ export default function HighlightedDraft({
     return (
       <span key={finding.id}>
         {before}
-        <button
+        <mark
           id={`draft-highlight-${finding.id}`}
-          type="button"
+          data-finding-id={finding.id}
           className={`finding-highlight finding-highlight-${finding.severity}${selectedFindingId === finding.id ? " selected" : ""}`}
           aria-label={`${SEVERITY_LABELS[finding.severity] ?? "Unknown"}: ${String(finding.check ?? "Unknown").replaceAll("_", " ")}. ${finding.text ?? ""}`}
-          aria-pressed={selectedFindingId === finding.id}
           onClick={() => onSelect(finding)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
-              e.preventDefault();
-              onSelect(finding);
-            }
-          }}
         >
           {body.slice(start, end)}
-        </button>
+        </mark>
       </span>
     );
   });
 
+  useLayoutEffect(() => {
+    const selection = pendingSelection.current;
+    const editor = editorRef.current;
+    if (!selection || !editor) return;
+
+    function pointAt(offset: number): [Node, number] {
+      const walker = document.createTreeWalker(editor!, NodeFilter.SHOW_TEXT);
+      let remaining = offset;
+      let node = walker.nextNode();
+      while (node) {
+        const length = node.textContent?.length ?? 0;
+        if (remaining <= length) return [node, remaining];
+        remaining -= length;
+        node = walker.nextNode();
+      }
+      const lastText = editor!.lastChild;
+      return lastText?.nodeType === Node.TEXT_NODE
+        ? [lastText, lastText.textContent?.length ?? 0]
+        : [editor!, editor!.childNodes.length];
+    }
+
+    const [anchorNode, anchorOffset] = pointAt(selection.anchor);
+    const [focusNode, focusOffset] = pointAt(selection.focus);
+    const currentSelection = window.getSelection();
+    currentSelection?.removeAllRanges();
+    currentSelection?.setBaseAndExtent(
+      anchorNode,
+      anchorOffset,
+      focusNode,
+      focusOffset,
+    );
+    pendingSelection.current = null;
+  }, [body]);
+
+  function readContent(editor: HTMLDivElement) {
+    const text = editor.textContent ?? "";
+    const selection = window.getSelection();
+    if (selection?.rangeCount) {
+      const getOffset = (node: Node, offset: number) => {
+        const range = document.createRange();
+        range.selectNodeContents(editor);
+        range.setEnd(node, offset);
+        return range.toString().length;
+      };
+      pendingSelection.current = {
+        anchor: getOffset(selection.anchorNode ?? editor, selection.anchorOffset),
+        focus: getOffset(selection.focusNode ?? editor, selection.focusOffset),
+      };
+    }
+    onChange(text);
+  }
+
+  function insertText(editor: HTMLDivElement, text: string) {
+    const selection = window.getSelection();
+    const range =
+      selection?.rangeCount && editor.contains(selection.anchorNode)
+        ? selection.getRangeAt(0)
+        : null;
+    if (!range) return;
+
+    range.deleteContents();
+    const textNode = document.createTextNode(text);
+    range.insertNode(textNode);
+    range.setStart(textNode, text.length);
+    range.collapse(true);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    readContent(editor);
+  }
+
   return (
     <section className="highlighted-draft-inline" aria-label="Inline highlights">
       <div
+        ref={editorRef}
         className="document-editor highlighted-draft-text"
-        role="region"
-        aria-label="Document with highlights"
+        role="textbox"
+        aria-label="Document body with review highlights"
+        aria-multiline="true"
         tabIndex={0}
+        contentEditable={!readOnly}
+        suppressContentEditableWarning
+        spellCheck={!readOnly}
+        onInput={(event) => readContent(event.currentTarget)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && !readOnly) {
+            event.preventDefault();
+            insertText(event.currentTarget, "\n");
+          }
+        }}
+        onPaste={(event) => {
+          if (readOnly) return;
+          event.preventDefault();
+          insertText(
+            event.currentTarget,
+            event.clipboardData.getData("text/plain"),
+          );
+        }}
       >
         {content}
         {body.slice(cursor)}

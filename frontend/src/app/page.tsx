@@ -5,6 +5,7 @@ import { useRole } from "@/lib/role";
 import { formatTimestamp } from "@/lib/format";
 import {
   BACKEND_DATA_NOTICE,
+  getDefaultDocument,
   getDocumentFindings,
   getQueuedDocuments,
   useWorkspace,
@@ -18,7 +19,7 @@ function displayName(user: string): string {
 export default function Home() {
   const { role, user, label } = useRole();
   const workspace = useWorkspace();
-  const document = workspace.documents[0];
+  const document = getDefaultDocument(workspace.documents);
   const findings = document ? getDocumentFindings(workspace, document.id) : [];
   const openFindings = findings.filter((finding) => finding.status === "open");
   const queued = getQueuedDocuments(workspace);
