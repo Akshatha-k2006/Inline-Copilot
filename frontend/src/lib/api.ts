@@ -199,6 +199,10 @@ export const api = {
       "POST",
       "/api/demo/reset-sample",
     ),
+  addDemoReviewRequest: () =>
+    request<Content>("POST", "/api/demo/add-review-request"),
+  addDemoEvidenceRequest: () =>
+    request<Content>("POST", "/api/demo/add-evidence-request"),
 
   listGuidelines: (options?: RequestOptions) =>
     request<ApiGuideline[]>("GET", "/api/guidelines", undefined, options),

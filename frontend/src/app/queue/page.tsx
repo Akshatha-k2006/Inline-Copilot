@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import EmptyState from "@/components/EmptyState";
+import { api } from "@/lib/api";
 import { useRole } from "@/lib/role";
 import { formatTimestamp } from "@/lib/format";
 import {
@@ -10,6 +11,7 @@ import {
   decideContentReview,
   getDocumentFindings,
   getQueuedDocuments,
+  refreshWorkspace,
   useWorkspace,
 } from "@/lib/workspace-store";
 import { canViewReviewQueue, contentStatusLabel } from "@/lib/workflow";
@@ -20,11 +22,35 @@ export default function ReviewQueuePage() {
   const [feedback, setFeedback] = useState<Record<number, string>>({});
   const [expanded, setExpanded] = useState<Record<number, boolean>>({});
   const [busy, setBusy] = useState<number | null>(null);
+  const [addingDemoRequest, setAddingDemoRequest] = useState(false);
   const [message, setMessage] = useState<{
     kind: "success" | "error";
     text: string;
   } | null>(null);
   const queued = useMemo(() => getQueuedDocuments(workspace), [workspace]);
+
+  async function addDemoRequest() {
+    setAddingDemoRequest(true);
+    setMessage(null);
+    try {
+      await api.addDemoReviewRequest();
+      await refreshWorkspace();
+      setMessage({
+        kind: "success",
+        text: "Demo request added to the review queue.",
+      });
+    } catch (cause) {
+      setMessage({
+        kind: "error",
+        text:
+          cause instanceof Error
+            ? cause.message
+            : "The demo request could not be added.",
+      });
+    } finally {
+      setAddingDemoRequest(false);
+    }
+  }
 
   if (!canViewReviewQueue(role))
     return (
@@ -120,6 +146,14 @@ export default function ReviewQueuePage() {
             decision.
           </p>
         </div>
+        <button
+          className="button button-primary"
+          type="button"
+          onClick={() => void addDemoRequest()}
+          disabled={addingDemoRequest}
+        >
+          {addingDemoRequest ? "Adding request..." : "Add demo request"}
+        </button>
       </header>
 
       {message && (

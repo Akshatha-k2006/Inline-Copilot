@@ -32,6 +32,7 @@ export default function EvidenceRequestsPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<number | null>(null);
   const [message, setMessage] = useState<{ kind: "success" | "error"; text: string } | null>(null);
+  const [addingDemoData, setAddingDemoData] = useState(false);
 
   async function loadRequests() {
     setLoading(true);
@@ -49,6 +50,30 @@ export default function EvidenceRequestsPage() {
       });
     } finally {
       setLoading(false);
+    }
+
+  }
+
+  async function addDemoEvidenceData() {
+    setAddingDemoData(true);
+    setMessage(null);
+    try {
+      await api.addDemoEvidenceRequest();
+      await loadRequests();
+      setMessage({
+        kind: "success",
+        text: "A new evidence demo draft and request were created.",
+      });
+    } catch (cause) {
+      setMessage({
+        kind: "error",
+        text:
+          cause instanceof Error
+            ? cause.message
+            : "The evidence demo draft could not be created.",
+      });
+    } finally {
+      setAddingDemoData(false);
     }
   }
 
@@ -137,6 +162,14 @@ export default function EvidenceRequestsPage() {
           <h1>Evidence requests</h1>
           <p className="lead">Submit supporting sources and record an accountable review decision.</p>
         </div>
+        <button
+          className="button button-primary"
+          type="button"
+          onClick={() => void addDemoEvidenceData()}
+          disabled={addingDemoData}
+        >
+          {addingDemoData ? "Creating demo draft..." : "Create evidence demo draft"}
+        </button>
       </header>
       {message && (
         <p className={message.kind === "error" ? "editor-error" : "editor-notice"} role="status">

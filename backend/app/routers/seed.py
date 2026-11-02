@@ -23,12 +23,128 @@ from app.models import (
     Guideline,
     Term,
 )
+from app.schemas import ContentResponse
 
 router = APIRouter(tags=["seed"])
 logger = logging.getLogger(__name__)
 
 # Resolve the fixture from the repository root.
 SEED_FILE = Path(__file__).resolve().parents[3] / "seed" / "brand.json"
+
+
+@router.post("/demo/add-review-request", response_model=ContentResponse, status_code=201)
+def add_demo_review_request(
+    role: Annotated[str, Depends(get_role)],
+    db: Session = Depends(get_db),
+) -> Content:
+    """Create a persisted demo request that is immediately visible to reviewers."""
+    if role not in {"reviewer", "brand_manager", "admin"}:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "forbidden",
+                "message": "Only reviewer roles can add a demo request to the queue.",
+            },
+        )
+
+    timestamp = datetime.now(timezone.utc)
+    content = Content(
+        title=f"Demo review request - {timestamp.strftime('%d %b %H:%M')}",
+        content_type="marketing_copy",
+        body=(
+            "Lumina Home is making everyday routines feel simpler. "
+            "Review this demo request for brand alignment before approval."
+        ),
+        status="in_review",
+        version=1,
+        reviewed_version=None,
+        reviewed_at=None,
+        created_by="Asha",
+    )
+    db.add(content)
+    db.flush()
+    db.add(
+        AuditEvent(
+            content_id=content.id,
+            actor="Demo Queue",
+            action="demo_review_request_created",
+            details={"actor_role": role, "status": content.status},
+        )
+    )
+    db.commit()
+    db.refresh(content)
+    return content
+
+
+@router.post("/demo/add-evidence-request", response_model=ContentResponse, status_code=201)
+def add_demo_evidence_request(
+    role: Annotated[str, Depends(get_role)],
+    db: Session = Depends(get_db),
+) -> Content:
+    if role not in {"reviewer", "brand_manager", "admin"}:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "forbidden",
+                "message": "Only reviewer roles can add demo evidence data.",
+            },
+        )
+
+    content = Content(
+        title="Demo evidence draft",
+        content_type="marketing_copy",
+        body=(
+            "Our new Lumina Home collection reduces household energy use by 42% "
+            "for every customer."
+        ),
+        status="draft",
+        version=1,
+        created_by="Asha",
+    )
+    db.add(content)
+    db.flush()
+    finding = Finding(
+        content_id=content.id,
+        content_version=content.version,
+        check_type="unsupported_claim",
+        severity="high",
+        message="This performance claim needs supporting evidence before publication.",
+        evidence={
+            "matched_text": "reduces household energy use by 42% for every customer",
+            "source": {"type": "demo", "label": "Evidence demo draft"},
+            "requires_manual_review": True,
+        },
+        suggested_fix="Provide a verifiable source or revise the claim.",
+        start_offset=30,
+        end_offset=87,
+        status="open",
+    )
+    db.add(finding)
+    db.flush()
+    request = EvidenceRequest(
+        finding_id=finding.id,
+        claim_text="reduces household energy use by 42% for every customer",
+        reason="A measurable performance claim requires a verifiable source.",
+        assignee="Asha",
+        status="open",
+    )
+    db.add(request)
+    db.flush()
+    db.add(
+        AuditEvent(
+            content_id=content.id,
+            actor="Demo Evidence",
+            action="demo_evidence_request_created",
+            details={
+                "actor_role": role,
+                "finding_id": finding.id,
+                "evidence_request_id": request.id,
+            },
+        )
+    )
+    db.commit()
+    db.refresh(content)
+    return content
 
 
 def parse_review_date(value: str) -> datetime:
