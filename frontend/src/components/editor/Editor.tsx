@@ -96,6 +96,9 @@ export default function Editor() {
   const [reviewing, setReviewing] = useState(false);
   const [reviewError, setReviewError] = useState(false);
   const [reviewNotice, setReviewNotice] = useState("");
+  const [reviewedDocumentIds, setReviewedDocumentIds] = useState<Set<number>>(
+    () => new Set(),
+  );
   const [busyFindingIds, setBusyFindingIds] = useState<number[]>([]);
   const [evidenceRequests, setEvidenceRequests] = useState<EvidenceRequest[]>(
     [],
@@ -292,6 +295,7 @@ export default function Editor() {
           current = await saveDraft(document.id, title, body, role);
         }
         await runContentReview(current.id, role);
+        setReviewedDocumentIds((ids) => new Set(ids).add(current.id));
         setSelectedId(null);
       } catch (cause) {
         setReviewError(true);
@@ -399,7 +403,6 @@ export default function Editor() {
         <header className="editor-header">
           <div>
             <div className="editor-header-top">
-              <p className="eyebrow">CoRESpace / Inline Editor</p>
               <div className="editor-user">
                 <span className="profile-avatar" aria-hidden="true">
                   {user.trim().charAt(0).toUpperCase()}
@@ -646,6 +649,7 @@ export default function Editor() {
 
   // Keep the reviewed draft editable and show only findings whose text still matches.
   const showHighlighted =
+    reviewedDocumentIds.has(document.id) &&
     openCount > 0 &&
     document.reviewed_version === document.version;
 
@@ -654,7 +658,6 @@ export default function Editor() {
       <header className="editor-header">
         <div>
           <div className="editor-header-top">
-            <p className="eyebrow">CoRESpace / Inline Editor</p>
             <div className="editor-user">
               <span className="profile-avatar" aria-hidden="true">
                 {user.trim().charAt(0).toUpperCase()}
