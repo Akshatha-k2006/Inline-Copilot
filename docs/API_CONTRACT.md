@@ -111,6 +111,11 @@ last-reviewed date, attention reasons, and clarification suggestions.
   unsupported-claim finding to create an editable evidence request. The
   response counts include `images`, `evidence_requests` (zero for seeding),
   and `removed_content`.
+- `POST /api/demo/reset-sample` is called when the Creator loads a workspace page.
+  It restores only the sample document to the checked-in draft text and palette,
+  clears its prior findings, evidence requests, and comments, and removes
+  non-sample image records. It is restricted to the Creator demo role and does
+  not reset other content documents.
 - `PUT /api/facts/{id}/re-approve` is the dedicated evidence-renewal action
   (restricted to Admin and Brand Manager; Creator and Reviewer roles receive
   `403`). The body is `{ "reviewDate": "YYYY-MM-DD", "lastReviewed":

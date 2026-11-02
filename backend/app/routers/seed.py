@@ -10,10 +10,11 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.dependencies import require_writer
+from app.dependencies import get_role, require_writer
 from app.models import (
     Asset,
     AuditEvent,
+    Comment,
     Content,
     ContentImage,
     EvidenceRequest,
@@ -114,6 +115,81 @@ def sync_sample_content(
         sample_image.storage_path = str(image_source)
         sample_image.alt_text = demo_image["alt_text"]
     return sample_content, sample_image
+
+
+@router.post("/demo/reset-sample")
+def reset_sample_demo(
+    role: Annotated[str, Depends(get_role)],
+    db: Session = Depends(get_db),
+):
+    if role != "creator":
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "forbidden",
+                "message": "Only the Creator can reset the demo sample.",
+            },
+        )
+    try:
+        with SEED_FILE.open("r", encoding="utf-8") as file:
+            data = json.load(file)
+        sample_content, sample_image = sync_sample_content(
+            db, data["sample_draft"], data["demo_image"]
+        )
+        finding_ids = [
+            finding_id
+            for (finding_id,) in db.query(Finding.id)
+            .filter(Finding.content_id == sample_content.id)
+            .all()
+        ]
+        if finding_ids:
+            db.query(EvidenceRequest).filter(
+                EvidenceRequest.finding_id.in_(finding_ids)
+            ).delete(synchronize_session=False)
+            for finding_id in finding_ids:
+                finding = db.get(Finding, finding_id)
+                if finding is not None:
+                    db.delete(finding)
+        db.query(Comment).filter(
+            Comment.content_id == sample_content.id
+        ).delete(synchronize_session=False)
+        for image in (
+            db.query(ContentImage)
+            .filter(
+                ContentImage.content_id == sample_content.id,
+                ContentImage.id != sample_image.id,
+            )
+            .all()
+        ):
+            db.delete(image)
+        db.add(
+            AuditEvent(
+                content_id=sample_content.id,
+                actor="Asha",
+                action="demo_sample_reset",
+                details={
+                    "actor_role": role,
+                    "content_version": sample_content.version,
+                },
+            )
+        )
+        db.commit()
+        return {
+            "message": "Demo sample restored.",
+            "content_id": sample_content.id,
+            "content_version": sample_content.version,
+            "image_id": sample_image.id,
+        }
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Unable to reset the demo sample.")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "demo_reset_failed",
+                "message": "Unable to reset the demo sample.",
+            },
+        ) from exc
 
 
 @router.post("/seed/load")

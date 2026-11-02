@@ -65,7 +65,7 @@ function hasPendingChangesRequest(
 
 export default function Editor() {
   const { role, user } = useRole();
-  const workspace = useWorkspace();
+  const workspace = useWorkspace({ resetSampleDemo: true });
   const [selectedDocumentId, setSelectedDocumentId] = useState<number | null>(
     null,
   );
