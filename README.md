@@ -1,85 +1,125 @@
-# Inline-Copilot
+# Inline Copilot
 
-An AI-powered brand governance platform that reviews content against approved brand guidelines, verifies claims against approved facts, and provides evidence-backed suggestions before publication. Features a Governance Hub for content review, approvals, and brand consistency insights.
+Inline Copilot is an AI-assisted brand governance platform built to help teams review marketing content before publication. It combines approved brand knowledge, automated content checks, role-based approval workflows, and evidence-backed review feedback in a single workspace.
 
-## Local demo
+The platform is designed for demo and internal validation use: creators draft content, reviewers inspect findings, brand managers approve workflow steps, and admins manage the governance process. AI supports the review process, but human approval remains the final decision.
 
-Run the app locally using the setup instructions below. The role switcher sends
-`X-Role` and `X-User` demo context to the backend for role-specific UI and
-workflow testing. These caller-supplied values are not authentication and do
-not provide production security; do not expose this demo API as a secured
-multi-user service.
+## Project Overview
 
-## What it does
+- AI-powered review of draft content against approved guidelines, facts, and terminology
+- Role-based user workflow for creators, reviewers, brand managers, and admins
+- Knowledge management for guidelines, glossary entries, approved facts, and assets
+- Review queue and audit trail for governance visibility
+- Demo-only header-based role simulation
 
-See [FEATURES.md](FEATURES.md) for what is completed, partial and planned. It is kept up to date as work merges.
+## Project Structure
 
-AI suggests. Humans decide. Nothing is published automatically.
-
-## Repository layout
-
+```text
+Inline-Copilot/
+├─ backend/                        # FastAPI application and business logic
+│  ├─ app/                         # Core backend source code
+│  │  ├─ routers/                  # API route definitions
+│  │  ├─ services/                 # Review, validation, and workflow services
+│  │  ├─ models.py                 # Database models
+│  │  ├─ schemas.py                # Request/response schemas
+│  │  ├─ config.py                 # Environment configuration
+│  │  ├─ db.py                     # Database setup and migrations
+│  │  ├─ dependencies.py           # Dependency injection helpers
+│  │  ├─ exception_handlers.py     # Global exception handling
+│  │  └─ main.py                   # FastAPI app entry point
+│  ├─ tests/                       # Backend test suite
+│  ├─ requirements.txt             # Python dependencies
+│  ├─ .env.example                 # Example backend environment configuration
+│  └─ .env                         # Local backend environment (not committed)
+├─ frontend/                       # Next.js frontend application
+│  ├─ src/                         # Frontend source code
+│  │  ├─ app/                      # App Router pages and layouts
+│  │  ├─ components/               # Reusable UI components
+│  │  ├─ lib/                      # API utilities and shared logic
+│  │  └─ .. .#
+│  ├─ mocks/                       # Mock data for local development and validation
+│  ├─ package.json                 # Frontend scripts and dependencies
+│  ├─ package-lock.json            # Lockfile
+│  ├─ .env.example                 # Example frontend environment configuration
+│  └─ .env.local                   # Local frontend environment (not committed)
+├─ docs/                           # Product and engineering documentation
+│  ├─ API_CONTRACT.md              # API contracts and payload structure
+│  ├─ DESIGN.md                    # Design overview
+│  ├─ FEATURES.md                  # Feature roadmap and completion status
+│  └─ PRODUCT_AUDIT.md             # Audit and evaluation notes
+├─ seed/                           # Seed data for demo brand initialization
+│  └─ brand.json#
+├─ README.md                       # Project overview and setup guide
+├─ .gitignore                      # Repository ignore rules
 ```
-frontend/    Next.js app (Governance Hub, editor, review screens)
-backend/     FastAPI service (API, review engine, approval workflow)
-seed/        Sample brand used by "Load sample brand"
-docs/        API contract and the issue list
-```
 
-## Run locally
+## Features
 
-Backend:
+See [docs/FEATURES.md](docs/FEATURES.md) for the current feature status, including completed work, known limitations, and planned enhancements.
 
-```
+## Tech Stack
+
+- Frontend: Next.js, React, TypeScript
+- Backend: FastAPI, Python, SQLAlchemy
+- Database: SQLite for local development, PostgreSQL-ready configuration
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js and npm
+- Python 3.11+
+- A local terminal with access to project files
+
+### Backend Setup
+
+```bash
 cd backend
+python -m venv .venv
+# Windows PowerShell
+.\.venv\Scripts\Activate.ps1
+# macOS/Linux
+source .venv/bin/activate
+
 pip install -r requirements.txt
-cp .env.example .env # set a local database URL
+copy .env.example .env
 uvicorn app.main:app --reload --port 8000
 ```
 
-On startup, the backend creates missing tables and applies the additive schema
-compatibility changes in `app/db.py`. This repository does not currently use a
-versioned migration tool.
+The backend API runs on `http://localhost:8000` by default. On startup, it creates required tables and applies compatibility updates for the local schema.
 
-Frontend:
+### Frontend Setup
 
-```
+```bash
 cd frontend
 npm install
+copy .env.example .env.local
 npm run dev
 ```
 
-In development, the frontend defaults to `http://localhost:8000`. Copy
-`frontend/.env.example` to `frontend/.env.local` to configure it explicitly.
-Copy `backend/.env.example` to `backend/.env`. Role and actor headers are
-simulated demo context, not verified identities or secure authorization; keep
-the backend limited to local demonstration and testing.
-Production requires `NEXT_PUBLIC_API_BASE_URL` to be set to the deployed
-backend's public HTTPS URL before building/deploying the frontend; production
-does not fall back to the visitor's localhost. Add both the local development
-origin and deployed frontend origin to backend `CORS_ORIGINS`.
+The frontend runs on `http://localhost:3000` and reads the API base URL from `NEXT_PUBLIC_API_BASE_URL` in the frontend environment file.
 
-## Environment variables
+### Environment Configuration
 
-See [backend/.env.example](backend/.env.example) for private backend
-configuration and [frontend/.env.example](frontend/.env.example) for the
-public API URL. Never commit real keys.
+- Backend config: [backend/.env.example](backend/.env.example)
+- Frontend config: [frontend/.env.example](frontend/.env.example)
 
-## How we work
+Do not commit real secrets or production credentials. Keep local demo usage restricted to development/testing scenarios.
 
-- One issue, one branch, one pull request. Branch names: `feat/<issue#>-short-name`.
-- The other teammate reviews every PR. Squash-merge into `main`; never push to `main` directly.
-- `main` always works and deploys automatically.
-- The API shapes are fixed in [docs/API_CONTRACT.md](docs/API_CONTRACT.md). Change the contract in a PR before changing the code.
+## Team Members
 
-## Technology
+- Akshatha K — Team Lead, Frontend
+- G Madhura Shastry — Backend and Review Engine
 
-Next.js (React) · FastAPI (Python) · SQLite or PostgreSQL · hosted LLM API plus deterministic rule checks.
+## Development Notes
 
-## Team
+- The app uses demo role headers (`X-Role` and `X-User`) to simulate role-based access for local testing.
+- This is not a production authentication system and should not be exposed as a secure multi-user service.
+- The project follows a single-issue / single-branch workflow and keeps API contract changes documented in the docs folder before implementation changes.
 
-- Akshatha K: team leader, frontend
-- Madhura Shastry: backend and review engine
+## Documentation
 
-## Disclosures
-
-AI tools, libraries and licences used: `<LIST BEFORE SUBMITTING>`
+- [docs/API_CONTRACT.md](docs/API_CONTRACT.md)
+- [docs/DESIGN.md](docs/DESIGN.md)
+- [docs/FEATURES.md](docs/FEATURES.md)
+- [docs/PRODUCT_AUDIT.md](docs/PRODUCT_AUDIT.md)
