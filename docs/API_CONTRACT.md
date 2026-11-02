@@ -104,12 +104,18 @@ last-reviewed date, attention reasons, and clarification suggestions.
   documents except the single sample draft, and is restricted to Admin and
   Brand Manager roles. Deleting other documents also removes their comments,
   findings, images, and evidence requests; a content-deletion audit event is
-  retained. The sample includes a brand palette, foreground/background colors,
-  and an image attached to the draft. It does not create review findings or
+  retained. It synchronizes the sample draft's text and palette to the fixture,
+  and serves its image from the checked-in seed asset so it survives ephemeral
+  deployment filesystems. It does not create review findings or
   evidence requests; run a review to generate findings, then use an
   unsupported-claim finding to create an editable evidence request. The
   response counts include `images`, `evidence_requests` (zero for seeding),
   and `removed_content`.
+- `POST /api/demo/reset-sample` is called when the Creator loads a workspace page.
+  It restores only the sample document to the checked-in draft text and palette,
+  clears its prior findings, evidence requests, and comments, and removes
+  non-sample image records. It is restricted to the Creator demo role and does
+  not reset other content documents.
 - `PUT /api/facts/{id}/re-approve` is the dedicated evidence-renewal action
   (restricted to Admin and Brand Manager; Creator and Reviewer roles receive
   `403`). The body is `{ "reviewDate": "YYYY-MM-DD", "lastReviewed":
@@ -176,8 +182,10 @@ name after removing its displayed role suffix.
   Only the owning Creator can update alt text on a draft. Empty alt text is
   retained so the editor can report the accessibility warning.
 - `GET /api/images/{image_id}/file` serves a stored content image for preview.
-  The demo stores files under the backend's local `uploads/` directory; use
-  object storage or a persistent volume for production deployments.
+  The bundled sample image is served from the checked-in seed asset. User-uploaded
+  images are stored under the backend's local `uploads/` directory; use object
+  storage or a persistent volume to preserve those uploads across production
+  restarts.
 
 Content includes `content_type` (for example `marketing_copy`, `blog_post`,
 `social_media`, `email`, or `other`), status, version, `reviewed_version`, and

@@ -88,43 +88,95 @@ class KnowledgeEndpointTests(unittest.TestCase):
         )
         self.db.commit()
 
-        with TemporaryDirectory() as upload_dir:
-            original_upload_dir = seed.UPLOAD_DIR
-            seed.UPLOAD_DIR = Path(upload_dir)
-            try:
-                self.assertTrue(initialize_sample_workspace(self.db))
-                self.db.expire_all()
+        self.assertTrue(initialize_sample_workspace(self.db))
+        self.db.expire_all()
 
-                documents = self.db.query(Content).all()
-                self.assertEqual(len(documents), 1)
-                self.assertEqual(
-                    documents[0].title, "Spring launch post (sample)"
-                )
-                self.assertEqual(
-                    self.db.query(AuditEvent)
-                    .filter(
-                        AuditEvent.action
-                        == "initial_sample_workspace_setup"
-                    )
-                    .count(),
-                    1,
-                )
+        documents = self.db.query(Content).all()
+        self.assertEqual(len(documents), 1)
+        self.assertEqual(documents[0].title, "Spring launch post (sample)")
+        sample_image = self.db.query(ContentImage).one()
+        self.assertTrue(Path(sample_image.storage_path).is_file())
+        self.assertEqual(
+            Path(sample_image.storage_path),
+            seed.SEED_FILE.parent / "lumina-sample-product.png",
+        )
+        self.assertEqual(
+            self.db.query(AuditEvent)
+            .filter(AuditEvent.action == "initial_sample_data_sync_v1")
+            .count(),
+            1,
+        )
+        self.assertEqual(
+            self.db.query(AuditEvent)
+            .filter(AuditEvent.action == "initial_sample_workspace_setup")
+            .count(),
+            1,
+        )
 
-                later_document = Content(
-                    title="Created after initialization",
-                    content_type="marketing_copy",
-                    body="Later content.",
-                    status="draft",
-                    version=1,
-                    created_by="Asha",
-                )
-                self.db.add(later_document)
-                self.db.commit()
+        later_document = Content(
+            title="Created after initialization",
+            content_type="marketing_copy",
+            body="Later content.",
+            status="draft",
+            version=1,
+            created_by="Asha",
+        )
+        self.db.add(later_document)
+        self.db.commit()
 
-                self.assertFalse(initialize_sample_workspace(self.db))
-                self.assertEqual(self.db.query(Content).count(), 2)
-            finally:
-                seed.UPLOAD_DIR = original_upload_dir
+        self.assertFalse(initialize_sample_workspace(self.db))
+        self.assertEqual(self.db.query(Content).count(), 2)
+
+    def test_initial_startup_updates_legacy_sample_and_repairs_image_path(self):
+        sample = Content(
+            title="Spring launch post (sample)",
+            content_type="social_media",
+            body="Old deployed sample text.",
+            status="draft",
+            version=1,
+            created_by="Asha",
+        )
+        self.db.add(sample)
+        self.db.flush()
+        image = ContentImage(
+            content_id=sample.id,
+            filename="lumina-sample-product.png",
+            mime_type="image/png",
+            storage_path="old-deployment/uploads/missing.png",
+            alt_text="Old image data",
+        )
+        self.db.add(image)
+        self.db.add_all(
+            [
+                AuditEvent(
+                    actor="system",
+                    action="initial_sample_workspace_setup",
+                    details={"sample_content_id": sample.id, "removed_content": 0},
+                ),
+                AuditEvent(
+                    actor="system",
+                    action="initial_sample_draft_reset",
+                    details={"sample_content_id": sample.id},
+                ),
+            ]
+        )
+        self.db.commit()
+
+        self.assertFalse(initialize_sample_workspace(self.db))
+        self.db.refresh(sample)
+        self.db.refresh(image)
+
+        with seed.SEED_FILE.open("r", encoding="utf-8") as file:
+            fixture = json.load(file)
+        self.assertEqual(sample.body, fixture["sample_draft"]["body"])
+        self.assertEqual(sample.version, 2)
+        self.assertEqual(sample.status, "draft")
+        self.assertIsNone(sample.reviewed_version)
+        self.assertEqual(
+            Path(image.storage_path),
+            seed.SEED_FILE.parent / fixture["demo_image"]["source_file"],
+        )
+        self.assertTrue(Path(image.storage_path).is_file())
 
     def test_initial_startup_resets_existing_sample_to_draft_once(self):
         sample = Content(
@@ -356,6 +408,94 @@ class KnowledgeEndpointTests(unittest.TestCase):
         self.assertEqual(status, 403)
         self.assertEqual(payload["error"], "forbidden")
 
+    def test_creator_reset_restores_pristine_sample_after_approval(self):
+        sample = Content(
+            title="Spring launch post (sample)",
+            content_type="social_media",
+            body="affordable and affordable",
+            status="approved",
+            version=3,
+            reviewed_version=3,
+            created_by="Asha",
+        )
+        self.db.add(sample)
+        self.db.flush()
+        finding = Finding(
+            content_id=sample.id,
+            content_version=3,
+            check_type="terminology",
+            severity="medium",
+            message="Old demo finding.",
+            evidence={"matched_text": "affordable"},
+        )
+        self.db.add(finding)
+        self.db.flush()
+        self.db.add_all(
+            [
+                EvidenceRequest(
+                    finding_id=finding.id,
+                    claim_text="affordable",
+                    reason="Old demo evidence request.",
+                    assignee="Ravi",
+                ),
+                Comment(
+                    content_id=sample.id,
+                    author="Ravi",
+                    body="Old demo feedback.",
+                ),
+                ContentImage(
+                    content_id=sample.id,
+                    filename="old-upload.png",
+                    mime_type="image/png",
+                    storage_path="missing-user-upload.png",
+                ),
+            ]
+        )
+        self.db.commit()
+
+        status, response = self.request(
+            "POST",
+            "/api/demo/reset-sample",
+            role="creator",
+        )
+
+        self.assertEqual(status, 200)
+        self.db.expire_all()
+        self.db.refresh(sample)
+        with seed.SEED_FILE.open("r", encoding="utf-8") as file:
+            fixture = json.load(file)
+        self.assertEqual(sample.body, fixture["sample_draft"]["body"])
+        self.assertEqual(sample.status, "draft")
+        self.assertEqual(sample.version, 4)
+        self.assertIsNone(sample.reviewed_version)
+        self.assertEqual(self.db.query(Finding).count(), 0)
+        self.assertEqual(self.db.query(EvidenceRequest).count(), 0)
+        self.assertEqual(self.db.query(Comment).count(), 0)
+        image = self.db.query(ContentImage).one()
+        self.assertEqual(image.id, response["image_id"])
+        self.assertEqual(
+            Path(image.storage_path),
+            seed.SEED_FILE.parent / fixture["demo_image"]["source_file"],
+        )
+        self.assertEqual(response["content_id"], sample.id)
+
+        repeated_status, repeated_response = self.request(
+            "POST",
+            "/api/demo/reset-sample",
+            role="creator",
+        )
+        self.assertEqual(repeated_status, 200)
+        self.assertEqual(repeated_response["content_version"], sample.version)
+        self.assertEqual(self.db.query(ContentImage).count(), 1)
+
+        denied_status, denied = self.request(
+            "POST",
+            "/api/demo/reset-sample",
+            role="reviewer",
+        )
+        self.assertEqual(denied_status, 403)
+        self.assertEqual(denied["error"], "forbidden")
+
     def test_sample_seed_keeps_only_one_document_and_removes_legacy_demo_request(self):
         self.db.add(
             Guideline(title="User-owned guideline", description="Keep this rule.")
@@ -438,84 +578,85 @@ class KnowledgeEndpointTests(unittest.TestCase):
         )
         self.db.commit()
 
-        with TemporaryDirectory() as upload_dir:
-            original_upload_dir = seed.UPLOAD_DIR
-            seed.UPLOAD_DIR = Path(upload_dir)
-            try:
-                status, first = self.request("POST", "/api/seed/load")
-                self.assertEqual(status, 200)
-                self.db.expire_all()
+        status, first = self.request("POST", "/api/seed/load")
+        self.assertEqual(status, 200)
+        self.db.expire_all()
 
-                def record_counts():
-                    return tuple(
-                        self.db.query(model).count()
-                        for model in (
-                            Guideline,
-                            Term,
-                            Fact,
-                            Asset,
-                            Content,
-                            ContentImage,
-                            Finding,
-                            EvidenceRequest,
-                        )
-                    )
+        def record_counts():
+            return tuple(
+                self.db.query(model).count()
+                for model in (
+                    Guideline,
+                    Term,
+                    Fact,
+                    Asset,
+                    Content,
+                    ContentImage,
+                    Finding,
+                    EvidenceRequest,
+                )
+            )
 
-                first_counts = record_counts()
-                self.assertEqual(first["counts"]["images"], 1)
-                self.assertEqual(first["counts"]["content"], 1)
-                self.assertEqual(first["counts"]["evidence_requests"], 0)
-                self.assertEqual(first["counts"]["removed_content"], 1)
-                self.assertEqual(self.db.query(Finding).count(), 0)
-                self.assertEqual(self.db.query(EvidenceRequest).count(), 0)
-                self.assertEqual(self.db.query(Comment).count(), 0)
-                self.assertEqual(
-                    self.db.query(Asset)
-                    .filter(
-                        Asset.asset_type == "palette",
-                        Asset.description.contains("#F2A93B"),
-                    )
-                    .count(),
-                    1,
-                )
-                contrast_result = check_contrast(
-                    self.db, "#F2A93B", "#FAF8F3", "normal"
-                )
-                self.assertEqual(
-                    contrast_result["brand_palette_match"],
-                    {"foreground": True, "background": True},
-                )
-                sample_content = self.db.get(Content, first["sample_content_id"]                )
-                self.assertEqual(sample_content.status, "draft")
-                self.assertIsNone(sample_content.reviewed_version)
-                self.assertEqual(sample_content.foreground_color, "#26323B")
-                self.assertEqual(sample_content.background_color, "#FAF8F3")
-                sample_documents = (
-                    self.db.query(Content)
-                    .filter(
-                        Content.title == "Spring launch post (sample)",
-                        Content.created_by == "Asha",
-                    )
-                    .all()
-                )
-                self.assertEqual(len(sample_documents), 1)
-                sample_image = (
-                    self.db.query(ContentImage)
-                    .filter(ContentImage.content_id == sample_content.id)
-                    .one()
-                )
-                self.assertTrue(Path(sample_image.storage_path).is_file())
+        first_counts = record_counts()
+        self.assertEqual(first["counts"]["images"], 1)
+        self.assertEqual(first["counts"]["content"], 1)
+        self.assertEqual(first["counts"]["evidence_requests"], 0)
+        self.assertEqual(first["counts"]["removed_content"], 1)
+        self.assertEqual(self.db.query(Finding).count(), 0)
+        self.assertEqual(self.db.query(EvidenceRequest).count(), 0)
+        self.assertEqual(self.db.query(Comment).count(), 0)
+        self.assertEqual(
+            self.db.query(Asset)
+            .filter(
+                Asset.asset_type == "palette",
+                Asset.description.contains("#F2A93B"),
+            )
+            .count(),
+            1,
+        )
+        contrast_result = check_contrast(
+            self.db, "#F2A93B", "#FAF8F3", "normal"
+        )
+        self.assertEqual(
+            contrast_result["brand_palette_match"],
+            {"foreground": True, "background": True},
+        )
+        sample_content = self.db.get(Content, first["sample_content_id"])
+        self.assertEqual(sample_content.status, "draft")
+        self.assertIsNone(sample_content.reviewed_version)
+        self.assertEqual(sample_content.foreground_color, "#26323B")
+        self.assertEqual(sample_content.background_color, "#FAF8F3")
+        with seed.SEED_FILE.open("r", encoding="utf-8") as file:
+            fixture = json.load(file)
+        self.assertEqual(sample_content.body, fixture["sample_draft"]["body"])
+        sample_documents = (
+            self.db.query(Content)
+            .filter(
+                Content.title == "Spring launch post (sample)",
+                Content.created_by == "Asha",
+            )
+            .all()
+        )
+        self.assertEqual(len(sample_documents), 1)
+        sample_image = (
+            self.db.query(ContentImage)
+            .filter(ContentImage.content_id == sample_content.id)
+            .one()
+        )
+        self.assertTrue(Path(sample_image.storage_path).is_file())
+        self.assertEqual(
+            Path(sample_image.storage_path),
+            seed.SEED_FILE.parent / fixture["demo_image"]["source_file"],
+        )
 
-                status, second = self.request("POST", "/api/seed/load")
-                self.assertEqual(status, 200)
-                self.db.expire_all()
-                self.assertEqual(
-                    second["sample_content_id"], first["sample_content_id"]
-                )
-                self.assertEqual(second["counts"]["removed_content"], 0)
-                self.assertEqual(record_counts(), first_counts)
-            finally:
-                seed.UPLOAD_DIR = original_upload_dir
+        status, second = self.request("POST", "/api/seed/load")
+        self.assertEqual(status, 200)
+        self.db.expire_all()
+        self.assertEqual(
+            second["sample_content_id"], first["sample_content_id"]
+        )
+        self.assertEqual(second["counts"]["removed_content"], 0)
+        self.assertEqual(record_counts(), first_counts)
 
         self.assertIsNone(self.db.get(Content, 1))
         self.assertEqual(self.db.query(Content).count(), 1)

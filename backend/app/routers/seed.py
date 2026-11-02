@@ -1,20 +1,20 @@
 
 import json
 import logging
-import shutil
 from datetime import date, datetime, time, timezone
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.dependencies import require_writer
+from app.dependencies import get_role, require_writer
 from app.models import (
     Asset,
     AuditEvent,
+    Comment,
     Content,
     ContentImage,
     EvidenceRequest,
@@ -27,14 +27,169 @@ from app.models import (
 router = APIRouter(tags=["seed"])
 logger = logging.getLogger(__name__)
 
-# Resolve the file relative to the backend directory.
+# Resolve the fixture from the repository root.
 SEED_FILE = Path(__file__).resolve().parents[3] / "seed" / "brand.json"
-UPLOAD_DIR = Path(__file__).resolve().parents[2] / "uploads"
 
 
 def parse_review_date(value: str) -> datetime:
     parsed = date.fromisoformat(value)
     return datetime.combine(parsed, time.min, tzinfo=timezone.utc)
+
+
+def sync_sample_content(
+    db: Session,
+    draft: dict[str, Any],
+    demo_image: dict[str, Any],
+    *,
+    reset_content: bool = True,
+) -> tuple[Content, ContentImage]:
+    sample_content = (
+        db.query(Content)
+        .filter(
+            Content.title == draft["title"],
+            Content.created_by == "Asha",
+        )
+        .order_by(Content.id)
+        .first()
+    )
+    if sample_content is None:
+        sample_content = Content(
+            title=draft["title"],
+            content_type="social_media",
+            body=draft["body"],
+            foreground_color=draft.get("foreground_color"),
+            background_color=draft.get("background_color"),
+            text_size=draft.get("text_size"),
+            status="draft",
+            version=1,
+            created_by="Asha",
+        )
+        db.add(sample_content)
+        db.flush()
+    elif reset_content:
+        content_changed = any(
+            (
+                sample_content.title != draft["title"],
+                sample_content.content_type != "social_media",
+                sample_content.body != draft["body"],
+                sample_content.foreground_color != draft.get("foreground_color"),
+                sample_content.background_color != draft.get("background_color"),
+                sample_content.text_size != draft.get("text_size"),
+                sample_content.status != "draft",
+            )
+        )
+        if content_changed:
+            sample_content.version += 1
+        sample_content.title = draft["title"]
+        sample_content.content_type = "social_media"
+        sample_content.body = draft["body"]
+        sample_content.foreground_color = draft.get("foreground_color")
+        sample_content.background_color = draft.get("background_color")
+        sample_content.text_size = draft.get("text_size")
+        sample_content.status = "draft"
+        sample_content.reviewed_version = None
+        sample_content.reviewed_at = None
+
+    image_source = SEED_FILE.parent / demo_image["source_file"]
+    if not image_source.is_file():
+        raise FileNotFoundError(image_source)
+    sample_image = (
+        db.query(ContentImage)
+        .filter(
+            ContentImage.content_id == sample_content.id,
+            ContentImage.filename == demo_image["filename"],
+        )
+        .first()
+    )
+    if sample_image is None:
+        sample_image = ContentImage(
+            content_id=sample_content.id,
+            filename=demo_image["filename"],
+            mime_type="image/png",
+            storage_path=str(image_source),
+            alt_text=demo_image["alt_text"],
+        )
+        db.add(sample_image)
+    else:
+        sample_image.mime_type = "image/png"
+        sample_image.storage_path = str(image_source)
+        sample_image.alt_text = demo_image["alt_text"]
+    return sample_content, sample_image
+
+
+@router.post("/demo/reset-sample")
+def reset_sample_demo(
+    role: Annotated[str, Depends(get_role)],
+    db: Session = Depends(get_db),
+):
+    if role != "creator":
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "forbidden",
+                "message": "Only the Creator can reset the demo sample.",
+            },
+        )
+    try:
+        with SEED_FILE.open("r", encoding="utf-8") as file:
+            data = json.load(file)
+        sample_content, sample_image = sync_sample_content(
+            db, data["sample_draft"], data["demo_image"]
+        )
+        finding_ids = [
+            finding_id
+            for (finding_id,) in db.query(Finding.id)
+            .filter(Finding.content_id == sample_content.id)
+            .all()
+        ]
+        if finding_ids:
+            db.query(EvidenceRequest).filter(
+                EvidenceRequest.finding_id.in_(finding_ids)
+            ).delete(synchronize_session=False)
+            for finding_id in finding_ids:
+                finding = db.get(Finding, finding_id)
+                if finding is not None:
+                    db.delete(finding)
+        db.query(Comment).filter(
+            Comment.content_id == sample_content.id
+        ).delete(synchronize_session=False)
+        for image in (
+            db.query(ContentImage)
+            .filter(
+                ContentImage.content_id == sample_content.id,
+                ContentImage.id != sample_image.id,
+            )
+            .all()
+        ):
+            db.delete(image)
+        db.add(
+            AuditEvent(
+                content_id=sample_content.id,
+                actor="Asha",
+                action="demo_sample_reset",
+                details={
+                    "actor_role": role,
+                    "content_version": sample_content.version,
+                },
+            )
+        )
+        db.commit()
+        return {
+            "message": "Demo sample restored.",
+            "content_id": sample_content.id,
+            "content_version": sample_content.version,
+            "image_id": sample_image.id,
+        }
+    except Exception as exc:
+        db.rollback()
+        logger.exception("Unable to reset the demo sample.")
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "demo_reset_failed",
+                "message": "Unable to reset the demo sample.",
+            },
+        ) from exc
 
 
 @router.post("/seed/load")
@@ -115,41 +270,9 @@ def load_seed_data(
                     )
                 )
 
-        draft = data["sample_draft"]
-        sample_content = (
-            db.query(Content)
-            .filter(
-                Content.title == draft["title"],
-                Content.created_by == "Asha",
-            )
-            .order_by(Content.id)
-            .first()
+        sample_content, sample_image = sync_sample_content(
+            db, data["sample_draft"], data["demo_image"]
         )
-        db.flush()
-        if sample_content is None:
-            sample_content = Content(
-                title=draft["title"],
-                content_type="social_media",
-                body=draft["body"],
-                foreground_color=draft.get("foreground_color"),
-                background_color=draft.get("background_color"),
-                text_size=draft.get("text_size"),
-                status="draft",
-                version=1,
-                created_by="Asha",
-            )
-            db.add(sample_content)
-            db.flush()
-        else:
-            sample_content.status = "draft"
-            sample_content.reviewed_version = None
-            sample_content.reviewed_at = None
-            if sample_content.foreground_color is None:
-                sample_content.foreground_color = draft.get("foreground_color")
-            if sample_content.background_color is None:
-                sample_content.background_color = draft.get("background_color")
-            if sample_content.text_size is None:
-                sample_content.text_size = draft.get("text_size")
 
         legacy_demo_reason = (
             "Provide approved comparative evidence before this superlative "
@@ -180,30 +303,6 @@ def load_seed_data(
                 is None
             ):
                 db.delete(finding)
-
-        demo_image = data["demo_image"]
-        image_source = SEED_FILE.parent / demo_image["source_file"]
-        image_path = UPLOAD_DIR / demo_image["filename"]
-        if not image_path.is_file():
-            UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(image_source, image_path)
-        sample_image = (
-            db.query(ContentImage)
-            .filter(
-                ContentImage.content_id == sample_content.id,
-                ContentImage.filename == demo_image["filename"],
-            )
-            .first()
-        )
-        if sample_image is None:
-            sample_image = ContentImage(
-                content_id=sample_content.id,
-                filename=demo_image["filename"],
-                mime_type="image/png",
-                storage_path=str(image_path),
-                alt_text=demo_image["alt_text"],
-            )
-            db.add(sample_image)
 
         other_content = (
             db.query(Content).filter(Content.id != sample_content.id).all()

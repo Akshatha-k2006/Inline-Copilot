@@ -65,7 +65,7 @@ function hasPendingChangesRequest(
 
 export default function Editor() {
   const { role, user } = useRole();
-  const workspace = useWorkspace();
+  const workspace = useWorkspace({ resetSampleDemo: true });
   const [selectedDocumentId, setSelectedDocumentId] = useState<number | null>(
     null,
   );
@@ -253,7 +253,7 @@ export default function Editor() {
         background_color: backgroundColor,
         text_size: textSize,
       });
-    }, "Color settings saved. Run review to check contrast.");
+    }, "Color settings saved.");
   }
 
   async function recheckAccessibility(finding: DemoFinding): Promise<void> {
