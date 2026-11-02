@@ -1,174 +1,117 @@
-# Inline Copilot features
+# Inline Copilot Features
 
-What Inline Copilot can do right now, what works with caveats, and what is
-planned. The API contract in `docs/API_CONTRACT.md` is the source of truth for
-endpoints and JSON shapes; this file describes the product-level behaviour.
+Inline Copilot is a governance workspace for brand content. It helps teams draft marketing copy, validate it against approved brand knowledge, resolve review findings, and manage publication-ready workflows with human oversight.
 
-Inline Copilot is a governance workspace for brand content. Creators draft
-marketing copy and check it inline against approved brand knowledge before it
-can be submitted; reviewers approve or request changes; brand managers and
-admins move approved work to publishable. Everything runs on the FastAPI
-backend with a Next.js frontend; there is no login — a demo role switcher
-sends `X-Role` and `X-User` headers (demo only, not authentication).
+This document summarizes the product capabilities currently implemented in the project. The API contract in [API_CONTRACT.md](./API_CONTRACT.md) remains the formal source of truth for technical request and response shapes.
 
-## Completed
+## Product Summary
 
-### Brand knowledge library
+The platform supports four demo roles:
 
-- Full CRUD for guidelines, glossary terms, approved facts, and assets
-  (`/api/guidelines`, `/api/glossary`, `/api/facts`, `/api/assets`).
-- Guidelines have an optional category; terms have a status, preferred wording,
-  and optional guideline link; facts have an owner, source, and review dates
-  with an `outdated` marker; assets have a type.
-- Every knowledge create, update, and delete writes a workspace-level audit
-  event in the same transaction.
-- The Knowledge screen shows all four collections as tabs (Guidelines,
-  Terminology, Approved facts, Assets) with working forms.
+- Creator: drafts and updates content
+- Reviewer: evaluates submissions and evidence
+- Brand Manager: tracks governance quality and rule performance
+- Admin: controls governance setup and operational oversight
 
-### Sample brand seeding
+The application combines a FastAPI backend, a Next.js frontend, and a review engine that checks content against approved guidelines, terminology, evidence-backed claims, image accessibility requirements, and workflow approval rules.
 
-- `POST /api/seed/load` loads the fictional Lumina brand from `seed/brand.json`.
-- Seeding is additive: it creates only missing records by natural key and never
-  overwrites or deletes user-created records, so it can be re-run safely.
-- Restricted to admin and brand manager; each load is itself an audit event.
+## Core Capabilities
 
-### Demo roles and navigation
+### 1. Brand Knowledge Management
 
-- Four roles — creator, reviewer, brand manager, admin — switched in the top
-  bar. Changing role returns to the home page.
-- Role-specific home dashboards with live metrics and recent activity derived
-  from content, knowledge, and audit records.
-- Navigation and pages adapt to role; role-restricted pages redirect home
-  (creators cannot enter the review queue, non-brand-manager roles cannot see
-  the audit trail).
-- Authorisation uses caller-supplied `X-Role`/`X-User` headers validated by the
-  backend. This is demo context, not authentication, and must not be exposed as
-  a secured multi-user service.
+- Full CRUD support for guidelines, glossary terms, approved facts, and assets
+- Structured brand rules for preferred wording, prohibited terminology, factual claims, and asset metadata
+- Stored knowledge used directly in review checks and UI guidance
+- Knowledge pages support creation, editing, and maintenance of approved governance content
 
-### Content workspace (inline editor)
+### 2. Content Review and Inline Governance
 
-- Creators create drafts (`body` may be empty; the editor shows its own
-  placeholder), edit draft bodies and titles, and delete their own drafts.
-- Every save increments the version with optimistic locking (stale versions
-  return `409`) and clears the reviewed-version marker.
-- Creators see only their own documents; reviewers and managers see everything.
-- "My documents" list cards show state rails (draft / in review / changes
-  requested / approved / ready to publish), word count, version, and a count
-  badge; the list scrolls inside the card.
-- A document title area, word/read-time counters, and the active status pill.
+- Content creation and editing workflows for drafts with version tracking
+- State-based publishing flow with statuses such as draft, in review, changes requested, approved, and ready to publish
+- Inline review findings that highlight risky copy directly inside the editor
+- Human review loop with resolution, dismissal, and re-review requirements
 
-### Review engine
+### 3. AI and Rule-Based Review Engine
 
-- `POST /api/content/{id}/review` runs all checks and persists findings for the
-  current content version with `reviewed_version`/`reviewed_at` markers and a
-  `content_reviewed` audit event.
-- Deterministic, knowledge-backed checks run first: prohibited and preferred
-  terminology from stored terms; unsupported claims (superlatives, guarantees,
-  selected numbers) matched against approved facts; outdated-fact detection by
-  review dates; tone rules such as exclamation-mark overuse.
-- Findings always cite the guideline, term, or fact they came from, and carry
-  severity, message, text offsets, and a suggested fix where one exists.
-- An optional hosted LLM reviews tone, messaging, and claim wording when
-  `LLM_API_KEY` is configured. Rule results are always returned; the response's
-  `engine` field reports `llm` as `ok`, `timeout`, `error`, or `disabled`, and
-  the UI surfaces non-ok states instead of pretending the review was clean.
+- Deterministic checks for:
+  - prohibited and preferred terminology
+  - unsupported or risky claims
+  - outdated fact detection
+  - tone and messaging issues
+- Optional LLM-backed review when an API key is configured
+- Findings include severity, source references, explanations, and suggested fixes
 
-### Findings in the editor
+### 4. Evidence Request Workflow
 
-- The findings panel shows open-finding counts as severity chips (errors /
-  warnings / info), one card per finding with severity colour, check name,
-  original text, suggested replacement, explanation, source, cited knowledge,
-  and fact details, and distinct empty states for "not run", "stale" (the draft
-  changed after its last review), "review error", and clean reviews.
-- Inline highlights overlay open findings on the reviewed text, linked to the
-  findings list; the editable textarea is the default mode, with an explicit
-  "Show highlights" / "Edit text" toggle (open findings only — resolved
-  findings never lock the editor).
-- Resolved findings (8) stay available, collapsed behind a summary expander.
+- Unsupported claim findings can trigger an evidence request workflow
+- Request owners can attach source URLs and evidence context to support a review claim
+- Reviewers can verify or decide whether the evidence is acceptable
+- Evidence history and decisions are tracked for governance accountability
 
-### Finding resolution
+### 5. Brand Manager Dashboard
 
-- `PATCH /api/findings/{id}` supports accept (apply the suggested fix),
-  edit-with-replacement, and dismiss with a required dismissal reason
-  (not applicable / context explains the claim / approved exception / false
-  positive).
-- Replacements are applied only to the verified text span; stale or overlapping
-  spans are rejected rather than corrupting the document, and unaffected
-  findings advance to the new version when their spans still match.
-- Accept and edit bump the content version and require re-review; dismiss does
-  not change the content. Every action is recorded as
-  `finding_accepted` / `finding_edited` / `finding_dismissed` audit events.
+- Brand managers and admins can view rule performance over a selected time period
+- Dashboard metrics include:
+  - active guidelines
+  - findings recorded
+  - review activity
+  - dismissed findings
+  - rules needing clarification
+- Helps identify guidelines that are frequently cited, dismissed, or under-reviewed
 
-### Creator feedback loop
+### 6. Image Upload and Accessibility Review
 
-- Reviewer "Request changes" returns the content to `draft` with a required
-  comment; the comment is persisted.
-- The creator sees a feedback card naming the document, its version, the
-  reviewer notes, and the changes-requested state, and submit stays hidden
-  until the draft is edited and re-reviewed, so old comments can never be
-  falsely "resolved".
+- Users can upload supported images into content and review them in context
+- Alternative text can be added and saved for uploaded assets
+- Accessibility checking includes image review workflows and contrast validation for foreground/background combinations
+- The platform supports UI-level review for text color readability, accessibility-sensitive combinations, and uploaded image content quality
 
-### Approval workflow
+### 7. Approval Workflow and Review Queue
 
-- Status path `draft → self_checked → in_review → approved → ready_to_publish`
-  enforced by the shared transition service with per-role authorization.
-- Self-check/submit requires a persisted review of the current version and no
-  open high-severity findings; submission is also blocked when a resolved
-  finding's flagged text is still present, with `409` and a clear message.
-- Reviewers approve or request changes via the review queue with optional or
-  required comments; brand managers and admins perform the
-  approved → ready-to-publish transition.
-- Every transition writes exactly one `content_status_changed` audit event
-  atomically with the change.
+- Structured status transitions enforce role-based next steps
+- Review queue surfaces content waiting for decision
+- Approvals, changes requests, and comments are persisted as part of the content governance process
+- Workflow actions are logged for audit and traceability
 
-### Review queue and audit trail
+### 8. Audit Trail and Governance Visibility
 
-- The review queue lists submissions awaiting review for reviewers/managers,
-  supports the approve / request-changes decisions, and shows comments.
-- The audit trail shows workspace activity (content, finding, knowledge, and
-  workflow events), scoped so creators see only their own content's events.
-- Every write — content edits, reviews, finding actions, decisions, comments,
-  knowledge CRUD, seed loads — produces an audit event.
+- Every major write action creates audit events for content, findings, review decisions, knowledge updates, and workflow changes
+- Audit history supports visibility into what occurred, when it was changed, and by which role
+- Access is scoped for demo usage and role-aware workflow visibility
 
-### Editor UI details
+## Feature Status
 
-- Success notices ("Full review completed…", "Document created.", "Draft saved
-  to the backend.") auto-clear after five seconds; errors persist until the
-  next action.
-- Backend connectivity status is shown from a backend health indicator.
-- Draft deletion is confirmed in the UI and hidden during draft creation.
+### Completed and Active
 
-## Partial (works, with limits)
+- Brand knowledge library for guidelines, glossary, facts, and assets
+- Sample brand loading and repeatable governance seeding
+- Role-based navigation and demo access simulation
+- Draft authoring, content editing, and version tracking
+- Review engine with findings and inline editor support
+- Finding lifecycle management: accept, edit, dismiss, and re-review
+- Approval workflow and review queue
+- Evidence request workflow for unsupported claims
+- Brand manager dashboard with rule and review insights
+- Image upload and accessibility validation support
+- Audit trail for governance events and workflow actions
 
-- **Claim coverage** recognizes selected patterns (superlatives, guarantees,
-  customer numbers, percentages) rather than all possible claims. Text the
-  patterns do not match is not checked.
-- **Access control is demo-grade** `X-Role`/`X-User` header simulation. It is
-  validated and enforced, but impersonation is possible and expected — the
-  target environment is local demonstration and testing.
-- **Facts and claim checks** use review dates and approved-fact matching but
-  no evidence attachments or re-approval workflow yet.
+### Works With Limitations
 
-## Planned
+- Claim detection is rule-based and covers selected patterns rather than every possible marketing claim type
+- Access control is demo-grade and relies on header-based role simulation, not secure production authentication
+- Some governance and review capabilities are intentionally prototype-level for local validation
+- Image and accessibility checks are designed for targeted demo scenarios and continue to evolve
 
-- **Visual consistency checks** — evaluating stored assets and brand
-  guidelines for imagery (no `visual` check exists yet).
-- **Accessibility checks** of content.
-- **Evidence management for facts** — evidence requests, attachments, and a
-  re-approval flow for facts past their review date.
-- **Guideline health insights** — usage counts and decision outcomes from
-  findings and decisions.
-- **Google Docs add-on** reusing the same `POST /review` API.
-- Production authentication to replace the demo header scheme.
+## Planned Enhancements
 
-## Verification status
+- Advanced visual consistency checks for imagery and brand assets
+- Broader accessibility validation across content and UI patterns
+- Enhanced evidence management, including stronger document verification and renewal flows
+- Improved guideline health insights and recommendation scoring
+- Production-grade authentication and authorization
+- Broader integration scenarios for external editorial and marketing workflows
 
-- Backend: 100 unit tests (`backend/tests`, run with `python -m unittest
-discover -s tests`), covering health, collection CRUD, content, review,
-  finding actions, workflow transitions, comments, audit, seeding, and engine
-  checks against `seed/brand.json`. One assertion in `test_review_llm` currently
-  fails because it hard-codes the `gemini-2.5-flash` model name while the
-  configured model is `gemini-3.8-flash`; the review itself works.
-- Frontend: `npx tsc --noEmit` and `npm run build` pass; editor flows are
-  exercised in a real browser (creation, review, resolution, submit gating,
-  role switching, and notice timing).
+## Notes
+
+Inline Copilot is designed for local demonstration, validation, and content governance workflow prototyping. It intentionally keeps the role system clear and transparent: it simulates identity for local use, but it is not a production authorization model. Human reviewers remain the final decision-makers before publication.
+
