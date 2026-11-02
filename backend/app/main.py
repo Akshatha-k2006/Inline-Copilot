@@ -3,7 +3,13 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.db import Base, engine, ensure_model_schema, migrate_review_schema
+from app.db import (
+    Base,
+    SessionLocal,
+    engine,
+    ensure_model_schema,
+    migrate_review_schema,
+)
 from app import models
 from app.exception_handlers import (
     CatchUnhandledExceptionsMiddleware,
@@ -23,6 +29,8 @@ from app.routers import (
     accessibility,
     brand_manager,
 )
+from app.services.startup import initialize_sample_workspace
+
 app = FastAPI(title="CoRESpace — Inline Copilot API")
 register_exception_handlers(app)
 
@@ -44,6 +52,8 @@ app.add_middleware(
 Base.metadata.create_all(bind=engine)
 ensure_model_schema(engine)
 migrate_review_schema(engine)
+with SessionLocal() as db:
+    initialize_sample_workspace(db)
 
 app.include_router(health.router, prefix="/api")
 app.include_router(seed.router, prefix="/api")

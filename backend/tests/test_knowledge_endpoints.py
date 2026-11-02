@@ -29,6 +29,10 @@ from app.models import (
 )
 from app.routers import assets, facts, glossary, guidelines, seed
 from app.services.accessibility_checker import check_contrast
+from app.services.startup import (
+    INITIAL_SAMPLE_SETUP_ACTION,
+    initialize_sample_workspace,
+)
 
 
 class KnowledgeEndpointTests(unittest.TestCase):
@@ -60,6 +64,100 @@ class KnowledgeEndpointTests(unittest.TestCase):
     def tearDown(self):
         self.db.close()
         self.engine.dispose()
+
+    def test_initial_startup_keeps_only_sample_once(self):
+        self.db.add_all(
+            [
+                Content(
+                    title="Old draft",
+                    content_type="marketing_copy",
+                    body="Old content.",
+                    status="draft",
+                    version=1,
+                    created_by="Asha",
+                ),
+                Content(
+                    title="Another draft",
+                    content_type="marketing_copy",
+                    body="More content.",
+                    status="draft",
+                    version=1,
+                    created_by="Asha",
+                ),
+            ]
+        )
+        self.db.commit()
+
+        with TemporaryDirectory() as upload_dir:
+            original_upload_dir = seed.UPLOAD_DIR
+            seed.UPLOAD_DIR = Path(upload_dir)
+            try:
+                self.assertTrue(initialize_sample_workspace(self.db))
+                self.db.expire_all()
+
+                documents = self.db.query(Content).all()
+                self.assertEqual(len(documents), 1)
+                self.assertEqual(
+                    documents[0].title, "Spring launch post (sample)"
+                )
+                self.assertEqual(
+                    self.db.query(AuditEvent)
+                    .filter(
+                        AuditEvent.action
+                        == "initial_sample_workspace_setup"
+                    )
+                    .count(),
+                    1,
+                )
+
+                later_document = Content(
+                    title="Created after initialization",
+                    content_type="marketing_copy",
+                    body="Later content.",
+                    status="draft",
+                    version=1,
+                    created_by="Asha",
+                )
+                self.db.add(later_document)
+                self.db.commit()
+
+                self.assertFalse(initialize_sample_workspace(self.db))
+                self.assertEqual(self.db.query(Content).count(), 2)
+            finally:
+                seed.UPLOAD_DIR = original_upload_dir
+
+    def test_initial_startup_resets_existing_sample_to_draft_once(self):
+        sample = Content(
+            title="Spring launch post (sample)",
+            content_type="social_media",
+            body="Sample content.",
+            status="in_review",
+            version=2,
+            reviewed_version=2,
+            created_by="Asha",
+        )
+        self.db.add(sample)
+        self.db.flush()
+        self.db.add(
+            AuditEvent(
+                actor="system",
+                action=INITIAL_SAMPLE_SETUP_ACTION,
+                details={"sample_content_id": sample.id, "removed_content": 0},
+            )
+        )
+        self.db.commit()
+
+        self.assertFalse(initialize_sample_workspace(self.db))
+        self.db.refresh(sample)
+        self.assertEqual(sample.status, "draft")
+        self.assertIsNone(sample.reviewed_version)
+        self.assertIsNone(sample.reviewed_at)
+
+        sample.status = "in_review"
+        self.db.commit()
+        self.assertFalse(initialize_sample_workspace(self.db))
+        self.db.refresh(sample)
+        self.assertEqual(sample.status, "in_review")
 
     def request(self, method, path, *, role="brand_manager", body=None):
         async def dispatch():
@@ -280,8 +378,9 @@ class KnowledgeEndpointTests(unittest.TestCase):
                 "Meet LuminaBulbs, the #1 best smart bulbs on the planet! "
                 "They will definitely cut your energy bill by 90%."
             ),
-            status="draft",
+            status="in_review",
             version=1,
+            reviewed_version=1,
             created_by="Asha",
         )
         self.db.add(sample_content)
@@ -387,6 +486,8 @@ class KnowledgeEndpointTests(unittest.TestCase):
                     {"foreground": True, "background": True},
                 )
                 sample_content = self.db.get(Content, first["sample_content_id"]                )
+                self.assertEqual(sample_content.status, "draft")
+                self.assertIsNone(sample_content.reviewed_version)
                 self.assertEqual(sample_content.foreground_color, "#26323B")
                 self.assertEqual(sample_content.background_color, "#FAF8F3")
                 sample_documents = (
