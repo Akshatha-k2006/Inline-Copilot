@@ -1480,7 +1480,19 @@ a {
 }
 
 .dashboard-period {
-  min-width: 180px;
+  display: grid;
+  gap: 8px;
+  min-width: 260px;
+}
+
+.dashboard-period-buttons {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dashboard-period-buttons .button {
+  min-width: 76px;
 }
 
 .dashboard-loading {
@@ -1494,6 +1506,101 @@ a {
 .dashboard-table {
   width: 100%;
   border-collapse: collapse;
+}
+
+.dashboard-chart {
+  padding: 20px;
+  overflow-x: auto;
+}
+
+.dashboard-svg-chart {
+  display: block;
+  min-width: 620px;
+  width: 100%;
+  height: auto;
+}
+
+.dashboard-chart-axis {
+  stroke: var(--border);
+  stroke-width: 1.5;
+}
+
+.dashboard-chart-column {
+  fill: var(--teal);
+}
+
+.dashboard-chart-label {
+  fill: var(--muted);
+  font-size: 12px;
+}
+
+.dashboard-chart-value {
+  fill: var(--ink);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dashboard-overview-chart {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(280px, 1.4fr);
+  align-items: center;
+  gap: 24px;
+  padding: 20px;
+}
+
+.dashboard-overview-chart h3 {
+  margin: 0 0 6px;
+}
+
+.dashboard-pie-layout {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+}
+
+.dashboard-pie-chart {
+  width: 180px;
+  height: 180px;
+  flex: 0 0 auto;
+}
+
+.dashboard-pie-hole {
+  fill: var(--surface);
+}
+
+.dashboard-pie-empty {
+  fill: none;
+  stroke: var(--border);
+  stroke-width: 20;
+}
+
+.dashboard-pie-total {
+  fill: var(--ink);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.dashboard-pie-legend {
+  display: grid;
+  gap: 12px;
+  min-width: 150px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.dashboard-pie-legend li {
+  display: grid;
+  grid-template-columns: 12px 1fr auto;
+  align-items: center;
+  gap: 8px;
+}
+
+.dashboard-pie-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
 }
 
 .dashboard-table th,
@@ -1531,6 +1638,10 @@ a {
 @media (max-width: 700px) {
   .dashboard-work-grid,
   .dashboard-clarifications {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-overview-chart {
     grid-template-columns: 1fr;
   }
 }

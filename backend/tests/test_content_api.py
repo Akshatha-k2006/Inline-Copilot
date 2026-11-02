@@ -17,6 +17,8 @@ from app.routers.content import router as content_router
 from app.routers.content_workflow import router as workflow_router
 from app.routers.health import router as health_router
 from app.routers.review import router as review_router
+from app.routers.seed import router as seed_router
+from app.routers.evidence_requests import router as evidence_router
 
 
 class ContentApiTests(unittest.TestCase):
@@ -34,6 +36,8 @@ class ContentApiTests(unittest.TestCase):
         self.app.include_router(content_router, prefix="/api")
         self.app.include_router(workflow_router, prefix="/api")
         self.app.include_router(review_router, prefix="/api")
+        self.app.include_router(seed_router, prefix="/api")
+        self.app.include_router(evidence_router, prefix="/api")
 
         def override_get_db():
             yield self.db
@@ -110,6 +114,55 @@ class ContentApiTests(unittest.TestCase):
                 "body": body,
             },
         )
+
+    def test_reviewer_can_add_persisted_demo_request_to_queue(self):
+        status, response = self.request(
+            "/api/demo/add-review-request",
+            method="POST",
+            role="reviewer",
+            user="Ravi (Reviewer)",
+        )
+        self.assertEqual(status, 201)
+        self.assertEqual(response["status"], "in_review")
+        self.assertEqual(response["created_by"], "Asha")
+
+        queued_status, queued = self.request(
+            "/api/content?status=in_review",
+            role="reviewer",
+            user="Ravi (Reviewer)",
+        )
+        self.assertEqual(queued_status, 200)
+        self.assertIn(response["id"], [item["id"] for item in queued])
+
+    def test_creator_cannot_add_demo_request_directly_to_review_queue(self):
+        status, response = self.request(
+            "/api/demo/add-review-request",
+            method="POST",
+            role="creator",
+            user="Asha (Creator)",
+        )
+        self.assertEqual(status, 403)
+        self.assertEqual(response["error"], "forbidden")
+
+    def test_reviewer_can_create_new_evidence_demo_draft_and_request(self):
+        status, response = self.request(
+            "/api/demo/add-evidence-request",
+            method="POST",
+            role="reviewer",
+            user="Ravi (Reviewer)",
+        )
+        self.assertEqual(status, 201)
+        self.assertEqual(response["status"], "draft")
+
+        request_status, requests = self.request(
+            "/api/evidence-requests",
+            role="reviewer",
+            user="Ravi (Reviewer)",
+        )
+        self.assertEqual(request_status, 200)
+        self.assertEqual(len(requests), 1)
+        self.assertEqual(requests[0]["claimText"], "reduces household energy use by 42% for every customer")
+        self.assertEqual(requests[0]["status"], "open")
 
     def test_health_checks_database_and_content_routes_are_registered_once(self):
         status, response = self.request("/api/health")
