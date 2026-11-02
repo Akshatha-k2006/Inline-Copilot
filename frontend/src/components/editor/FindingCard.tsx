@@ -170,7 +170,12 @@ export default function FindingCard({
       aria-label={`${severityLabel} severity finding: ${checkLabel}`}
       tabIndex={0}
       onClick={(event) => {
-        if ((event.target as HTMLElement).closest("button, a, textarea, summary"))
+        const target = event.target as HTMLElement;
+        if (
+          target.closest(
+            "button, a, textarea, summary, select, input, label, option",
+          )
+        )
           return;
         onSelect(finding);
       }}
@@ -389,7 +394,10 @@ export default function FindingCard({
               {hasOpenEvidenceRequest ? "Evidence Requested" : "Request Evidence"}
             </button>
           ) : (
-            <div className="evidence-request-form">
+            <div
+              className="evidence-request-form"
+              onClick={(event) => event.stopPropagation()}
+            >
               <div className="form-field">
                 <label htmlFor={`evidence-claim-${finding.id}`}>Claim text</label>
                 <input
@@ -418,11 +426,13 @@ export default function FindingCard({
                   onChange={(event) => setEvidenceAssignee(event.target.value)}
                 >
                   <option value="">Choose an owner</option>
-                  {ROLE_OPTIONS.map((option) => (
-                    <option key={option.user} value={option.user}>
-                      {option.user}
-                    </option>
-                  ))}
+                  {ROLE_OPTIONS.filter((option) => option.role !== "creator").map(
+                    (option) => (
+                      <option key={option.user} value={option.user}>
+                        {option.user}
+                      </option>
+                    ),
+                  )}
                 </select>
               </div>
               {evidenceFormError && (
