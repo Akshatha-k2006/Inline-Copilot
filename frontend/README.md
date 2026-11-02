@@ -17,6 +17,9 @@ npm run dev          # http://localhost:3000
   `NEXT_PUBLIC_API_BASE_URL` and sends `X-Role` and `X-User` on requests.
 - The Dashboard loads health, backend knowledge collections, and persisted
   content. It does not replace failed API requests with fixture data.
+- On the first backend startup, the sample brand is loaded and other saved
+  content documents are removed once, leaving the sample document. Later
+  startups do not reset content.
 - Write & Review creates and updates persisted content and uses backend review,
   findings, comments, audit, and workflow endpoints.
 - The role switcher selects a prototype role; these headers are not

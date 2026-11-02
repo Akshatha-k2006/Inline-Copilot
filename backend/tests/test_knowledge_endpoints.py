@@ -29,6 +29,7 @@ from app.models import (
 )
 from app.routers import assets, facts, glossary, guidelines, seed
 from app.services.accessibility_checker import check_contrast
+from app.services.startup import initialize_sample_workspace
 
 
 class KnowledgeEndpointTests(unittest.TestCase):
@@ -60,6 +61,67 @@ class KnowledgeEndpointTests(unittest.TestCase):
     def tearDown(self):
         self.db.close()
         self.engine.dispose()
+
+    def test_initial_startup_keeps_only_sample_once(self):
+        self.db.add_all(
+            [
+                Content(
+                    title="Old draft",
+                    content_type="marketing_copy",
+                    body="Old content.",
+                    status="draft",
+                    version=1,
+                    created_by="Asha",
+                ),
+                Content(
+                    title="Another draft",
+                    content_type="marketing_copy",
+                    body="More content.",
+                    status="draft",
+                    version=1,
+                    created_by="Asha",
+                ),
+            ]
+        )
+        self.db.commit()
+
+        with TemporaryDirectory() as upload_dir:
+            original_upload_dir = seed.UPLOAD_DIR
+            seed.UPLOAD_DIR = Path(upload_dir)
+            try:
+                self.assertTrue(initialize_sample_workspace(self.db))
+                self.db.expire_all()
+
+                documents = self.db.query(Content).all()
+                self.assertEqual(len(documents), 1)
+                self.assertEqual(
+                    documents[0].title, "Spring launch post (sample)"
+                )
+                self.assertEqual(
+                    self.db.query(AuditEvent)
+                    .filter(
+                        AuditEvent.action
+                        == "initial_sample_workspace_setup"
+                    )
+                    .count(),
+                    1,
+                )
+
+                later_document = Content(
+                    title="Created after initialization",
+                    content_type="marketing_copy",
+                    body="Later content.",
+                    status="draft",
+                    version=1,
+                    created_by="Asha",
+                )
+                self.db.add(later_document)
+                self.db.commit()
+
+                self.assertFalse(initialize_sample_workspace(self.db))
+                self.assertEqual(self.db.query(Content).count(), 2)
+            finally:
+                seed.UPLOAD_DIR = original_upload_dir
 
     def request(self, method, path, *, role="brand_manager", body=None):
         async def dispatch():
