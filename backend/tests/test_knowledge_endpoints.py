@@ -2,6 +2,8 @@ import asyncio
 import json
 import unittest
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from tempfile import TemporaryDirectory
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI
@@ -14,14 +16,19 @@ from app.exception_handlers import register_exception_handlers
 from app.models import (
     Asset,
     AuditEvent,
+    Comment,
     Content,
+    ContentImage,
+    EvidenceRequest,
     Fact,
+    Finding,
     FindingDecisionEvent,
     FindingReviewEvent,
     Guideline,
     Term,
 )
 from app.routers import assets, facts, glossary, guidelines, seed
+from app.services.accessibility_checker import check_contrast
 
 
 class KnowledgeEndpointTests(unittest.TestCase):
@@ -251,7 +258,7 @@ class KnowledgeEndpointTests(unittest.TestCase):
         self.assertEqual(status, 403)
         self.assertEqual(payload["error"], "forbidden")
 
-    def test_sample_seed_is_repeatable_and_preserves_unrelated_records(self):
+    def test_sample_seed_keeps_only_one_document_and_removes_legacy_demo_request(self):
         self.db.add(
             Guideline(title="User-owned guideline", description="Keep this rule.")
         )
@@ -265,24 +272,163 @@ class KnowledgeEndpointTests(unittest.TestCase):
                 created_by="another-user",
             )
         )
+        sample_content = Content(
+            id=2,
+            title="Spring launch post (sample)",
+            content_type="social_media",
+            body=(
+                "Meet LuminaBulbs, the #1 best smart bulbs on the planet! "
+                "They will definitely cut your energy bill by 90%."
+            ),
+            status="draft",
+            version=1,
+            created_by="Asha",
+        )
+        self.db.add(sample_content)
+        self.db.flush()
+        legacy_finding = Finding(
+            content_id=sample_content.id,
+            content_version=1,
+            check_type="unsupported_claim",
+            severity="warning",
+            message=(
+                'The claim "#1 best smart bulbs on the planet" is not supported '
+                "by approved brand evidence."
+            ),
+            evidence={"matched_text": "#1 best smart bulbs on the planet"},
+            start_offset=21,
+            end_offset=51,
+            status="resolved",
+        )
+        other_finding = Finding(
+            content_id=1,
+            content_version=1,
+            check_type="unsupported_claim",
+            severity="warning",
+            message="A user finding.",
+            evidence={"matched_text": "User content"},
+            start_offset=0,
+            end_offset=12,
+            status="open",
+        )
+        self.db.add_all([legacy_finding, other_finding])
+        self.db.flush()
+        self.db.add_all(
+            [
+                EvidenceRequest(
+                    finding_id=legacy_finding.id,
+                    claim_text="#1 best smart bulbs on the planet",
+                    reason=(
+                        "Provide approved comparative evidence before this "
+                        "superlative claim can be published."
+                    ),
+                    assignee="Ravi (Reviewer)",
+                    status="open",
+                ),
+                EvidenceRequest(
+                    finding_id=other_finding.id,
+                    claim_text="User content",
+                    reason="A user request.",
+                    assignee="Ravi (Reviewer)",
+                    status="open",
+                ),
+            ]
+        )
+        self.db.add(
+            Comment(content_id=1, author="another-user", body="Keep no orphan.")
+        )
         self.db.commit()
 
-        status, first = self.request("POST", "/api/seed/load")
-        self.assertEqual(status, 200)
-        def record_counts():
-            return tuple(
-                self.db.query(model).count()
-                for model in (Guideline, Term, Fact, Asset, Content)
-            )
+        with TemporaryDirectory() as upload_dir:
+            original_upload_dir = seed.UPLOAD_DIR
+            seed.UPLOAD_DIR = Path(upload_dir)
+            try:
+                status, first = self.request("POST", "/api/seed/load")
+                self.assertEqual(status, 200)
+                self.db.expire_all()
 
-        first_counts = record_counts()
+                def record_counts():
+                    return tuple(
+                        self.db.query(model).count()
+                        for model in (
+                            Guideline,
+                            Term,
+                            Fact,
+                            Asset,
+                            Content,
+                            ContentImage,
+                            Finding,
+                            EvidenceRequest,
+                        )
+                    )
 
-        status, second = self.request("POST", "/api/seed/load")
-        self.assertEqual(status, 200)
-        self.assertEqual(second["sample_content_id"], first["sample_content_id"])
-        self.assertEqual(record_counts(), first_counts)
-        self.assertIsNotNone(self.db.get(Content, 1))
-        self.assertEqual(self.db.get(Content, 1).body, "Do not replace.")
+                first_counts = record_counts()
+                self.assertEqual(first["counts"]["images"], 1)
+                self.assertEqual(first["counts"]["content"], 1)
+                self.assertEqual(first["counts"]["evidence_requests"], 0)
+                self.assertEqual(first["counts"]["removed_content"], 1)
+                self.assertEqual(self.db.query(Finding).count(), 0)
+                self.assertEqual(self.db.query(EvidenceRequest).count(), 0)
+                self.assertEqual(self.db.query(Comment).count(), 0)
+                self.assertEqual(
+                    self.db.query(Asset)
+                    .filter(
+                        Asset.asset_type == "palette",
+                        Asset.description.contains("#F2A93B"),
+                    )
+                    .count(),
+                    1,
+                )
+                contrast_result = check_contrast(
+                    self.db, "#F2A93B", "#FAF8F3", "normal"
+                )
+                self.assertEqual(
+                    contrast_result["brand_palette_match"],
+                    {"foreground": True, "background": True},
+                )
+                sample_content = self.db.get(Content, first["sample_content_id"]                )
+                self.assertEqual(sample_content.foreground_color, "#26323B")
+                self.assertEqual(sample_content.background_color, "#FAF8F3")
+                sample_documents = (
+                    self.db.query(Content)
+                    .filter(
+                        Content.title == "Spring launch post (sample)",
+                        Content.created_by == "Asha",
+                    )
+                    .all()
+                )
+                self.assertEqual(len(sample_documents), 1)
+                sample_image = (
+                    self.db.query(ContentImage)
+                    .filter(ContentImage.content_id == sample_content.id)
+                    .one()
+                )
+                self.assertTrue(Path(sample_image.storage_path).is_file())
+
+                status, second = self.request("POST", "/api/seed/load")
+                self.assertEqual(status, 200)
+                self.db.expire_all()
+                self.assertEqual(
+                    second["sample_content_id"], first["sample_content_id"]
+                )
+                self.assertEqual(second["counts"]["removed_content"], 0)
+                self.assertEqual(record_counts(), first_counts)
+            finally:
+                seed.UPLOAD_DIR = original_upload_dir
+
+        self.assertIsNone(self.db.get(Content, 1))
+        self.assertEqual(self.db.query(Content).count(), 1)
+        self.assertEqual(
+            self.db.query(AuditEvent)
+            .filter(AuditEvent.action == "content_deleted")
+            .count(),
+            1,
+        )
+        self.assertIsNotNone(
+            self.db.query(Guideline)
+            .filter(Guideline.title == "User-owned guideline")
+            .first()
+        )
         self.assertEqual(
             self.db.query(AuditEvent)
             .filter(AuditEvent.action == "sample_brand_loaded")

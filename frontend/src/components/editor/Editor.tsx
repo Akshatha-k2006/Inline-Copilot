@@ -6,6 +6,7 @@ import { useRole } from "@/lib/role";
 import {
   createDocument as createBackendDocument,
   deleteDocument as deleteBackendDocument,
+  getDefaultDocument,
   getDocumentFindings,
   resolveFinding,
   runContentReview,
@@ -150,8 +151,9 @@ export default function Editor() {
       : undefined;
     if (requestedDocument) {
       setSelectedDocumentId(requestedDocument.id);
-    } else if (workspace.documents[0]) {
-      setSelectedDocumentId(workspace.documents[0].id);
+    } else {
+      const defaultDocument = getDefaultDocument(workspace.documents);
+      if (defaultDocument) setSelectedDocumentId(defaultDocument.id);
     }
   }, [selectedDocumentId, workspace.documents]);
 
@@ -879,7 +881,7 @@ export default function Editor() {
                         setBody(document.body);
                       } else {
                         setSelectedDocumentId(
-                          workspace.documents[0]?.id ?? null,
+                          getDefaultDocument(workspace.documents)?.id ?? null,
                         );
                       }
                     }}

@@ -385,6 +385,9 @@ export default function FindingCard({
               onClick={() => {
                 setEvidenceFormError("");
                 setEvidenceSuccess("");
+                setEvidenceReason(
+                  `Provide approved evidence to support this claim before it can be published: "${finding.text}".`,
+                );
                 setShowEvidenceForm(true);
               }}
               disabled={
