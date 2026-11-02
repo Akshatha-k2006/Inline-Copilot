@@ -10,7 +10,6 @@ export default function RoleSwitcher() {
 
   return (
     <label className="role-switcher">
-      <span className="role-label">Demo role</span>
       <select
         className="role-select"
         value={role}

@@ -54,6 +54,30 @@ export interface ContentImage {
   updated_at: string;
 }
 
+export interface ContrastCheckResponse {
+  foreground_color: string;
+  background_color: string;
+  text_size: "normal" | "large";
+  contrast_ratio: number;
+  required_ratio: number;
+  passes: boolean;
+  brand_palette_match: {
+    foreground: boolean;
+    background: boolean;
+  };
+  finding: {
+    check: string;
+    severity: string;
+    message: string;
+    suggested_fix: string;
+  } | null;
+  suggested_replacement: {
+    foreground_color: string;
+    background_color: string;
+    contrast_ratio: number;
+  } | null;
+}
+
 export interface ContentDraft {
   title: string;
   content_type: string;

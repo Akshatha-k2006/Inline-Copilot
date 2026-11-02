@@ -23,7 +23,7 @@ import FindingsPanel from "./FindingsPanel";
 import HighlightedDraft from "./HighlightedDraft";
 import ImageAccessibilityPanel from "./ImageAccessibilityPanel";
 
-const DRAFT_BODY_PLACEHOLDER = "Start writing your on-brand content here.";
+const DRAFT_BODY_PLACEHOLDER = "Start writing your on-brand content here...";
 
 function countWords(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length;
@@ -63,7 +63,7 @@ function hasPendingChangesRequest(
 }
 
 export default function Editor() {
-  const { role } = useRole();
+  const { role, user } = useRole();
   const workspace = useWorkspace();
   const [selectedDocumentId, setSelectedDocumentId] = useState<number | null>(
     null,
@@ -83,6 +83,7 @@ export default function Editor() {
     visibleDocuments.find((item) => item.id === selectedDocumentId) ??
     visibleDocuments[0] ??
     workspace.documents.find((item) => item.id === selectedDocumentId);
+  const [documentSearch, setDocumentSearch] = useState("");
   const [title, setTitle] = useState(document?.title ?? "");
   const [body, setBody] = useState(document?.body ?? "");
   const [creating, setCreating] = useState(false);
@@ -92,6 +93,7 @@ export default function Editor() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [reviewing, setReviewing] = useState(false);
+  const [reviewError, setReviewError] = useState(false);
   const [reviewNotice, setReviewNotice] = useState("");
   const [busyFindingIds, setBusyFindingIds] = useState<number[]>([]);
   const [evidenceRequests, setEvidenceRequests] = useState<EvidenceRequest[]>(
@@ -100,6 +102,9 @@ export default function Editor() {
   const [evidenceLoading, setEvidenceLoading] = useState(false);
   const [evidenceError, setEvidenceError] = useState("");
   const [showHighlights, setShowHighlights] = useState(false);
+  const filteredDocuments = visibleDocuments.filter((item) =>
+    item.title.toLowerCase().includes(documentSearch.trim().toLowerCase()),
+  );
   const titleInputRef = useRef<HTMLInputElement>(null);
   const newTitleInputRef = useRef<HTMLInputElement>(null);
   const bodyRef = useRef<HTMLTextAreaElement>(null);
@@ -158,6 +163,7 @@ export default function Editor() {
 
   useEffect(() => {
     setReviewNotice("");
+    setReviewError(false);
     setShowHighlights(false);
   }, [document?.id]);
 
@@ -278,6 +284,7 @@ export default function Editor() {
     if (!document || !canEdit || reviewing) return Promise.resolve();
     return run(async () => {
       setReviewing(true);
+      setReviewError(false);
       setReviewNotice("");
       try {
         let current = document;
@@ -286,6 +293,9 @@ export default function Editor() {
         }
         const response = await runContentReview(current.id, role);
         setSelectedId(null);
+      } catch (cause) {
+        setReviewError(true);
+        throw cause;
       } finally {
         setReviewing(false);
       }
@@ -391,7 +401,15 @@ export default function Editor() {
       <section className="page editor-page">
         <header className="editor-header">
           <div>
-            <p className="eyebrow">CoRESpace / Inline Editor</p>
+            <div className="editor-header-top">
+              <p className="eyebrow">CoRESpace / Inline Editor</p>
+              <div className="editor-user">
+                <span className="profile-avatar" aria-hidden="true">
+                  {user.trim().charAt(0).toUpperCase()}
+                </span>
+                <span>{user.replace(/\s+\([^)]*\)$/, "")}</span>
+              </div>
+            </div>
             <h1>Write with confidence</h1>
             <p className="lead">
               Review exact phrases against approved brand knowledge before
@@ -434,8 +452,17 @@ export default function Editor() {
                 New
               </button>
             </div>
+            <label className="document-search">
+              <span className="visually-hidden">Search documents</span>
+              <input
+                type="search"
+                placeholder="Search documents"
+                value={documentSearch}
+                onChange={(event) => setDocumentSearch(event.target.value)}
+              />
+            </label>
             <div className="document-list">
-              {workspace.documents.map((item) => {
+              {filteredDocuments.map((item) => {
                 const itemPending = hasPendingChangesRequest(
                   workspace.history,
                   item,
@@ -454,6 +481,9 @@ export default function Editor() {
                       setCreating(false);
                     }}
                   >
+                    <span className="document-file-icon" aria-hidden="true">
+                      ▤
+                    </span>
                     <strong className="document-list-item-title">
                       {item.title}
                     </strong>
@@ -476,12 +506,16 @@ export default function Editor() {
             </div>
             <div className="document-list-footer">
               <p className="muted">
-                {workspace.documents.length} document
-                {workspace.documents.length !== 1 ? "s" : ""}
+                {visibleDocuments.length} document
+                {visibleDocuments.length !== 1 ? "s" : ""}
               </p>
             </div>
           </aside>
           <section className="editor-main card">
+            <div className="writing-heading">
+              <h2>Writing Content</h2>
+              <span className="status-pill status-draft">Draft</span>
+            </div>
             {creating ? (
               <>
                 <div className="editor-toolbar">
@@ -568,7 +602,31 @@ export default function Editor() {
               </>
             )}
           </section>
-          <div className="editor-side"></div>
+          <aside className="editor-side">
+            <section className="editor-card findings-panel">
+              <div className="panel-heading">
+                <div>
+                  <h2>Findings</h2>
+                </div>
+                <span className="findings-count">0 findings</span>
+              </div>
+              <div className="editor-empty-state">
+                <span className="empty-state-mark" aria-hidden="true">
+                  <svg viewBox="0 0 32 32" focusable="false">
+                    <path d="M8 3.5h11l6 6V25H8z" />
+                    <path d="M19 3.5V10h6M12 14h9M12 18h6" />
+                    <circle cx="21.5" cy="21.5" r="5" />
+                    <path d="m25 25 3.5 3.5" />
+                  </svg>
+                </span>
+                <h3>No findings yet</h3>
+                <p>
+                  Create or select a draft, then run a full review to see
+                  findings from the backend here.
+                </p>
+              </div>
+            </section>
+          </aside>
         </div>
       </section>
     );
@@ -602,7 +660,15 @@ export default function Editor() {
     <section className="page editor-page">
       <header className="editor-header">
         <div>
-          <p className="eyebrow">CoRESpace / Inline Editor</p>
+          <div className="editor-header-top">
+            <p className="eyebrow">CoRESpace / Inline Editor</p>
+            <div className="editor-user">
+              <span className="profile-avatar" aria-hidden="true">
+                {user.trim().charAt(0).toUpperCase()}
+              </span>
+              <span>{user.replace(/\s+\([^)]*\)$/, "")}</span>
+            </div>
+          </div>
           <h1>Write with confidence</h1>
           <p className="lead">
             Review exact phrases against approved brand knowledge before sharing
@@ -692,8 +758,17 @@ export default function Editor() {
               </button>
             )}
           </div>
+          <label className="document-search">
+            <span className="visually-hidden">Search documents</span>
+            <input
+              type="search"
+              placeholder="Search documents"
+              value={documentSearch}
+              onChange={(event) => setDocumentSearch(event.target.value)}
+            />
+          </label>
           <div className="document-list">
-            {visibleDocuments.map((item) => {
+            {filteredDocuments.map((item) => {
               const itemPending = hasPendingChangesRequest(
                 workspace.history,
                 item,
@@ -713,6 +788,9 @@ export default function Editor() {
                     }
                   }}
                 >
+                  <span className="document-file-icon" aria-hidden="true">
+                    ▤
+                  </span>
                   <strong className="document-list-item-title">
                     {item.title}
                   </strong>
@@ -733,9 +811,11 @@ export default function Editor() {
               );
             })}
           </div>
-          {visibleDocuments.length === 0 && (
+          {filteredDocuments.length === 0 && (
             <p className="muted">
-              {role === "creator"
+              {documentSearch.trim()
+                ? "No documents match your search."
+                : role === "creator"
                 ? "No documents yet."
                 : "No submitted documents."}
             </p>
@@ -757,6 +837,12 @@ export default function Editor() {
           </div>
         </aside>
         <section className="editor-main card">
+          <div className="writing-heading">
+            <h2>Writing Content</h2>
+            <span className={`status-pill status-${creating ? "draft" : document.status}`}>
+              {creating ? "Draft" : contentStatusLabel(document.status)}
+            </span>
+          </div>
           {creating ? (
             <>
               <div className="editor-toolbar">
@@ -876,7 +962,7 @@ export default function Editor() {
                 )}
                 {canEdit && (
                   <button
-                    className="button button-primary"
+                    className="button button-primary button-run-review"
                     type="button"
                     disabled={busy}
                     onClick={() => void reviewDraft()}
@@ -917,7 +1003,7 @@ export default function Editor() {
               findings={findings}
               busyFindingIds={busyFindingIds}
               readOnly={!canEdit || busy}
-              reviewState={reviewState}
+              reviewState={reviewError ? "error" : reviewState}
               reviewing={reviewing}
               canRunReview={canEdit && !busy}
               onRunReview={() => void reviewDraft()}

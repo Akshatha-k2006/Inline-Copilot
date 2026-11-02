@@ -8,6 +8,7 @@ import type {
   ContentCommentsResponse,
   Content,
   ContentImage,
+  ContrastCheckResponse,
   ContentAuditEvent,
   ContentDraft,
   ContentFindingsResponse,
@@ -260,6 +261,16 @@ export const api = {
   updateContentImageAltText: (id: number, altText: string) =>
     request<ContentImage>("PATCH", `/api/content-images/${id}`, {
       alt_text: altText,
+    }),
+  checkColorContrast: (
+    foregroundColor: string,
+    backgroundColor: string,
+    textSize: "normal" | "large",
+  ) =>
+    request<ContrastCheckResponse>("POST", "/api/accessibility/contrast", {
+      foreground_color: foregroundColor,
+      background_color: backgroundColor,
+      text_size: textSize,
     }),
 
   reviewContent: (id: number) =>
