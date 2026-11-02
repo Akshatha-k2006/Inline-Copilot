@@ -408,6 +408,94 @@ class KnowledgeEndpointTests(unittest.TestCase):
         self.assertEqual(status, 403)
         self.assertEqual(payload["error"], "forbidden")
 
+    def test_creator_reset_restores_pristine_sample_after_approval(self):
+        sample = Content(
+            title="Spring launch post (sample)",
+            content_type="social_media",
+            body="affordable and affordable",
+            status="approved",
+            version=3,
+            reviewed_version=3,
+            created_by="Asha",
+        )
+        self.db.add(sample)
+        self.db.flush()
+        finding = Finding(
+            content_id=sample.id,
+            content_version=3,
+            check_type="terminology",
+            severity="medium",
+            message="Old demo finding.",
+            evidence={"matched_text": "affordable"},
+        )
+        self.db.add(finding)
+        self.db.flush()
+        self.db.add_all(
+            [
+                EvidenceRequest(
+                    finding_id=finding.id,
+                    claim_text="affordable",
+                    reason="Old demo evidence request.",
+                    assignee="Ravi",
+                ),
+                Comment(
+                    content_id=sample.id,
+                    author="Ravi",
+                    body="Old demo feedback.",
+                ),
+                ContentImage(
+                    content_id=sample.id,
+                    filename="old-upload.png",
+                    mime_type="image/png",
+                    storage_path="missing-user-upload.png",
+                ),
+            ]
+        )
+        self.db.commit()
+
+        status, response = self.request(
+            "POST",
+            "/api/demo/reset-sample",
+            role="creator",
+        )
+
+        self.assertEqual(status, 200)
+        self.db.expire_all()
+        self.db.refresh(sample)
+        with seed.SEED_FILE.open("r", encoding="utf-8") as file:
+            fixture = json.load(file)
+        self.assertEqual(sample.body, fixture["sample_draft"]["body"])
+        self.assertEqual(sample.status, "draft")
+        self.assertEqual(sample.version, 4)
+        self.assertIsNone(sample.reviewed_version)
+        self.assertEqual(self.db.query(Finding).count(), 0)
+        self.assertEqual(self.db.query(EvidenceRequest).count(), 0)
+        self.assertEqual(self.db.query(Comment).count(), 0)
+        image = self.db.query(ContentImage).one()
+        self.assertEqual(image.id, response["image_id"])
+        self.assertEqual(
+            Path(image.storage_path),
+            seed.SEED_FILE.parent / fixture["demo_image"]["source_file"],
+        )
+        self.assertEqual(response["content_id"], sample.id)
+
+        repeated_status, repeated_response = self.request(
+            "POST",
+            "/api/demo/reset-sample",
+            role="creator",
+        )
+        self.assertEqual(repeated_status, 200)
+        self.assertEqual(repeated_response["content_version"], sample.version)
+        self.assertEqual(self.db.query(ContentImage).count(), 1)
+
+        denied_status, denied = self.request(
+            "POST",
+            "/api/demo/reset-sample",
+            role="reviewer",
+        )
+        self.assertEqual(denied_status, 403)
+        self.assertEqual(denied["error"], "forbidden")
+
     def test_sample_seed_keeps_only_one_document_and_removes_legacy_demo_request(self):
         self.db.add(
             Guideline(title="User-owned guideline", description="Keep this rule.")

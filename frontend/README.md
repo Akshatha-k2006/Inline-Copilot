@@ -20,10 +20,11 @@ npm run dev          # http://localhost:3000
 - On the first backend startup, the sample brand is loaded and other saved
   content documents are removed once, leaving the sample document as a draft.
   Existing unreviewed version-1 sample content is synchronized once to the
-  checked-in sample text and image. Later startups do not reset content or undo
-  a user's submission. The sample image is bundled with the backend; user
-  uploads need persistent storage configured by the deployment for restart
-  persistence.
+  checked-in sample text and image. Whenever the Creator loads a workspace
+  page, the sample document is restored to the original draft and its previous
+  review state is cleared; other documents are unaffected. The sample image is
+  bundled with the backend; user uploads need persistent storage configured by
+  the deployment for restart persistence.
 - Write & Review creates and updates persisted content and uses backend review,
   findings, comments, audit, and workflow endpoints.
 - The role switcher selects a prototype role; these headers are not

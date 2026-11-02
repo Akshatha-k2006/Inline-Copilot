@@ -78,6 +78,7 @@ const EMPTY_STATE: WorkspaceState = {
 let workspace: WorkspaceState = EMPTY_STATE;
 let loadedRole: Role | null = null;
 let loadChain: Promise<void> = Promise.resolve();
+let sampleResetTask: Promise<void> | null = null;
 const listeners = new Set<() => void>();
 
 function subscribe(listener: () => void): () => void {
@@ -333,7 +334,9 @@ export function refreshWorkspace(): Promise<void> {
   return loadWorkspace({ force: true, silent: true });
 }
 
-export function useWorkspace(): WorkspaceState {
+export function useWorkspace(
+  options: { resetSampleDemo?: boolean } = { resetSampleDemo: true },
+): WorkspaceState {
   const snapshot = useSyncExternalStore(
     subscribe,
     getSnapshot,
@@ -343,8 +346,36 @@ export function useWorkspace(): WorkspaceState {
 
   useEffect(() => {
     if (!isRoleLoaded) return;
+    if (options.resetSampleDemo && role === "creator") {
+      workspace = {
+        ...workspace,
+        isLoaded: false,
+        isLoading: true,
+        error: null,
+      };
+      notify();
+      if (!sampleResetTask) {
+        sampleResetTask = api
+          .resetSampleDemo()
+          .then(() => loadWorkspace({ force: true, silent: true }))
+          .finally(() => {
+            sampleResetTask = null;
+          });
+      }
+      void sampleResetTask
+        .catch((cause: unknown) => {
+          workspace = {
+            ...workspace,
+            isLoaded: false,
+            isLoading: false,
+            error: errorMessage(cause),
+          };
+          notify();
+        });
+      return;
+    }
     void loadWorkspace();
-  }, [isRoleLoaded, role]);
+  }, [isRoleLoaded, role, options.resetSampleDemo]);
 
   return snapshot;
 }

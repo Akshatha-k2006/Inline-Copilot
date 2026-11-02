@@ -194,6 +194,11 @@ export const api = {
   health: (options?: RequestOptions) =>
     request<Health>("GET", "/api/health", undefined, options),
   seedSample: () => request<SeedResponse>("POST", "/api/seed/load"),
+  resetSampleDemo: () =>
+    request<{ message: string; content_id: number }>(
+      "POST",
+      "/api/demo/reset-sample",
+    ),
 
   listGuidelines: (options?: RequestOptions) =>
     request<ApiGuideline[]>("GET", "/api/guidelines", undefined, options),
