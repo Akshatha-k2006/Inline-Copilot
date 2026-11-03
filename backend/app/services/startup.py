@@ -4,7 +4,12 @@ import logging
 from sqlalchemy.orm import Session
 
 from app.models import AuditEvent, Content
-from app.routers.seed import SEED_FILE, load_seed_data, sync_sample_content
+from app.routers.seed import (
+    SEED_FILE,
+    ensure_demo_evidence_request,
+    load_seed_data,
+    sync_sample_content,
+)
 
 logger = logging.getLogger(__name__)
 INITIAL_SAMPLE_SETUP_ACTION = "initial_sample_workspace_setup"
@@ -131,4 +136,7 @@ def initialize_sample_workspace(db: Session) -> bool:
             "Synchronized the sample document and bundled image (content reset: %s).",
             reset_content,
         )
+    demo_request = ensure_demo_evidence_request(db)
+    if demo_request.id is not None:
+        db.commit()
     return initialized_now

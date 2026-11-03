@@ -32,6 +32,78 @@ logger = logging.getLogger(__name__)
 SEED_FILE = Path(__file__).resolve().parents[3] / "seed" / "brand.json"
 
 
+def ensure_demo_evidence_request(db: Session) -> EvidenceRequest:
+    """Create the persisted evidence demo once and return its request."""
+    existing = (
+        db.query(EvidenceRequest)
+        .join(Finding, EvidenceRequest.finding_id == Finding.id)
+        .join(Content, Finding.content_id == Content.id)
+        .filter(
+            Content.title == "Demo evidence draft",
+            Finding.check_type == "unsupported_claim",
+            EvidenceRequest.claim_text
+            == "reduces household energy use by 42% for every customer",
+        )
+        .first()
+    )
+    if existing is not None:
+        return existing
+
+    content = Content(
+        title="Demo evidence draft",
+        content_type="marketing_copy",
+        body=(
+            "Our new Lumina Home collection reduces household energy use by 42% "
+            "for every customer."
+        ),
+        status="draft",
+        version=1,
+        created_by="Asha",
+    )
+    db.add(content)
+    db.flush()
+    finding = Finding(
+        content_id=content.id,
+        content_version=content.version,
+        check_type="unsupported_claim",
+        severity="high",
+        message="This performance claim needs supporting evidence before publication.",
+        evidence={
+            "matched_text": "reduces household energy use by 42% for every customer",
+            "source": {"type": "demo", "label": "Evidence demo draft"},
+            "requires_manual_review": True,
+        },
+        suggested_fix="Provide a verifiable source or revise the claim.",
+        start_offset=30,
+        end_offset=87,
+        status="open",
+    )
+    db.add(finding)
+    db.flush()
+    request = EvidenceRequest(
+        finding_id=finding.id,
+        claim_text="reduces household energy use by 42% for every customer",
+        reason="A measurable performance claim requires a verifiable source.",
+        assignee="Asha",
+        status="open",
+    )
+    db.add(request)
+    db.flush()
+    db.add(
+        AuditEvent(
+            content_id=content.id,
+            actor="Demo Evidence",
+            action="demo_evidence_request_created",
+            details={
+                "actor_role": "system",
+                "finding_id": finding.id,
+                "evidence_request_id": request.id,
+            },
+        )
+    )
+    return request
+
+
 @router.post("/demo/add-review-request", response_model=ContentResponse, status_code=201)
 def add_demo_review_request(
     role: Annotated[str, Depends(get_role)],
@@ -90,59 +162,10 @@ def add_demo_evidence_request(
             },
         )
 
-    content = Content(
-        title="Demo evidence draft",
-        content_type="marketing_copy",
-        body=(
-            "Our new Lumina Home collection reduces household energy use by 42% "
-            "for every customer."
-        ),
-        status="draft",
-        version=1,
-        created_by="Asha",
-    )
-    db.add(content)
-    db.flush()
-    finding = Finding(
-        content_id=content.id,
-        content_version=content.version,
-        check_type="unsupported_claim",
-        severity="high",
-        message="This performance claim needs supporting evidence before publication.",
-        evidence={
-            "matched_text": "reduces household energy use by 42% for every customer",
-            "source": {"type": "demo", "label": "Evidence demo draft"},
-            "requires_manual_review": True,
-        },
-        suggested_fix="Provide a verifiable source or revise the claim.",
-        start_offset=30,
-        end_offset=87,
-        status="open",
-    )
-    db.add(finding)
-    db.flush()
-    request = EvidenceRequest(
-        finding_id=finding.id,
-        claim_text="reduces household energy use by 42% for every customer",
-        reason="A measurable performance claim requires a verifiable source.",
-        assignee="Asha",
-        status="open",
-    )
-    db.add(request)
-    db.flush()
-    db.add(
-        AuditEvent(
-            content_id=content.id,
-            actor="Demo Evidence",
-            action="demo_evidence_request_created",
-            details={
-                "actor_role": role,
-                "finding_id": finding.id,
-                "evidence_request_id": request.id,
-            },
-        )
-    )
+    request = ensure_demo_evidence_request(db)
     db.commit()
+    finding = db.get(Finding, request.finding_id)
+    content = db.get(Content, finding.content_id)
     db.refresh(content)
     return content
 
